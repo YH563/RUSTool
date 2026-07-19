@@ -3,11 +3,13 @@
         xmlns:vm="using:RUSTool.ViewModels"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+        mc:Ignorable="d" d:DesignWidth="600" d:DesignHeight="450"
         x:Class="RUSTool.Views.MainWindow"
         x:DataType="vm:MainViewModel"
         Icon="/Assets/avalonia-logo.ico"
-        Title="RUSTool">
+        Title="RUSTool"
+        Width="600" Height="500"
+        >
 
     <Design.DataContext>
         <!-- This only sets the DataContext for the previewer in an IDE,
@@ -84,7 +86,7 @@
                 <!-- 关节 Jog -->
                 <Border BorderBrush="Gray" BorderThickness="1" Padding="6">
                     <StackPanel>
-                        <TextBlock Text="关节 Jog (ref=0)" FontWeight="Bold"/>
+                        <TextBlock Text="关节 Jog (参考系=0)" FontWeight="Bold"/>
                         <WrapPanel>
                             <Button Content="J1+" Command="{Binding Robot.JogAxis1PosCommand}" Margin="1"/>
                             <Button Content="J1-" Command="{Binding Robot.JogAxis1NegCommand}" Margin="1"/>
@@ -105,7 +107,7 @@
                 <!-- 笛卡尔 Jog -->
                 <Border BorderBrush="Gray" BorderThickness="1" Padding="6">
                     <StackPanel>
-                        <TextBlock Text="笛卡尔 Jog (参考系={Binding Robot.JogRefFrame})" FontWeight="Bold"/>
+                        <TextBlock Text="{Binding Robot.JogRefFrame, StringFormat='笛卡尔 Jog (参考系={0})'}" FontWeight="Bold"/>
                         <WrapPanel>
                             <Button Content="X+" Command="{Binding Robot.JogXPosCommand}" Margin="1"/>
                             <Button Content="X-" Command="{Binding Robot.JogXNegCommand}" Margin="1"/>

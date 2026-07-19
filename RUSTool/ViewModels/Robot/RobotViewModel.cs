@@ -38,7 +38,7 @@ public partial class RobotViewModel : ViewModelBase
     // 点动参数
     [ObservableProperty] private int _jogSpeed = 30;
     [ObservableProperty] private int _jogAcc = 30;
-    [ObservableProperty] private int _jogRefFrame;   // 0=关节, 2=基坐标, 4=工具
+    [ObservableProperty] private int _jogRefFrame = 2;   // 0=关节, 2=基坐标, 4=工具
     [ObservableProperty] private double _jogMaxDis;  // 0=无限
 
     // 构造
@@ -75,18 +75,38 @@ public partial class RobotViewModel : ViewModelBase
     private async Task DisconnectFromRobot() => await _client.DisconnectAsync();
 
     /// <summary>
-    /// 关节空间运动
+    /// 关节空间运动（输入格式: 0.1,-0.5,1.2,0,0.3,0）
     /// </summary>
     [RelayCommand]
-    private async Task MoveJ(double[] joints) =>
-        await _client.SendCommandAsync("movej", joints);
+    private async Task MoveJ(string input)
+    {
+        try
+        {
+            var joints = Array.ConvertAll(input.Split(',', StringSplitOptions.TrimEntries), double.Parse);
+            await _client.SendCommandAsync("movej", joints);
+        }
+        catch
+        {
+            ErrorMessage = "MoveJ 参数格式错误，示例: 0.1,-0.5,1.2,0,0.3,0";
+        }
+    }
 
     /// <summary>
-    /// 笛卡尔直线运动
+    /// 笛卡尔直线运动（输入格式: x,y,z,rx,ry,rz）
     /// </summary>
     [RelayCommand]
-    private async Task MoveL(double[] pose) =>
-        await _client.SendCommandAsync("movel", pose);
+    private async Task MoveL(string input)
+    {
+        try
+        {
+            var pose = Array.ConvertAll(input.Split(',', StringSplitOptions.TrimEntries), double.Parse);
+            await _client.SendCommandAsync("movel", pose);
+        }
+        catch
+        {
+            ErrorMessage = "MoveL 参数格式错误，示例: 0.3,0,0.5,3.14,0,0";
+        }
+    }
 
     // 辅助
     private double[] JogArgs(int refFrame, int nb, int dir) =>

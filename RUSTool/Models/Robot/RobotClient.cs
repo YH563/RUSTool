@@ -85,19 +85,27 @@ public class RobotClient : IAsyncDisposable
     // 接收循环
     private async Task ReceiveLoopAsync(CancellationToken ct)
     {
-        var buffer = new byte[65536];
-
         try
         {
+            var buffer = new byte[65536];
+            var msgBuf = new StringBuilder();
+
             while (_ws?.State == WebSocketState.Open && !ct.IsCancellationRequested)
             {
                 var result = await _ws.ReceiveAsync(buffer, ct);
+
                 if (result.MessageType == WebSocketMessageType.Close)
                     break;
-                if (result.MessageType != WebSocketMessageType.Text)
+                if (result.MessageType is not (WebSocketMessageType.Text or WebSocketMessageType.Binary))
                     continue;
 
-                var json = Encoding.UTF8.GetString(buffer, 0, result.Count);
+                msgBuf.Append(Encoding.UTF8.GetString(buffer, 0, result.Count));
+
+                if (!result.EndOfMessage)
+                    continue;
+
+                var json = msgBuf.ToString();
+                msgBuf.Clear();
                 HandleMessage(json);
             }
         }
@@ -114,23 +122,27 @@ public class RobotClient : IAsyncDisposable
 
     private void HandleMessage(string json)
     {
-        using var doc = JsonDocument.Parse(json);
-        var root = doc.RootElement;
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
 
-        // 有 success 字段 -> 指令响应
-        if (root.TryGetProperty("success", out _))
-        {
-            var response = JsonSerializer.Deserialize<CommandResponse>(json, JsonOptions);
-            if (response != null && _pendingCommands.TryRemove(response.Id, out var tcs))
-                tcs.TrySetResult(response);
+            // 有 success 字段 -> 指令响应
+            if (root.TryGetProperty("success", out _))
+            {
+                var response = JsonSerializer.Deserialize<CommandResponse>(json, JsonOptions);
+                if (response != null && _pendingCommands.TryRemove(response.Id, out var tcs))
+                    tcs.TrySetResult(response);
+            }
+            // 否则 -> 状态推送
+            else
+            {
+                var state = JsonSerializer.Deserialize<RobotState>(json, JsonOptions);
+                if (state != null)
+                    OnStateUpdated?.Invoke(state);
+            }
         }
-        // 否则 -> 状态推送
-        else
-        {
-            var state = JsonSerializer.Deserialize<RobotState>(json, JsonOptions);
-            if (state != null)
-                OnStateUpdated?.Invoke(state);
-        }
+        catch { /* 跳过异常的 JSON */ }
     }
 
     // 自动重连
