@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using RUSTool.Models.Robot;
+using RUSTool.Models;
+using RUSTool.Services;
 using System;
 using System.Threading.Tasks;
 
@@ -8,7 +9,7 @@ namespace RUSTool.ViewModels.Robot;
 
 public partial class RobotViewModel : ViewModelBase
 {
-    private readonly RobotClient _client = new();
+    private readonly ICommandService _service;
 
     // 服务器地址
     [ObservableProperty] private string _serverUrl = "ws://localhost:8765";
@@ -41,13 +42,16 @@ public partial class RobotViewModel : ViewModelBase
     [ObservableProperty] private int _jogRefFrame = 2;   // 0=关节, 2=基坐标, 4=工具
     [ObservableProperty] private double _jogMaxDis;  // 0=无限
 
-    // 构造
-    public RobotViewModel()
+    /// <summary>
+    /// 构造，可注入 ICommandService（不传则默认使用 WebSocket 实现）
+    /// </summary>
+    public RobotViewModel(ICommandService? service = null)
     {
-        _client.OnStateUpdated += OnStateUpdated;
-        _client.OnConnected += () => IsConnected = true;
-        _client.OnDisconnected += () => IsConnected = false;
-        _client.OnError += msg => App.Current!.Dispatcher.Post(() =>
+        _service = service ?? new CommandService();
+        _service.OnStateUpdated += OnStateUpdated;
+        _service.OnConnected += () => IsConnected = true;
+        _service.OnDisconnected += () => IsConnected = false;
+        _service.OnError += msg => App.Current!.Dispatcher.Post(() =>
             ErrorMessage = msg);
     }
 
@@ -60,7 +64,7 @@ public partial class RobotViewModel : ViewModelBase
         ErrorMessage = "";
         try
         {
-            await _client.ConnectAsync(ServerUrl);
+            await _service.ConnectAsync(ServerUrl);
         }
         catch (Exception ex)
         {
@@ -72,7 +76,7 @@ public partial class RobotViewModel : ViewModelBase
     /// 断开连接
     /// </summary>
     [RelayCommand]
-    private async Task DisconnectFromRobot() => await _client.DisconnectAsync();
+    private async Task DisconnectFromRobot() => await _service.DisconnectAsync();
 
     /// <summary>
     /// 关节空间运动（输入格式: 0.1,-0.5,1.2,0,0.3,0）
@@ -83,7 +87,7 @@ public partial class RobotViewModel : ViewModelBase
         try
         {
             var joints = Array.ConvertAll(input.Split(',', StringSplitOptions.TrimEntries), double.Parse);
-            await _client.SendCommandAsync("movej", joints);
+            await _service.SendMoveJointAsync(joints);
         }
         catch
         {
@@ -100,7 +104,7 @@ public partial class RobotViewModel : ViewModelBase
         try
         {
             var pose = Array.ConvertAll(input.Split(',', StringSplitOptions.TrimEntries), double.Parse);
-            await _client.SendCommandAsync("movel", pose);
+            await _service.SendMoveLinearAsync(pose);
         }
         catch
         {
@@ -109,14 +113,11 @@ public partial class RobotViewModel : ViewModelBase
     }
 
     // 辅助
-    private double[] JogArgs(int refFrame, int nb, int dir) =>
-        [refFrame, nb, dir, JogSpeed, JogAcc, JogMaxDis];
-
     private Task JogJoint(int nb, int dir) =>
-        _client.SendCommandAsync("start_jog", JogArgs(0, nb, dir));
+        _service.SendJogStartAsync(0, nb, dir, JogSpeed, JogAcc, JogMaxDis);
 
     private Task JogCart(int nb, int dir) =>
-        _client.SendCommandAsync("start_jog", JogArgs(JogRefFrame, nb, dir));
+        _service.SendJogStartAsync(JogRefFrame, nb, dir, JogSpeed, JogAcc, JogMaxDis);
 
     // 关节点动 (强制 ref=0)
     [RelayCommand] private Task JogAxis1Pos() => JogJoint(1, 1);
@@ -147,11 +148,9 @@ public partial class RobotViewModel : ViewModelBase
     [RelayCommand] private Task JogRzNeg() => JogCart(6, 0);
 
     // 停止
-    [RelayCommand] private Task StopJog() =>
-        _client.SendCommandAsync("stop_jog_decel", []);
+    [RelayCommand] private Task StopJog() => _service.SendJogStopAsync();
 
-    [RelayCommand] private Task StopJogImmediate() =>
-        _client.SendCommandAsync("stop_jog_immediate", []);
+    [RelayCommand] private Task StopJogImmediate() => _service.SendJogStopImmediateAsync();
 
     /// <summary>
     /// 处理 WebSocket 推送的状态

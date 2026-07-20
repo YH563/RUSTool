@@ -3,136 +3,58 @@
         xmlns:vm="using:RUSTool.ViewModels"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="600" d:DesignHeight="450"
+        mc:Ignorable="d" d:DesignWidth="1920" d:DesignHeight="1080"
         x:Class="RUSTool.Views.MainWindow"
         x:DataType="vm:MainViewModel"
         Icon="/Assets/avalonia-logo.ico"
         Title="RUSTool"
-        Width="600" Height="500"
+        Width="1280" Height="720"
         >
 
     <Design.DataContext>
-        <!-- This only sets the DataContext for the previewer in an IDE,
-             to set the actual DataContext for runtime, set the DataContext property in code (look at App.axaml.cs) -->
         <vm:MainViewModel />
     </Design.DataContext>
-
-    <Grid RowDefinitions="Auto,Auto,*" ColumnDefinitions="*" Margin="10">
-
-        <!-- 连接栏 -->
-        <StackPanel Grid.Row="0" Spacing="4" Margin="0,0,0,6">
-            <StackPanel Orientation="Horizontal" Spacing="8">
-                <TextBox Text="{Binding Robot.ServerUrl}" Width="220"
-                         PlaceholderText="ws://localhost:8765"/>
-                <Button Content="连接" Command="{Binding Robot.ConnectToRobotCommand}"/>
-                <Button Content="断开" Command="{Binding Robot.DisconnectFromRobotCommand}"
-                        IsEnabled="{Binding Robot.IsConnected}"/>
-                <TextBlock Text="{Binding Robot.IsConnected, StringFormat='已连接: {0}'}"/>
-                <TextBlock Text="{Binding Robot.FrameRate, StringFormat='帧率: {0:F1} Hz'}"/>
-            </StackPanel>
-            <TextBlock Text="{Binding Robot.ErrorMessage}" Foreground="Red"/>
-        </StackPanel>
-
-        <!-- 数据面板 -->
-        <Grid Grid.Row="1" ColumnDefinitions="Auto,Auto" RowDefinitions="Auto" Margin="0,0,0,10">
-
-            <!-- 关节角 -->
-            <StackPanel Grid.Column="0" Margin="0,0,40,0">
-                <TextBlock Text="关节角 (rad)" FontWeight="Bold" Margin="0,0,0,4"/>
-                <TextBlock Text="{Binding Robot.Joint1, StringFormat='J1: {0:F4}'}"/>
-                <TextBlock Text="{Binding Robot.Joint2, StringFormat='J2: {0:F4}'}"/>
-                <TextBlock Text="{Binding Robot.Joint3, StringFormat='J3: {0:F4}'}"/>
-                <TextBlock Text="{Binding Robot.Joint4, StringFormat='J4: {0:F4}'}"/>
-                <TextBlock Text="{Binding Robot.Joint5, StringFormat='J5: {0:F4}'}"/>
-                <TextBlock Text="{Binding Robot.Joint6, StringFormat='J6: {0:F4}'}"/>
-            </StackPanel>
-
-            <!-- 法兰位姿 -->
-            <StackPanel Grid.Column="1">
-                <TextBlock Text="法兰位姿 (m / rad)" FontWeight="Bold" Margin="0,0,0,4"/>
-                <TextBlock Text="{Binding Robot.FlangeX, StringFormat='X:  {0:F4}'}"/>
-                <TextBlock Text="{Binding Robot.FlangeY, StringFormat='Y:  {0:F4}'}"/>
-                <TextBlock Text="{Binding Robot.FlangeZ, StringFormat='Z:  {0:F4}'}"/>
-                <TextBlock Text="{Binding Robot.FlangeRx, StringFormat='Rx: {0:F4}'}"/>
-                <TextBlock Text="{Binding Robot.FlangeRy, StringFormat='Ry: {0:F4}'}"/>
-                <TextBlock Text="{Binding Robot.FlangeRz, StringFormat='Rz: {0:F4}'}"/>
-            </StackPanel>
-        </Grid>
-
-        <!-- 控制按钮区域 -->
-        <ScrollViewer Grid.Row="2">
-            <StackPanel Spacing="8">
-
-                <!-- 基本运动 -->
-                <WrapPanel>
-                    <Button Content="MoveJ" Command="{Binding Robot.MoveJCommand}"
-                            CommandParameter="{Binding #posInput.Text}" Margin="2"/>
-                    <Button Content="MoveL" Command="{Binding Robot.MoveLCommand}"
-                            CommandParameter="{Binding #posInput.Text}" Margin="2"/>
-                    <TextBox x:Name="posInput" PlaceholderText="位置数组, 如 0,0,0,0,0,0" Width="250"/>
-                </WrapPanel>
-
-                <!-- 点动参数 -->
-                <Border BorderBrush="Gray" BorderThickness="1" Padding="6">
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <TextBlock Text="点动参数" FontWeight="Bold"/>
-                        <TextBlock Text="{Binding Robot.JogSpeed, StringFormat='速度: {0}%'}"/>
-                        <TextBlock Text="{Binding Robot.JogAcc, StringFormat='加速度: {0}%'}"/>
-                        <TextBlock Text="{Binding Robot.JogRefFrame, StringFormat='参考系: {0}'}"/>
-                        <TextBlock Text="{Binding Robot.JogMaxDis, StringFormat='最大位移: {0}'}"/>
-                    </StackPanel>
-                </Border>
-
-                <!-- 关节 Jog -->
-                <Border BorderBrush="Gray" BorderThickness="1" Padding="6">
-                    <StackPanel>
-                        <TextBlock Text="关节 Jog (参考系=0)" FontWeight="Bold"/>
-                        <WrapPanel>
-                            <Button Content="J1+" Command="{Binding Robot.JogAxis1PosCommand}" Margin="1"/>
-                            <Button Content="J1-" Command="{Binding Robot.JogAxis1NegCommand}" Margin="1"/>
-                            <Button Content="J2+" Command="{Binding Robot.JogAxis2PosCommand}" Margin="1"/>
-                            <Button Content="J2-" Command="{Binding Robot.JogAxis2NegCommand}" Margin="1"/>
-                            <Button Content="J3+" Command="{Binding Robot.JogAxis3PosCommand}" Margin="1"/>
-                            <Button Content="J3-" Command="{Binding Robot.JogAxis3NegCommand}" Margin="1"/>
-                            <Button Content="J4+" Command="{Binding Robot.JogAxis4PosCommand}" Margin="1"/>
-                            <Button Content="J4-" Command="{Binding Robot.JogAxis4NegCommand}" Margin="1"/>
-                            <Button Content="J5+" Command="{Binding Robot.JogAxis5PosCommand}" Margin="1"/>
-                            <Button Content="J5-" Command="{Binding Robot.JogAxis5NegCommand}" Margin="1"/>
-                            <Button Content="J6+" Command="{Binding Robot.JogAxis6PosCommand}" Margin="1"/>
-                            <Button Content="J6-" Command="{Binding Robot.JogAxis6NegCommand}" Margin="1"/>
-                        </WrapPanel>
-                    </StackPanel>
-                </Border>
-
-                <!-- 笛卡尔 Jog -->
-                <Border BorderBrush="Gray" BorderThickness="1" Padding="6">
-                    <StackPanel>
-                        <TextBlock Text="{Binding Robot.JogRefFrame, StringFormat='笛卡尔 Jog (参考系={0})'}" FontWeight="Bold"/>
-                        <WrapPanel>
-                            <Button Content="X+" Command="{Binding Robot.JogXPosCommand}" Margin="1"/>
-                            <Button Content="X-" Command="{Binding Robot.JogXNegCommand}" Margin="1"/>
-                            <Button Content="Y+" Command="{Binding Robot.JogYPosCommand}" Margin="1"/>
-                            <Button Content="Y-" Command="{Binding Robot.JogYNegCommand}" Margin="1"/>
-                            <Button Content="Z+" Command="{Binding Robot.JogZPosCommand}" Margin="1"/>
-                            <Button Content="Z-" Command="{Binding Robot.JogZNegCommand}" Margin="1"/>
-                            <Button Content="Rx+" Command="{Binding Robot.JogRxPosCommand}" Margin="1"/>
-                            <Button Content="Rx-" Command="{Binding Robot.JogRxNegCommand}" Margin="1"/>
-                            <Button Content="Ry+" Command="{Binding Robot.JogRyPosCommand}" Margin="1"/>
-                            <Button Content="Ry-" Command="{Binding Robot.JogRyNegCommand}" Margin="1"/>
-                            <Button Content="Rz+" Command="{Binding Robot.JogRzPosCommand}" Margin="1"/>
-                            <Button Content="Rz-" Command="{Binding Robot.JogRzNegCommand}" Margin="1"/>
-                        </WrapPanel>
-                    </StackPanel>
-                </Border>
-
-                <!-- 停止 -->
-                <WrapPanel>
-                    <Button Content="减速停止" Command="{Binding Robot.StopJogCommand}" Margin="2"/>
-                    <Button Content="急停" Command="{Binding Robot.StopJogImmediateCommand}"
-                            Background="Red" Foreground="White" Margin="2"/>
-                </WrapPanel>
-
-            </StackPanel>
-        </ScrollViewer>
+    <Window.Styles>
+        <Style Selector="MenuItem">
+            <Setter Property="FontSize" Value="14"></Setter>
+        </Style>
+        <Style Selector="Menu">
+            <Setter Property="Background" Value="White"></Setter>
+        </Style>
+    </Window.Styles>
+    
+    <Grid RowDefinitions="Auto,*">
+        <Menu>
+            <MenuItem Header="文件">
+                <MenuItem Header="新建"  />
+                <MenuItem Header="打开"  />
+                <MenuItem Header="复制"  />
+                <MenuItem Header="Save _As"  />
+                <Separator />
+                <MenuItem Header="_Exit" />
+            </MenuItem>
+            <MenuItem Header="编辑">
+                <MenuItem Header="_Undo"  />
+                <MenuItem Header="_Redo"  />
+                <Separator />
+                <MenuItem Header="Cu_t"  />
+                <MenuItem Header="_Copy"  />
+                <MenuItem Header="_Paste"  />
+            </MenuItem>
+            <MenuItem Header="视图">
+                <MenuItem Header="_Zoom In"  />
+                <MenuItem Header="Zoom _Out"  />
+                <Separator />
+                <MenuItem Header="_Reset Zoom"  />
+            </MenuItem>
+            <MenuItem Header="工具">
+                <MenuItem Header="_About"  />
+            </MenuItem>
+            <MenuItem Header="帮助">
+                <MenuItem Header="_About"  />
+            </MenuItem>
+        </Menu>
+        <Button Grid.Row="1" Margin="20" Content="Click Me" >
+        </Button>
     </Grid>
 </Window>

@@ -1,3 +1,4 @@
+using RUSTool.Models;
 using System;
 using System.Collections.Concurrent;
 using System.Net.WebSockets;
@@ -6,12 +7,12 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace RUSTool.Models.Robot;
+namespace RUSTool.Communication;
 
 /// <summary>
-/// WebSocket 机器人客户端 — 状态订阅 + 指令发送
+/// WebSocket 客户端 — 状态订阅 + 指令发送
 /// </summary>
-public class RobotClient : IAsyncDisposable
+public class WebSocketClient : IProtocolClient
 {
     private ClientWebSocket? _ws;
     private CancellationTokenSource? _cts;
@@ -24,21 +25,16 @@ public class RobotClient : IAsyncDisposable
     };
 
     // 事件
-    /// <summary>状态推送事件</summary>
     public event Action<RobotState>? OnStateUpdated;
-    /// <summary>错误消息事件</summary>
     public event Action<string>? OnError;
-    /// <summary>连接成功事件</summary>
     public event Action? OnConnected;
-    /// <summary>连接断开事件</summary>
     public event Action? OnDisconnected;
 
     // 属性
-    /// <summary>是否已连接</summary>
     public bool IsConnected => _ws?.State == WebSocketState.Open;
 
     // 连接 / 断开
-    internal async Task ConnectAsync(string url = "ws://localhost:8765", CancellationToken ct = default)
+    public async Task ConnectAsync(string url = "ws://localhost:8765", CancellationToken ct = default)
     {
         _cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         _ws = new ClientWebSocket();
@@ -47,7 +43,6 @@ public class RobotClient : IAsyncDisposable
         _ = Task.Run(() => ReceiveLoopAsync(_cts.Token), _cts.Token);
     }
 
-    /// <summary>断开连接</summary>
     public async Task DisconnectAsync()
     {
         await _cts?.CancelAsync()!;
@@ -58,7 +53,6 @@ public class RobotClient : IAsyncDisposable
     }
 
     // 发送指令
-    /// <summary>发送指令并等待响应（10s 超时）</summary>
     public async Task<CommandResponse> SendCommandAsync(string cmd, double[]? args = null,
         CancellationToken ct = default)
     {
@@ -146,7 +140,6 @@ public class RobotClient : IAsyncDisposable
     }
 
     // 自动重连
-    /// <summary>持续运行，断线后 5s 自动重连</summary>
     public async Task RunWithReconnectAsync(string url = "ws://localhost:8765",
         CancellationToken ct = default)
     {

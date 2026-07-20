@@ -1,4 +1,4 @@
-namespace RUSTool.Models.Robot;
+namespace RUSTool.Models;
 
 /// <summary>
 /// 机器人状态推送（服务器 125Hz 广播）
