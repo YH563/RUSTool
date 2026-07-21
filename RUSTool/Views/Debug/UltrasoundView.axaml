@@ -1,0 +1,27 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="400" d:DesignHeight="400"
+             x:Class="RUSTool.Views.Debug.UltrasoundView">
+    <Grid>
+        <Border Background="#1A1A2E" CornerRadius="0,0,6,6">
+            <Grid RowDefinitions="*,Auto">
+                <!-- 超声图像区域，后续替换为 WriteableBitmap -->
+                <TextBlock Text="超声影像"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           Foreground="#555555" />
+
+                <!-- 叠加信息 -->
+                <StackPanel Grid.Row="1" Orientation="Horizontal"
+                            HorizontalAlignment="Right" Margin="8"
+                            Spacing="12" Opacity="0.8">
+                    <TextBlock Text="增益: 50%" Foreground="#CCCCCC" FontSize="11" />
+                    <TextBlock Text="深度: 5cm" Foreground="#CCCCCC" FontSize="11" />
+                    <TextBlock Text="帧: 0" Foreground="#CCCCCC" FontSize="11" />
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

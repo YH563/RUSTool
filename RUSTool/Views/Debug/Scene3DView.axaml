@@ -1,0 +1,15 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="600" d:DesignHeight="500"
+             x:Class="RUSTool.Views.Debug.Scene3DView">
+    <Grid>
+        <Border Background="#FAFAFA" CornerRadius="0,0,6,6">
+            <TextBlock Text="3D 场景渲染区域"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center"
+                       Foreground="#999999" />
+        </Border>
+    </Grid>
+</UserControl>

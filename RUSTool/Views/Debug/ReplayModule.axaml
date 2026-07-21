@@ -1,0 +1,58 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="680" d:DesignHeight="200"
+             x:Class="RUSTool.Views.Debug.ReplayModule">
+    <Grid RowDefinitions="Auto,Auto,Auto" Margin="8">
+
+        <!-- 时间轴 -->
+        <Grid ColumnDefinitions="*,Auto">
+            <!-- 滑块区域（后续替换为自定义 TimelineSlider） -->
+            <Border Background="#F0F0F0" CornerRadius="4" Height="30"
+                    BorderBrush="#D0D0D0" BorderThickness="1">
+                <TextBlock Text="══════════════════════════●═══════════════"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           Foreground="#999999" />
+            </Border>
+            <TextBlock Grid.Column="1" Text="00:03:21 / 00:12:45"
+                       Margin="8,0,0,0" VerticalAlignment="Center"
+                       Foreground="#666666" FontSize="12" />
+        </Grid>
+
+        <!-- 播放控制 -->
+        <StackPanel Grid.Row="1" Orientation="Horizontal"
+                    HorizontalAlignment="Center" Spacing="6" Margin="0,8">
+            <Button Content="⏮" Width="32" Height="28" />
+            <Button Content="◀◀" Width="32" Height="28" />
+            <Button Content="▶" Width="48" Height="28"
+                    Background="#D0E8F8" BorderBrush="#5B9BD5" />
+            <Button Content="▶▶" Width="32" Height="28" />
+            <Button Content="⏭" Width="32" Height="28" />
+            <Separator Width="1" Height="24" Margin="4,0" />
+            <TextBlock Text="速度:" VerticalAlignment="Center" />
+            <ComboBox SelectedIndex="1" Width="70">
+                <ComboBoxItem>0.5x</ComboBoxItem>
+                <ComboBoxItem>1.0x</ComboBoxItem>
+                <ComboBoxItem>1.5x</ComboBoxItem>
+                <ComboBoxItem>2.0x</ComboBoxItem>
+            </ComboBox>
+            <Button Content="A" Width="32" Height="28" />
+            <Button Content="B" Width="32" Height="28" />
+            <Button Content="循环" Height="28" />
+            <Button Content="导出" Height="28" />
+        </StackPanel>
+
+        <!-- 数据选择 -->
+        <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
+            <TextBlock Text="回放数据:" VerticalAlignment="Center" Foreground="#666666" />
+            <ComboBox SelectedIndex="0">
+                <ComboBoxItem>最近一次扫查</ComboBoxItem>
+                <ComboBoxItem>已保存记录 01</ComboBoxItem>
+                <ComboBoxItem>已保存记录 02</ComboBoxItem>
+            </ComboBox>
+            <Button Content="浏览..." />
+        </StackPanel>
+    </Grid>
+</UserControl>

@@ -32,4 +32,22 @@
         <PackageReference Include="LiveChartsCore.SkiaSharpView.Avalonia" Version="2.0.5" />
         <PackageReference Include="SukiUI" Version="7.0.1" />
     </ItemGroup>
+
+    <ItemGroup>
+      <Compile Update="Views\Debug\ChartPanel.axaml.cs">
+        <DependentUpon>ChartPanel.axaml</DependentUpon>
+      </Compile>
+      <Compile Update="Views\Debug\DebugWorkspace.axaml.cs">
+        <DependentUpon>DebugWorkspace.axaml</DependentUpon>
+      </Compile>
+      <Compile Update="Views\Debug\LogView.axaml.cs">
+        <DependentUpon>LogView.axaml</DependentUpon>
+      </Compile>
+      <Compile Update="Views\Debug\LogView.axaml.cs">
+        <DependentUpon>LogView.axaml</DependentUpon>
+      </Compile>
+      <Compile Update="Views\Debug\ArmControlPanel.axaml.cs">
+        <DependentUpon>ArmControlPanel.axaml</DependentUpon>
+      </Compile>
+    </ItemGroup>
 </Project>
