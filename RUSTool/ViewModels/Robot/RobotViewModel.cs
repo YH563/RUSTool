@@ -1,7 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using RUSTool.Models;
-using RUSTool.Services;
+using RUSTool.Communication;
 using System;
 using System.Threading.Tasks;
 
@@ -9,10 +8,10 @@ namespace RUSTool.ViewModels.Robot;
 
 public partial class RobotViewModel : ViewModelBase
 {
-    private readonly ICommandService _service;
+    private readonly BridgeClient _bridge;
 
     // 服务器地址
-    [ObservableProperty] private string _serverUrl = "ws://localhost:8765";
+    [ObservableProperty] private string _serverUrl = "127.0.0.1";
     // 错误信息（显示在界面上）
     [ObservableProperty] private string _errorMessage = "";
 
@@ -35,7 +34,7 @@ public partial class RobotViewModel : ViewModelBase
     [ObservableProperty] private double _flangeRx;
     [ObservableProperty] private double _flangeRy;
     [ObservableProperty] private double _flangeRz;
-    
+
     // 关节力矩 (Nm)
     [ObservableProperty] private double _torque1;
     [ObservableProperty] private double _torque2;
@@ -43,8 +42,7 @@ public partial class RobotViewModel : ViewModelBase
     [ObservableProperty] private double _torque4;
     [ObservableProperty] private double _torque5;
     [ObservableProperty] private double _torque6;
-    
-    
+
     // 点动参数
     [ObservableProperty] private int _jogSpeed = 30;
     [ObservableProperty] private int _jogAcc = 30;
@@ -52,20 +50,17 @@ public partial class RobotViewModel : ViewModelBase
     [ObservableProperty] private double _jogMaxDis;  // 0=无限
 
     /// <summary>
-    /// 构造，可注入 ICommandService（不传则默认使用 WebSocket 实现）
+    /// 构造，可注入 BridgeClient（不传则默认连接 127.0.0.1:8765）
     /// </summary>
-    public RobotViewModel(ICommandService? service = null)
+    public RobotViewModel(BridgeClient? bridge = null)
     {
-        _service = service ?? new CommandService();
-        _service.OnStateUpdated += OnStateUpdated;
-        _service.OnConnected += () => IsConnected = true;
-        _service.OnDisconnected += () => IsConnected = false;
-        _service.OnError += msg => App.Current!.Dispatcher.Post(() =>
-            ErrorMessage = msg);
+        _bridge = bridge ?? new BridgeClient();
+        _bridge.StateUpdated += OnStateUpdated;
+        _bridge.ConnectionChanged += connected => IsConnected = connected;
     }
 
     /// <summary>
-    /// 连接机器人
+    /// 连接机器人（连 /control，断线自动重连；连接成功后再开启状态流）
     /// </summary>
     [RelayCommand]
     private async Task ConnectToRobot()
@@ -73,7 +68,8 @@ public partial class RobotViewModel : ViewModelBase
         ErrorMessage = "";
         try
         {
-            await _service.ConnectAsync(ServerUrl);
+            await _bridge.ConnectAsync();
+            _bridge.StartStateStream();
         }
         catch (Exception ex)
         {
@@ -85,7 +81,12 @@ public partial class RobotViewModel : ViewModelBase
     /// 断开连接
     /// </summary>
     [RelayCommand]
-    private async Task DisconnectFromRobot() => await _service.DisconnectAsync();
+    private void DisconnectFromRobot()
+    {
+        _bridge.StopStateStream();
+        _bridge.Disconnect();
+        IsConnected = false;
+    }
 
     /// <summary>
     /// 关节空间运动（输入格式: 0.1,-0.5,1.2,0,0.3,0）
@@ -96,7 +97,9 @@ public partial class RobotViewModel : ViewModelBase
         try
         {
             var joints = Array.ConvertAll(input.Split(',', StringSplitOptions.TrimEntries), double.Parse);
-            await _service.SendMoveJointAsync(joints);
+            var result = await _bridge.SendAsync(Commands.MoveJ, joints);
+            if (!result.Success)
+                ErrorMessage = $"MoveJ 失败: {result.Message}";
         }
         catch
         {
@@ -113,7 +116,9 @@ public partial class RobotViewModel : ViewModelBase
         try
         {
             var pose = Array.ConvertAll(input.Split(',', StringSplitOptions.TrimEntries), double.Parse);
-            await _service.SendMoveLinearAsync(pose);
+            var result = await _bridge.SendAsync(Commands.MoveL, pose);
+            if (!result.Success)
+                ErrorMessage = $"MoveL 失败: {result.Message}";
         }
         catch
         {
@@ -123,10 +128,10 @@ public partial class RobotViewModel : ViewModelBase
 
     // 辅助
     private Task JogJoint(int nb, int dir) =>
-        _service.SendJogStartAsync(0, nb, dir, JogSpeed, JogAcc, JogMaxDis);
+        _bridge.SendAsync(Commands.StartJog, [0, nb, dir, JogSpeed, JogAcc, JogMaxDis]);
 
     private Task JogCart(int nb, int dir) =>
-        _service.SendJogStartAsync(JogRefFrame, nb, dir, JogSpeed, JogAcc, JogMaxDis);
+        _bridge.SendAsync(Commands.StartJog, [JogRefFrame, nb, dir, JogSpeed, JogAcc, JogMaxDis]);
 
     // 关节点动 (强制 ref=0)
     [RelayCommand] private Task JogAxis1Pos() => JogJoint(1, 1);
@@ -157,14 +162,14 @@ public partial class RobotViewModel : ViewModelBase
     [RelayCommand] private Task JogRzNeg() => JogCart(6, 0);
 
     // 停止
-    [RelayCommand] private Task StopJog() => _service.SendJogStopAsync();
+    [RelayCommand] private Task StopJog() => _bridge.SendAsync(Commands.StopJogDecel);
 
-    [RelayCommand] private Task StopJogImmediate() => _service.SendJogStopImmediateAsync();
+    [RelayCommand] private Task StopJogImmediate() => _bridge.SendAsync(Commands.StopJogImmediate);
 
     /// <summary>
-    /// 处理 WebSocket 推送的状态
+    /// 处理 /state 通道推送的状态帧
     /// </summary>
-    private void OnStateUpdated(RobotState state)
+    private void OnStateUpdated(BridgeProtocol.StateFrame state)
     {
         App.Current!.Dispatcher.Post(() =>
         {
@@ -181,22 +186,20 @@ public partial class RobotViewModel : ViewModelBase
             FlangeRx = Rad2Deg(state.FlangePos.Length > 3 ? state.FlangePos[3] : 0);
             FlangeRy = Rad2Deg(state.FlangePos.Length > 4 ? state.FlangePos[4] : 0);
             FlangeRz = Rad2Deg(state.FlangePos.Length > 5 ? state.FlangePos[5] : 0);
-            
+
             Torque1 = state.Effort.Length > 0 ? state.Effort[0] : 0;
             Torque2 = state.Effort.Length > 1 ? state.Effort[1] : 0;
             Torque3 = state.Effort.Length > 2 ? state.Effort[2] : 0;
             Torque4 = state.Effort.Length > 3 ? state.Effort[3] : 0;
             Torque5 = state.Effort.Length > 4 ? state.Effort[4] : 0;
             Torque6 = state.Effort.Length > 5 ? state.Effort[5] : 0;
-            
+
             FrameRate = state.FrameRate;
         });
     }
-    
+
     /// <summary>
     /// 弧度制转角度制
     /// </summary>
-    /// <param name="rad"></param>
-    /// <returns></returns>
     private double Rad2Deg(double rad) => rad * 180 / Math.PI;
 }

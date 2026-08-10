@@ -12,7 +12,6 @@
 
     <ItemGroup>
         <Folder Include="Communication\" />
-        <Folder Include="Services\" />
         <Folder Include="Data\" />
         <Folder Include="Visualization\" />
         <Folder Include="Infrastructure\" />

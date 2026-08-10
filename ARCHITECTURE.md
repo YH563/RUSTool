@@ -4,18 +4,11 @@
 
 ```
 RUSTool/
-├── Models/              ← 领域数据模型（纯数据结构，无行为）
-│                          · RobotState.cs — 机器人状态（关节角、位姿等）
-│
-├── Communication/       ← 外部通信层（所有与后端/外设的通信协议）
-│                          · IProtocolClient.cs     — 通信层接口
-│                          · WebSocketClient.cs      — WebSocket 实现
-│                          · CommandRequest.cs       — 请求报文
-│                          · CommandResponse.cs      — 响应报文
-│
-├── Services/            ← 业务服务层（指令编排、业务逻辑）
-│                          · ICommandService.cs      — 命令服务接口
-│                          · CommandService.cs       — 命令服务实现
+├── Communication/       ← 前端通信客户端（连 bridge 的那一层）
+│                          · BridgeClient.cs        — 对外门面（唯一公共入口，供 UI/VM 调用）
+│                          · ConnectionManager.cs   — 连接建立 / 收发循环 / 断线重连 / 退避
+│                          · BridgeProtocol.cs      — 消息模型 + JSON 编解码（纯函数）
+│                          · ProtocolConstants.cs   — Channels / Commands / Events 常量
 │
 ├── Data/                ← 数据库 / 持久化层（占位）
 │
@@ -31,7 +24,8 @@ RUSTool/
 │   └── MainWindow.axaml
 │
 ├── Docs/                ← 文档
-│   └── websocket_api.md
+│   ├── avalonia_client_design.md  — 通信客户端设计
+│   └── websocket_api.md           — WebSocket 协议
 │
 ├── Assets/              ← 静态资源（图标等）
 │
@@ -43,25 +37,19 @@ RUSTool/
 
 ```
 View  ← 绑定 →  ViewModel
-                     ↓ 依赖接口
-               ICommandService        (Services/)
-                     ↓
-               CommandService         (Services/)
-                     ↓ 依赖接口
-               IProtocolClient        (Communication/)
-                     ↓
-               WebSocketClient        (Communication/)
-                     ↓
-              后端服务器 (WebSocket)
+                      ↓
+               BridgeClient          (Communication/)
+                      ↓
+              ConnectionManager      (Communication/)
+                      ↓
+           后端 bridge (WebSocket：/control /state /sensor)
 ```
 
 ## 各层职责
 
 | 层 | 职责 | 示例 |
 |---|---|---|
-| **Models** | 纯领域数据，无行为 | `RobotState`、后续的工件模型、工艺参数等 |
-| **Communication** | 与外部系统通信 | WebSocket 客户端、gRPC 客户端、HTTP 客户端 |
-| **Services** | 业务逻辑编排 | 运动指令服务、标定服务、日志服务 |
+| **Communication** | 与 bridge 通信：指令下发/回执匹配、状态流接收、断线重连 | `BridgeClient`、`ConnectionManager`、`BridgeProtocol` |
 | **Data** | 数据库/持久化 | SQLite、PostgreSQL 仓储实现 |
 | **Visualization** | 3D 场景、数据图表 | 机器人仿真场景、实时曲线 |
 | **Infrastructure** | 跨切面基础设施 | 日志、配置、IoC 容器、异常处理 |
@@ -72,9 +60,10 @@ View  ← 绑定 →  ViewModel
 
 ```
 新功能 → 看属于哪一层，放在对应的目录下：
-  · 新增协议（gRPC）      → Communication/GrpcClient.cs
-  · 新增业务服务（标定）    → Services/CalibrationService.cs
-  · 新增数据模型（工件）    → Models/Workpiece.cs
-  · 新增数据库（SQLite）   → Data/ 下
+  · 新增指令        → Communication/ProtocolConstants.cs 补 Commands 常量
+  · 新增事件        → Communication/ProtocolConstants.cs 补 Events 常量
+  · /sensor 二进制帧 → BridgeProtocol 增加解码方法（不影响现有结构）
+  · 新增业务服务（标定）→ 直接复用 BridgeClient 或在 ViewModel 层编排
+  · 新增数据库（SQLite）→ Data/ 下
   · 新增 3D 仿真窗        → Visualization/ + ViewModels/ + Views/
 ```
