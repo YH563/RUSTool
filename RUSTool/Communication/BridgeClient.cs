@@ -22,9 +22,10 @@ public sealed class BridgeClient : IDisposable
     private readonly ConcurrentDictionary<uint, TaskCompletionSource<CommandResult>> _pending = new();
     private long _nextId;
     private BridgeProtocol.StateFrame? _latestState;
-    private Task? _stateStreamTask;
-    private bool _stateStreamEnabled;
-    private bool _disposed;
+    private CancellationTokenSource? _stateCts;
+    private int _stateLoopRunning;
+    private volatile bool _stateStreamEnabled;
+    private volatile bool _disposed;
 
     public BridgeClient(string host = "127.0.0.1", ushort port = 8765)
     {
@@ -65,14 +66,17 @@ public sealed class BridgeClient : IDisposable
         if (_stateStreamEnabled)
             return;
         _stateStreamEnabled = true;
-        _stateStreamTask = Task.Run(StateStreamLoopAsync, CancellationToken.None);
+        _stateCts = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token);
+        StartStateLoop();
     }
 
     /// <summary>关闭 /state 状态流。</summary>
     public void StopStateStream()
     {
         _stateStreamEnabled = false;
-        _connection.DisconnectStateAsync().GetAwaiter().GetResult();
+        _stateCts?.Cancel();
+        // 异步断开，避免在 UI 线程同步等待造成死锁
+        _ = DisconnectStateAsyncSafely();
     }
 
     /// <summary>
@@ -122,6 +126,9 @@ public sealed class BridgeClient : IDisposable
     /// <summary>断开所有连接（客户端仍可再次 ConnectAsync）。</summary>
     public void Disconnect()
     {
+        // 同时停掉状态流，否则 /state 会按断线重连逻辑自行恢复
+        _stateStreamEnabled = false;
+        _stateCts?.Cancel();
         _connection.DisconnectAll();
         ConnectionChanged?.Invoke(false);
     }
@@ -133,8 +140,10 @@ public sealed class BridgeClient : IDisposable
         _disposed = true;
         _stateStreamEnabled = false;
         _cts.Cancel();
+        _stateCts?.Cancel();
         _connection.DisconnectAll();
         FailAllPending("client disposed");
+        _stateCts?.Dispose();
         _cts.Dispose();
     }
 
@@ -177,37 +186,65 @@ public sealed class BridgeClient : IDisposable
     private void OnStateDisconnected()
     {
         // 状态流断线后自动重连（直到 StopStateStream / Dispose）
-        if (_stateStreamEnabled)
-        {
-            _stateStreamTask = Task.Run(StateStreamLoopAsync, CancellationToken.None);
-        }
+        if (_stateStreamEnabled && !_disposed)
+            StartStateLoop();
+    }
+
+    /// <summary>
+    /// 启动状态流重连循环（同一时刻仅允许一个，防止断线风暴导致并发连接）。
+    /// </summary>
+    private void StartStateLoop()
+    {
+        if (Interlocked.Exchange(ref _stateLoopRunning, 1) != 0)
+            return;
+        _ = Task.Run(StateStreamLoopAsync, CancellationToken.None);
     }
 
     private async Task StateStreamLoopAsync()
     {
-        while (_stateStreamEnabled && !_disposed)
+        try
         {
-            try
+            var stateCts = _stateCts;
+            while (_stateStreamEnabled && !_disposed && stateCts is not null)
             {
-                await _connection.ConnectStateAsync(_cts.Token);
-                return; // 连上后由 StateDisconnected 驱动下一次连接
-            }
-            catch (OperationCanceledException)
-            {
-                return;
-            }
-            catch (Exception)
-            {
-                // 连接失败，退避后重试
                 try
                 {
-                    await Task.Delay(1000, _cts.Token);
+                    await _connection.ConnectStateAsync(stateCts.Token).ConfigureAwait(false);
+                    return; // 连上后由 StateDisconnected 驱动下一次连接
                 }
                 catch (OperationCanceledException)
                 {
                     return;
                 }
+                catch (Exception)
+                {
+                    // 连接失败，退避后重试
+                    try
+                    {
+                        await Task.Delay(1000, stateCts.Token).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        return;
+                    }
+                }
             }
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _stateLoopRunning, 0);
+        }
+    }
+
+    private async Task DisconnectStateAsyncSafely()
+    {
+        try
+        {
+            await _connection.DisconnectStateAsync().ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            // 断开失败无需处理，下次连接会覆盖
         }
     }
 

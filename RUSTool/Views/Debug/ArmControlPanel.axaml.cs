@@ -1,6 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Input;
-using RUSTool.ViewModels.Robot;
+using RUSTool.ViewModels;
 
 namespace RUSTool.Views.Debug;
 
@@ -10,8 +10,9 @@ public partial class ArmControlPanel : UserControl
     {
         InitializeComponent();
 
-        // 点动按钮：用 AddHandler 捕获 Button 内部已处理的指针事件
-        var jogBtns = new[] {
+        // 点动按钮：按下开始 / 松开停止。用 AddHandler 捕获 Button 内部已处理的指针事件。
+        var jogBtns = new[]
+        {
             BtnXNeg, BtnXPos, BtnYNeg, BtnYPos, BtnZNeg, BtnZPos,
             BtnRxNeg, BtnRxPos, BtnRyNeg, BtnRyPos, BtnRzNeg, BtnRzPos,
         };
@@ -24,7 +25,7 @@ public partial class ArmControlPanel : UserControl
 
     private void OnJogModeChanged(object? sender, SelectionChangedEventArgs e)
     {
-        if (sender is ComboBox { SelectedIndex: var idx } && DataContext is RobotViewModel vm)
+        if (sender is ComboBox { SelectedIndex: var idx } && DataContext is RobotControlViewModel vm)
         {
             vm.JogRefFrame = idx switch
             {
@@ -34,70 +35,38 @@ public partial class ArmControlPanel : UserControl
                 _ => 2,
             };
 
-            // 切换标签文字
-            if (idx == 2) // 关节空间
-            {
-                LabelX.Text = "关节1";
-                LabelY.Text = "关节2";
-                LabelZ.Text = "关节3";
-                LabelRx.Text = "关节4";
-                LabelRy.Text = "关节5";
-                LabelRz.Text = "关节6";
-            }
-            else
-            {
-                LabelX.Text = "X方向";
-                LabelY.Text = "Y方向";
-                LabelZ.Text = "Z方向";
-                LabelRx.Text = "绕X轴旋转";
-                LabelRy.Text = "绕Y轴旋转";
-                LabelRz.Text = "绕Z轴旋转";
-            }
+            var joint = idx == 2;
+            LabelX.Text = joint ? "关节1" : "X方向";
+            LabelY.Text = joint ? "关节2" : "Y方向";
+            LabelZ.Text = joint ? "关节3" : "Z方向";
+            LabelRx.Text = joint ? "关节4" : "绕X轴旋转";
+            LabelRy.Text = joint ? "关节5" : "绕Y轴旋转";
+            LabelRz.Text = joint ? "关节6" : "绕Z轴旋转";
         }
     }
 
     private void OnJogPressed(object? sender, PointerPressedEventArgs e)
     {
-        if (sender is Button { Tag: string tag } && DataContext is RobotViewModel vm)
+        if (sender is Button { Tag: string tag } && DataContext is RobotControlViewModel vm)
         {
-            // 关节空间模式 → 映射到 J1~J6
-            if (vm.JogRefFrame == 0)
+            var (axis, dir) = tag switch
             {
-                var jointCmd = tag switch
-                {
-                    "X+"  => vm.JogAxis1PosCommand,  "X-"  => vm.JogAxis1NegCommand,
-                    "Y+"  => vm.JogAxis2PosCommand,  "Y-"  => vm.JogAxis2NegCommand,
-                    "Z+"  => vm.JogAxis3PosCommand,  "Z-"  => vm.JogAxis3NegCommand,
-                    "Rx+" => vm.JogAxis4PosCommand,  "Rx-" => vm.JogAxis4NegCommand,
-                    "Ry+" => vm.JogAxis5PosCommand,  "Ry-" => vm.JogAxis5NegCommand,
-                    "Rz+" => vm.JogAxis6PosCommand,  "Rz-" => vm.JogAxis6NegCommand,
-                    _ => null,
-                };
-                jointCmd?.Execute(null);
-            }
-            else
-            {
-                // 笛卡尔模式（基坐标/工具坐标）
-                var cmd = tag switch
-                {
-                    "X+" => vm.JogXPosCommand,    "X-" => vm.JogXNegCommand,
-                    "Y+" => vm.JogYPosCommand,    "Y-" => vm.JogYNegCommand,
-                    "Z+" => vm.JogZPosCommand,    "Z-" => vm.JogZNegCommand,
-                    "Rx+" => vm.JogRxPosCommand,  "Rx-" => vm.JogRxNegCommand,
-                    "Ry+" => vm.JogRyPosCommand,  "Ry-" => vm.JogRyNegCommand,
-                    "Rz+" => vm.JogRzPosCommand,  "Rz-" => vm.JogRzNegCommand,
-                    _ => null,
-                };
-                cmd?.Execute(null);
-            }
+                "X+" => (1, 1), "X-" => (1, 0),
+                "Y+" => (2, 1), "Y-" => (2, 0),
+                "Z+" => (3, 1), "Z-" => (3, 0),
+                "Rx+" => (4, 1), "Rx-" => (4, 0),
+                "Ry+" => (5, 1), "Ry-" => (5, 0),
+                "Rz+" => (6, 1), "Rz-" => (6, 0),
+                _ => (0, 0),
+            };
+            if (axis > 0)
+                vm.BeginJog(axis, dir);
         }
     }
 
     private void OnJogReleased(object? sender, PointerReleasedEventArgs e)
     {
-        if (DataContext is RobotViewModel vm)
-        {
-            vm.StopJogCommand.Execute(null);
-        }
+        if (DataContext is RobotControlViewModel vm)
+            vm.EndJog();
     }
 }

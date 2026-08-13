@@ -1,0 +1,35 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:RUSTool.ViewModels"
+             xmlns:debug="using:RUSTool.Views.Debug"
+             mc:Ignorable="d" d:DesignWidth="560" d:DesignHeight="300"
+             x:Class="RUSTool.Views.Debug.RobotCommandPanel"
+             x:DataType="vm:MainViewModel">
+    <Grid RowDefinitions="*,Auto" Margin="8">
+
+        <!-- 按任务分组的指令标签页 -->
+        <TabControl Grid.Row="0">
+            <TabItem Header="连接">
+                <debug:ConnectionPanel DataContext="{Binding Connection}" />
+            </TabItem>
+            <TabItem Header="手动">
+                <debug:ArmControlPanel DataContext="{Binding Control}" />
+            </TabItem>
+            <TabItem Header="扫查流程">
+                <debug:ScanWorkflowPanel DataContext="{Binding Scan}" />
+            </TabItem>
+            <TabItem Header="仿真">
+                <debug:SimulationPanel DataContext="{Binding Sim}" />
+            </TabItem>
+        </TabControl>
+
+        <!-- 常驻急停：不折叠，始终可达 -->
+        <Button Grid.Row="1" Content="🛑 急停"
+                Command="{Binding Control.StopAllMotionCommand}"
+                Background="#DC3545" BorderBrush="#DC3545" Foreground="#FFFFFF"
+                HorizontalAlignment="Stretch" Padding="0,10" Margin="0,8,0,0"
+                FontSize="15" FontWeight="Bold" />
+    </Grid>
+</UserControl>

@@ -1,0 +1,48 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:RUSTool.ViewModels"
+             mc:Ignorable="d" d:DesignWidth="420" d:DesignHeight="280"
+             x:Class="RUSTool.Views.Debug.SimulationPanel"
+             x:DataType="vm:SimulationViewModel">
+    <StackPanel Spacing="12" Margin="10">
+
+        <!-- 仿真倍速 -->
+        <Border Background="#FAFAFA" CornerRadius="6" Padding="10,8">
+            <StackPanel Spacing="6">
+                <TextBlock Text="仿真倍速" FontSize="12" Foreground="#888888" />
+                <Grid ColumnDefinitions="*,Auto">
+                    <TextBox Text="{Binding TimeSpeed}" VerticalAlignment="Center" />
+                    <Button Grid.Column="1" Content="设置" Command="{Binding SetTimeSpeedCommand}"
+                            Margin="8,0,0,0" />
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <!-- 单步 -->
+        <Button Content="单步仿真" Command="{Binding StepOnceCommand}" HorizontalAlignment="Stretch" />
+
+        <!-- 仿真信息 -->
+        <Border Background="#F5F9FF" CornerRadius="6" Padding="10,8" BorderBrush="#D6E6F8" BorderThickness="1">
+            <StackPanel Spacing="4">
+                <Grid ColumnDefinitions="Auto,*">
+                    <TextBlock Text="仿真时间" FontSize="12" Foreground="#888888" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1" Text="{Binding SimTime, StringFormat='{}{0:F1} s'}"
+                               FontSize="13" Foreground="#1A1A1A" HorizontalAlignment="Right" />
+                </Grid>
+                <Grid ColumnDefinitions="Auto,*">
+                    <TextBlock Text="帧率" FontSize="12" Foreground="#888888" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1" Text="{Binding FrameRate, StringFormat='{}{0:F0} fps'}"
+                               FontSize="13" Foreground="#1A1A1A" HorizontalAlignment="Right" />
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <!-- 刷新 -->
+        <Button Content="刷新仿真信息" Command="{Binding RefreshCommand}" HorizontalAlignment="Stretch" />
+
+        <!-- 状态 -->
+        <TextBlock Text="{Binding StatusText}" FontSize="12" Foreground="#555" TextWrapping="Wrap" />
+    </StackPanel>
+</UserControl>

@@ -1,0 +1,58 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:RUSTool.ViewModels"
+             mc:Ignorable="d" d:DesignWidth="420" d:DesignHeight="280"
+             x:Class="RUSTool.Views.Debug.ConnectionPanel"
+             x:DataType="vm:ConnectionViewModel">
+    <StackPanel Spacing="12" Margin="10">
+
+        <!-- 连接状态 -->
+        <Border Background="#F5F9FF" CornerRadius="6" Padding="10,8" BorderBrush="#D6E6F8" BorderThickness="1">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+                <TextBlock Text="●" FontSize="14" VerticalAlignment="Center" Foreground="#4CAF50" />
+                <TextBlock Grid.Column="1" Text="连接状态" FontSize="13" FontWeight="SemiBold"
+                           Foreground="#1A1A1A" VerticalAlignment="Center" Margin="6,0,0,0" />
+                <TextBlock Grid.Column="2" Text="{Binding StatusText}" FontSize="13" Foreground="#555"
+                           VerticalAlignment="Center" />
+            </Grid>
+        </Border>
+
+        <!-- 连接 / 断开 -->
+        <Grid ColumnDefinitions="*,*">
+            <Button Content="连接" Command="{Binding ConnectCommand}" Margin="0,0,4,0"
+                    Background="#E8F5E9" BorderBrush="#4CAF50" Foreground="#2E7D32" />
+            <Button Grid.Column="1" Content="断开" Command="{Binding DisconnectCommand}" Margin="4,0,0,0" />
+        </Grid>
+
+        <!-- 使能 -->
+        <Grid ColumnDefinitions="*,*">
+            <Button Content="上使能" Command="{Binding EnableRobotCommand}" Margin="0,0,4,0" />
+            <Button Grid.Column="1" Content="下使能" Command="{Binding DisableRobotCommand}" Margin="4,0,0,0" />
+        </Grid>
+
+        <!-- 驱动切换 -->
+        <Border Background="#FAFAFA" CornerRadius="6" Padding="10,8">
+            <StackPanel Spacing="6">
+                <TextBlock Text="驱动模式" FontSize="12" Foreground="#888888" />
+                <Grid ColumnDefinitions="*,Auto">
+                    <ComboBox SelectedIndex="{Binding SelectedDriver}" VerticalAlignment="Center">
+                        <ComboBoxItem>真实驱动</ComboBoxItem>
+                        <ComboBoxItem>仿真驱动</ComboBoxItem>
+                    </ComboBox>
+                    <Button Grid.Column="1" Content="切换" Command="{Binding SwitchDriverCommand}"
+                            Margin="8,0,0,0" />
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <!-- 状态查询 -->
+        <Button Content="刷新连接状态" Command="{Binding RefreshConnectionCommand}"
+                HorizontalAlignment="Stretch" />
+
+        <!-- 错误信息 -->
+        <TextBlock Text="{Binding ErrorMessage}" FontSize="12" Foreground="#DC3545"
+                   TextWrapping="Wrap" />
+    </StackPanel>
+</UserControl>

@@ -1,4 +1,5 @@
 using System;
+using System.Buffers;
 using System.IO;
 using System.Net.WebSockets;
 using System.Text;
@@ -72,6 +73,11 @@ internal sealed class ConnectionManager : IDisposable
         // 若已有旧连接则先断开，避免叠加
         await DisconnectStateAsync();
         var ws = await ConnectAsync(Channels.State, ct);
+        if (ct.IsCancellationRequested)
+        {
+            await CloseAsync(ws);
+            throw new OperationCanceledException(ct);
+        }
         _stateWs = ws;
         _ = Task.Run(() => StateReceiveLoopAsync(ws, ct), CancellationToken.None);
     }
@@ -116,8 +122,16 @@ internal sealed class ConnectionManager : IDisposable
     private async Task<ClientWebSocket> ConnectAsync(string channel, CancellationToken ct)
     {
         var ws = new ClientWebSocket();
-        await ws.ConnectAsync(new Uri($"ws://{_host}:{_port}{channel}"), ct);
-        return ws;
+        try
+        {
+            await ws.ConnectAsync(new Uri($"ws://{_host}:{_port}{channel}"), ct);
+            return ws;
+        }
+        catch
+        {
+            ws.Dispose();
+            throw;
+        }
     }
 
     private async Task ControlLoopAsync(CancellationToken ct)
@@ -151,7 +165,8 @@ internal sealed class ConnectionManager : IDisposable
             }
             finally
             {
-                if (ws is { State: not WebSocketState.Open })
+                // 无论 socket 处于何种状态都释放，避免取消/异常路径泄漏连接
+                if (ws is not null)
                 {
                     if (ReferenceEquals(_controlWs, ws))
                         _controlWs = null;
@@ -204,7 +219,11 @@ internal sealed class ConnectionManager : IDisposable
                 StateMessageReceived?.Invoke(frame.Value);
             }
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (OperationCanceledException)
+        {
+            // 连接被取消，正常退出
+        }
+        catch (Exception)
         {
             // 断开，交给 BridgeClient 重连
         }
@@ -218,19 +237,27 @@ internal sealed class ConnectionManager : IDisposable
     /// <summary>整帧接收一条消息（文本/二进制），返回原始字节；连接关闭返回 null。</summary>
     private static async Task<ReadOnlyMemory<byte>?> ReceiveFrameAsync(ClientWebSocket ws, CancellationToken ct)
     {
-        var buffer = new byte[65536];
-        using var ms = new MemoryStream();
-        while (true)
+        // 高频状态帧下避免每帧分配 64KB，改用池化 buffer
+        var buffer = ArrayPool<byte>.Shared.Rent(65536);
+        try
         {
-            var result = await ws.ReceiveAsync(buffer, ct);
-            if (result.MessageType == WebSocketMessageType.Close)
-                return null;
-            if (result.MessageType is not (WebSocketMessageType.Text or WebSocketMessageType.Binary))
-                continue;
+            using var ms = new MemoryStream();
+            while (true)
+            {
+                var result = await ws.ReceiveAsync(buffer, ct);
+                if (result.MessageType == WebSocketMessageType.Close)
+                    return null;
+                if (result.MessageType is not (WebSocketMessageType.Text or WebSocketMessageType.Binary))
+                    continue;
 
-            ms.Write(buffer, 0, result.Count);
-            if (result.EndOfMessage)
-                return ms.ToArray();
+                ms.Write(buffer, 0, result.Count);
+                if (result.EndOfMessage)
+                    return ms.ToArray();
+            }
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
         }
     }
 

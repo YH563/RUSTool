@@ -2,18 +2,18 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-             xmlns:robotVm="clr-namespace:RUSTool.ViewModels.Robot"
+             xmlns:vm="using:RUSTool.ViewModels"
              mc:Ignorable="d" d:DesignWidth="700" d:DesignHeight="350"
              x:Class="RUSTool.Views.Debug.ArmControlPanel"
-             x:DataType="robotVm:RobotViewModel">
-    <Grid ColumnDefinitions="0.75*,Auto,1*" Margin="8">
+             x:DataType="vm:RobotControlViewModel">
+    <Grid ColumnDefinitions="1.0*,Auto,1.2*" Margin="8">
         <!-- ═══ 左侧：机械臂控制 ═══ -->
         <Grid Grid.Column="0" RowDefinitions="Auto,*" Margin="4, 10">
 
             <!-- 标题行 -->
             <Border Grid.Row="0" Margin="0,0,0,12">
                 <Grid ColumnDefinitions="Auto,*,Auto">
-                    <TextBlock Text="控制面板" FontSize="15" FontWeight="Bold"
+                    <TextBlock Text="点动控制" FontSize="15" FontWeight="Bold"
                                VerticalAlignment="Center" Foreground="#1A1A1A" />
                     <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                         <TextBlock Text="点动模式" FontSize="12" Foreground="#888888"
@@ -104,58 +104,46 @@
         <!-- 分割线 -->
         <Rectangle Grid.Column="1" Width="1" Fill="#E0E0E0" VerticalAlignment="Stretch" Margin="0,4" />
 
-        <!-- ═══ 右侧：状态信息 ═══ -->
-        <Grid Grid.Column="2" RowDefinitions="Auto,*,*,*,Auto" Margin="4, 10">
+        <!-- ═══ 右侧：运动指令 ═══ -->
+        <Grid Grid.Column="2" RowDefinitions="Auto,*,Auto" Margin="4, 10">
 
-            <TextBlock Text="机械臂状态信息" FontSize="15" FontWeight="Bold"
+            <TextBlock Text="运动指令" FontSize="15" FontWeight="Bold"
                        VerticalAlignment="Center" Foreground="#1A1A1A" Margin="10,0,0,12"/>
 
-            <!-- TCP 位置 -->
-            <Border Grid.Row="1" Background="#F8F8F8" CornerRadius="6"  Padding="4" Margin="6,0,0,6" VerticalAlignment="Center">
-                <Grid RowDefinitions="Auto,Auto,Auto">
-                    <TextBlock Text="TCP 位置" FontSize="12" FontWeight="Bold" Foreground="#444" />
-                    <Grid Grid.Row="1" ColumnDefinitions="*,*,*" RowDefinitions="*,*" Margin="0,6,0,0">
-                        <TextBlock Grid.Row="0" Grid.Column="0" Text="{Binding FlangeX, StringFormat='X: {0:F4} m'}" FontSize="13" Margin="2"></TextBlock>
-                        <TextBlock Grid.Row="1" Grid.Column="0" Text="{Binding FlangeRx, StringFormat='Rx: {0:F2} deg'}" FontSize="13" Margin="2"></TextBlock>
-                        <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding FlangeY, StringFormat='Y: {0:F4} m'}" FontSize="13" Margin="2"></TextBlock>
-                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding FlangeRz, StringFormat='Rz: {0:F2} deg'}" FontSize="13" Margin="2"></TextBlock>
-                        <TextBlock Grid.Row="0" Grid.Column="2" Text="{Binding FlangeZ, StringFormat='Z: {0:F4} m'}" FontSize="13" Margin="2"></TextBlock>
-                        <TextBlock Grid.Row="1" Grid.Column="2" Text="{Binding FlangeRy, StringFormat='Ry: {0:F2} deg'}" FontSize="13" Margin="2"></TextBlock>
-                    </Grid>
-                </Grid>
-            </Border>
+            <!-- MoveJ / MoveL -->
+            <StackPanel Grid.Row="1" Spacing="12" Margin="10,0,0,0">
 
-            <!-- 关节角度 -->
-            <Border Grid.Row="2" Background="#F8F8F8" CornerRadius="6"  Padding="4" Margin="6,0,0,6" VerticalAlignment="Center">
-                <Grid RowDefinitions="Auto,Auto,Auto">
-                    <TextBlock Text="关节角度" FontSize="12" FontWeight="Bold" Foreground="#444" />
-                    <Grid Grid.Row="1" ColumnDefinitions="*,*,*" RowDefinitions="*,*" Margin="0,6,0,0">
-                        <TextBlock Grid.Row="0" Grid.Column="0" Text="{Binding Joint1, StringFormat='J1: {0:F2} deg'}" FontSize="13" Margin="2"></TextBlock>
-                        <TextBlock Grid.Row="1" Grid.Column="0" Text="{Binding Joint2, StringFormat='J2: {0:F2} deg'}" FontSize="13" Margin="2"></TextBlock>
-                        <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Joint3, StringFormat='J3: {0:F2} deg'}" FontSize="13" Margin="2"></TextBlock>
-                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Joint4, StringFormat='J4: {0:F2} deg'}" FontSize="13" Margin="2"></TextBlock>
-                        <TextBlock Grid.Row="0" Grid.Column="2" Text="{Binding Joint5, StringFormat='J5: {0:F2} deg'}" FontSize="13" Margin="2"></TextBlock>
-                        <TextBlock Grid.Row="1" Grid.Column="2" Text="{Binding Joint6, StringFormat='J6: {0:F2} deg'}" FontSize="13" Margin="2"></TextBlock>
+                <StackPanel Spacing="4">
+                    <TextBlock Text="关节空间运动" FontSize="12" Foreground="#888888"/>
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBox x:Name="MoveJInput" PlaceholderText="q1,q2,q3,q4,q5,q6"
+                                 FontSize="13" VerticalAlignment="Center"/>
+                        <Button Grid.Column="1" Content="执行" Margin="6,0,0,0"
+                                Command="{Binding MoveJCommand}"
+                                CommandParameter="{Binding Text, ElementName=MoveJInput}"/>
                     </Grid>
-                </Grid>
-            </Border>
-            <Border Grid.Row="3" Background="#F8F8F8" CornerRadius="6"  Padding="4" Margin="6,0,0,6" VerticalAlignment="Center">
-                <Grid RowDefinitions="Auto,Auto,Auto">
-                    <TextBlock Text="关节力矩" FontSize="12" FontWeight="Bold" Foreground="#444" />
-                    <Grid Grid.Row="1" ColumnDefinitions="*,*,*" RowDefinitions="*,*" Margin="0,6,0,0">
-                        <TextBlock Grid.Row="0" Grid.Column="0" Text="{Binding Torque1, StringFormat='J1: {0:F2} Nm'}" FontSize="13" Margin="2"></TextBlock>
-                        <TextBlock Grid.Row="1" Grid.Column="0" Text="{Binding Torque2, StringFormat='J2: {0:F2} Nm'}" FontSize="13" Margin="2"></TextBlock>
-                        <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Torque3, StringFormat='J3: {0:F2} Nm'}" FontSize="13" Margin="2"></TextBlock>
-                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Torque4, StringFormat='J4: {0:F2} Nm'}" FontSize="13" Margin="2"></TextBlock>
-                        <TextBlock Grid.Row="0" Grid.Column="2" Text="{Binding Torque5, StringFormat='J5: {0:F2} Nm'}" FontSize="13" Margin="2"></TextBlock>
-                        <TextBlock Grid.Row="1" Grid.Column="2" Text="{Binding Torque6, StringFormat='J6: {0:F2} Nm'}" FontSize="13" Margin="2"></TextBlock>
+                </StackPanel>
+
+                <StackPanel Spacing="4">
+                    <TextBlock Text="笛卡尔直线运动" FontSize="12" Foreground="#888888"/>
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBox x:Name="MoveLInput" PlaceholderText="x,y,z,rx,ry,rz"
+                                 FontSize="13" VerticalAlignment="Center"/>
+                        <Button Grid.Column="1" Content="执行" Margin="6,0,0,0"
+                                Command="{Binding MoveLCommand}"
+                                CommandParameter="{Binding Text, ElementName=MoveLInput}"/>
                     </Grid>
-                </Grid>
-            </Border>
-            <StackPanel Grid.Row="4" HorizontalAlignment="Right" Orientation="Horizontal">
-                
-                <TextBlock Text="已连接" FontSize="11"></TextBlock>
+                </StackPanel>
+
             </StackPanel>
+
+            <!-- 暂停，继续运动 -->
+            <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8"
+                        Margin="10,12,0,0" HorizontalAlignment="Right">
+                <Button Content="暂停" Command="{Binding PauseCommand}"/>
+                <Button Content="继续" Command="{Binding ResumeCommand}"/>
+            </StackPanel>
+
         </Grid>
 
     </Grid>

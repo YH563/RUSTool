@@ -48,5 +48,20 @@
       <Compile Update="Views\Debug\ArmControlPanel.axaml.cs">
         <DependentUpon>ArmControlPanel.axaml</DependentUpon>
       </Compile>
+      <Compile Update="Views\Debug\RobotStatusOverlay.axaml.cs">
+        <DependentUpon>RobotStatusOverlay.axaml</DependentUpon>
+      </Compile>
+      <Compile Update="Views\Debug\ConnectionPanel.axaml.cs">
+        <DependentUpon>ConnectionPanel.axaml</DependentUpon>
+      </Compile>
+      <Compile Update="Views\Debug\ScanWorkflowPanel.axaml.cs">
+        <DependentUpon>ScanWorkflowPanel.axaml</DependentUpon>
+      </Compile>
+      <Compile Update="Views\Debug\SimulationPanel.axaml.cs">
+        <DependentUpon>SimulationPanel.axaml</DependentUpon>
+      </Compile>
+      <Compile Update="Views\Debug\RobotCommandPanel.axaml.cs">
+        <DependentUpon>RobotCommandPanel.axaml</DependentUpon>
+      </Compile>
     </ItemGroup>
 </Project>
