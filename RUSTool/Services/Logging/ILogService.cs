@@ -1,6 +1,6 @@
 using System.Collections.ObjectModel;
 
-namespace RUSTool.Services;
+namespace RUSTool.Services.Logging;
 
 /// <summary>日志等级。</summary>
 public enum LogLevel

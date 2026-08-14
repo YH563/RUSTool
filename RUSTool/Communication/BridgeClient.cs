@@ -52,6 +52,9 @@ public sealed class BridgeClient : IDisposable
     /// <summary>最新一帧状态（只保留最新）</summary>
     public BridgeProtocol.StateFrame? LatestState => _latestState;
 
+    /// <summary>指令日志回调（message, isError），由组装层注入，例如接到全局日志服务。</summary>
+    public Action<string, bool>? Logger { get; set; }
+
     /// <summary>连 /control（必连），断线自动重连。</summary>
     public Task ConnectAsync()
     {
@@ -85,6 +88,19 @@ public sealed class BridgeClient : IDisposable
     /// </summary>
     public async Task<CommandResult> SendAsync(string cmd, double[]? args = null,
         int timeoutMs = 5000, CancellationToken ct = default)
+    {
+        var argText = args is { Length: > 0 } ? string.Join(",", args) : "";
+        Logger?.Invoke($"→ 发送指令 {cmd} [{argText}]", false);
+
+        var result = await SendCoreAsync(cmd, args, timeoutMs, ct);
+
+        Logger?.Invoke($"← 指令 {cmd} 结果: {(result.Success ? "成功" : "失败")} - {result.Message}",
+            !result.Success);
+        return result;
+    }
+
+    private async Task<CommandResult> SendCoreAsync(string cmd, double[]? args,
+        int timeoutMs, CancellationToken ct)
     {
         ThrowIfDisposed();
 

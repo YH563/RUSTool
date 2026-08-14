@@ -2,7 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-             xmlns:vm="using:RUSTool.ViewModels"
+             xmlns:vm="using:RUSTool.ViewModels.Robot"
              mc:Ignorable="d" d:DesignWidth="320" d:DesignHeight="420"
              x:Class="RUSTool.Views.Debug.RobotStatusOverlay"
              x:DataType="vm:RobotStatusViewModel"
@@ -20,9 +20,6 @@
                            Foreground="#F5F5F5" VerticalAlignment="Center"/>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6"
                             VerticalAlignment="Center">
-                    <Ellipse Width="8" Height="8" Fill="#4ADE80" VerticalAlignment="Center"/>
-                    <TextBlock Text="已连接" FontSize="12" Foreground="#9CA3AF"
-                               VerticalAlignment="Center"/>
                 </StackPanel>
             </Grid>
 
@@ -30,13 +27,13 @@
             <Border Background="#2AFFFFFF" CornerRadius="6" Padding="8,6">
                 <StackPanel Spacing="6">
                     <TextBlock Text="TCP 位置" FontSize="12" Foreground="#9CA3AF"/>
-                    <Grid ColumnDefinitions="*,*,*" RowDefinitions="*,*">
-                        <TextBlock Grid.Row="0" Grid.Column="0" Text="{Binding FlangeX, StringFormat='X: {0:F4} m'}" FontSize="13" Foreground="#E5E5E5"/>
-                        <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding FlangeY, StringFormat='Y: {0:F4} m'}" FontSize="13" Foreground="#E5E5E5"/>
-                        <TextBlock Grid.Row="0" Grid.Column="2" Text="{Binding FlangeZ, StringFormat='Z: {0:F4} m'}" FontSize="13" Foreground="#E5E5E5"/>
-                        <TextBlock Grid.Row="1" Grid.Column="0" Text="{Binding FlangeRx, StringFormat='Rx: {0:F2} deg'}" FontSize="13" Foreground="#E5E5E5"/>
-                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding FlangeRy, StringFormat='Ry: {0:F2} deg'}" FontSize="13" Foreground="#E5E5E5"/>
-                        <TextBlock Grid.Row="1" Grid.Column="2" Text="{Binding FlangeRz, StringFormat='Rz: {0:F2} deg'}" FontSize="13" Foreground="#E5E5E5"/>
+                    <Grid ColumnDefinitions="*,*,*" RowDefinitions="*,*" ColumnSpacing="6">
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="{Binding FlangeX, StringFormat='X: {0:F2} m'}" FontSize="12" Foreground="#E5E5E5"/>
+                        <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding FlangeY, StringFormat='Y: {0:F2} m'}" FontSize="12" Foreground="#E5E5E5"/>
+                        <TextBlock Grid.Row="0" Grid.Column="2" Text="{Binding FlangeZ, StringFormat='Z: {0:F2} m'}" FontSize="12" Foreground="#E5E5E5"/>
+                        <TextBlock Grid.Row="1" Grid.Column="0" Text="{Binding FlangeRx, StringFormat='Rx: {0:F2} deg'}" FontSize="12" Foreground="#E5E5E5"/>
+                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding FlangeRy, StringFormat='Ry: {0:F2} deg'}" FontSize="12" Foreground="#E5E5E5"/>
+                        <TextBlock Grid.Row="1" Grid.Column="2" Text="{Binding FlangeRz, StringFormat='Rz: {0:F2} deg'}" FontSize="12" Foreground="#E5E5E5"/>
                     </Grid>
                 </StackPanel>
             </Border>
@@ -45,13 +42,13 @@
             <Border Background="#2AFFFFFF" CornerRadius="6" Padding="8,6">
                 <StackPanel Spacing="6">
                     <TextBlock Text="关节角度" FontSize="12" Foreground="#9CA3AF"/>
-                    <Grid ColumnDefinitions="*,*" RowDefinitions="*,*,*">
-                        <TextBlock Grid.Row="0" Grid.Column="0" Text="{Binding Joint1, StringFormat='J1: {0:F2} deg'}" FontSize="13" Foreground="#E5E5E5"/>
-                        <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Joint2, StringFormat='J2: {0:F2} deg'}" FontSize="13" Foreground="#E5E5E5"/>
-                        <TextBlock Grid.Row="1" Grid.Column="0" Text="{Binding Joint3, StringFormat='J3: {0:F2} deg'}" FontSize="13" Foreground="#E5E5E5"/>
-                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Joint4, StringFormat='J4: {0:F2} deg'}" FontSize="13" Foreground="#E5E5E5"/>
-                        <TextBlock Grid.Row="2" Grid.Column="0" Text="{Binding Joint5, StringFormat='J5: {0:F2} deg'}" FontSize="13" Foreground="#E5E5E5"/>
-                        <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Joint6, StringFormat='J6: {0:F2} deg'}" FontSize="13" Foreground="#E5E5E5"/>
+                    <Grid ColumnDefinitions="*,*" RowDefinitions="*,*,*" ColumnSpacing="6">
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="{Binding Joint1, StringFormat='J1: {0:F2} deg'}" FontSize="12" Foreground="#E5E5E5"/>
+                        <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Joint2, StringFormat='J2: {0:F2} deg'}" FontSize="12" Foreground="#E5E5E5"/>
+                        <TextBlock Grid.Row="1" Grid.Column="0" Text="{Binding Joint3, StringFormat='J3: {0:F2} deg'}" FontSize="12" Foreground="#E5E5E5"/>
+                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Joint4, StringFormat='J4: {0:F2} deg'}" FontSize="12" Foreground="#E5E5E5"/>
+                        <TextBlock Grid.Row="2" Grid.Column="0" Text="{Binding Joint5, StringFormat='J5: {0:F2} deg'}" FontSize="12" Foreground="#E5E5E5"/>
+                        <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Joint6, StringFormat='J6: {0:F2} deg'}" FontSize="12" Foreground="#E5E5E5"/>
                     </Grid>
                 </StackPanel>
             </Border>
@@ -60,13 +57,13 @@
             <Border Background="#2AFFFFFF" CornerRadius="6" Padding="8,6">
                 <StackPanel Spacing="6">
                     <TextBlock Text="关节力矩" FontSize="12" Foreground="#9CA3AF"/>
-                    <Grid ColumnDefinitions="*,*" RowDefinitions="*,*,*">
-                        <TextBlock Grid.Row="0" Grid.Column="0" Text="{Binding Torque1, StringFormat='J1: {0:F2} Nm'}" FontSize="13" Foreground="#E5E5E5"/>
-                        <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Torque2, StringFormat='J2: {0:F2} Nm'}" FontSize="13" Foreground="#E5E5E5"/>
-                        <TextBlock Grid.Row="1" Grid.Column="0" Text="{Binding Torque3, StringFormat='J3: {0:F2} Nm'}" FontSize="13" Foreground="#E5E5E5"/>
-                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Torque4, StringFormat='J4: {0:F2} Nm'}" FontSize="13" Foreground="#E5E5E5"/>
-                        <TextBlock Grid.Row="2" Grid.Column="0" Text="{Binding Torque5, StringFormat='J5: {0:F2} Nm'}" FontSize="13" Foreground="#E5E5E5"/>
-                        <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Torque6, StringFormat='J6: {0:F2} Nm'}" FontSize="13" Foreground="#E5E5E5"/>
+                    <Grid ColumnDefinitions="*,*" RowDefinitions="*,*,*" ColumnSpacing="6">
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="{Binding Torque1, StringFormat='J1: {0:F2} Nm'}" FontSize="12" Foreground="#E5E5E5"/>
+                        <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Torque2, StringFormat='J2: {0:F2} Nm'}" FontSize="12" Foreground="#E5E5E5"/>
+                        <TextBlock Grid.Row="1" Grid.Column="0" Text="{Binding Torque3, StringFormat='J3: {0:F2} Nm'}" FontSize="12" Foreground="#E5E5E5"/>
+                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Torque4, StringFormat='J4: {0:F2} Nm'}" FontSize="12" Foreground="#E5E5E5"/>
+                        <TextBlock Grid.Row="2" Grid.Column="0" Text="{Binding Torque5, StringFormat='J5: {0:F2} Nm'}" FontSize="12" Foreground="#E5E5E5"/>
+                        <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Torque6, StringFormat='J6: {0:F2} Nm'}" FontSize="12" Foreground="#E5E5E5"/>
                     </Grid>
                 </StackPanel>
             </Border>

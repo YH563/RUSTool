@@ -1,7 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using System;
 
-namespace RUSTool.Services;
+namespace RUSTool.Services.Robot;
 
 /// <summary>
 /// 机械臂操作模式。手动控制与扫查流程互斥：

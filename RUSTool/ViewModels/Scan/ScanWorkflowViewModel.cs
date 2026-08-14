@@ -1,11 +1,12 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using RUSTool.Communication;
-using RUSTool.Services;
+using RUSTool.Services.Logging;
+using RUSTool.Services.Robot;
 using System;
 using System.Threading.Tasks;
 
-namespace RUSTool.ViewModels;
+namespace RUSTool.ViewModels.Scan;
 
 /// <summary>
 /// 扫查流程 VM：把任务级指令串成 4 步状态机，用状态灯 + 状态文本驱动界面。
@@ -15,6 +16,7 @@ namespace RUSTool.ViewModels;
 public partial class ScanWorkflowViewModel : ViewModelBase
 {
     private readonly IRobotService _robot;
+    private readonly ILogService _log;
 
     // ── 步骤完成标志 ──
     [ObservableProperty] private bool _preScanDone;
@@ -29,10 +31,18 @@ public partial class ScanWorkflowViewModel : ViewModelBase
     /// <summary>建议的下一步操作。</summary>
     [ObservableProperty] private string _nextStep = "开始预扫描";
 
-    public ScanWorkflowViewModel(IRobotService robot)
+    public ScanWorkflowViewModel(IRobotService robot, ILogService log)
     {
         _robot = robot;
+        _log = log;
         _robot.EventReceived += OnEvent;
+    }
+
+    /// <summary>指令失败时写入日志（同时 UI 已通过 WorkflowStatus 展示）。</summary>
+    private void LogIfFailed(string action, CommandResult r)
+    {
+        if (!r.Success)
+            _log.Log($"{action} 失败: {r.Message}", LogLevel.Error);
     }
 
     // ── ① 预扫描 ──
@@ -41,6 +51,7 @@ public partial class ScanWorkflowViewModel : ViewModelBase
     private async Task StartPreScan()
     {
         var r = await _robot.PreScanStartAsync();
+        LogIfFailed("预扫描", r);
         WorkflowStatus = r.Success ? "预扫描进行中" : $"预扫描失败: {r.Message}";
         NextStep = "结束预扫描";
     }
@@ -49,6 +60,7 @@ public partial class ScanWorkflowViewModel : ViewModelBase
     private async Task EndPreScan()
     {
         var r = await _robot.PreScanEndAsync();
+        LogIfFailed("结束预扫描", r);
         WorkflowStatus = r.Success ? "预扫描结束" : $"预扫描失败: {r.Message}";
         NextStep = "设置扫查位姿";
     }
@@ -59,6 +71,7 @@ public partial class ScanWorkflowViewModel : ViewModelBase
     private async Task SetStartPose()
     {
         var r = await _robot.SetStartPoseAsync();
+        LogIfFailed("记录起点", r);
         StartPoseSet = r.Success;
         WorkflowStatus = r.Success ? "起点已记录" : $"记录起点失败: {r.Message}";
         RefreshNextStep();
@@ -68,6 +81,7 @@ public partial class ScanWorkflowViewModel : ViewModelBase
     private async Task SetEndPose()
     {
         var r = await _robot.SetEndPoseAsync();
+        LogIfFailed("记录终点", r);
         EndPoseSet = r.Success;
         WorkflowStatus = r.Success ? "终点已记录" : $"记录终点失败: {r.Message}";
         RefreshNextStep();
@@ -79,6 +93,7 @@ public partial class ScanWorkflowViewModel : ViewModelBase
     private async Task StartPlan()
     {
         var r = await _robot.PlanAsync();
+        LogIfFailed("规划", r);
         WorkflowStatus = r.Success ? "规划中…（等待 plan_done）" : $"规划失败: {r.Message}";
         NextStep = "等待规划完成";
     }
@@ -89,6 +104,7 @@ public partial class ScanWorkflowViewModel : ViewModelBase
     private async Task Execute()
     {
         var r = await _robot.ExecuteAsync();
+        LogIfFailed("执行", r);
         WorkflowStatus = r.Success ? "扫查中…" : $"执行失败: {r.Message}";
         NextStep = "等待扫查完成";
     }
@@ -97,6 +113,7 @@ public partial class ScanWorkflowViewModel : ViewModelBase
     private async Task Pause()
     {
         var r = await _robot.PauseAsync();
+        LogIfFailed("暂停", r);
         WorkflowStatus = r.Success ? "已暂停" : $"暂停失败: {r.Message}";
     }
 
@@ -104,6 +121,7 @@ public partial class ScanWorkflowViewModel : ViewModelBase
     private async Task Resume()
     {
         var r = await _robot.ResumeAsync();
+        LogIfFailed("恢复", r);
         WorkflowStatus = r.Success ? "已恢复" : $"恢复失败: {r.Message}";
     }
 
@@ -111,6 +129,7 @@ public partial class ScanWorkflowViewModel : ViewModelBase
     private async Task StopScan()
     {
         var r = await _robot.StopAsync();
+        LogIfFailed("停止", r);
         WorkflowStatus = r.Success ? "已停止" : $"停止失败: {r.Message}";
     }
 
@@ -151,18 +170,25 @@ public partial class ScanWorkflowViewModel : ViewModelBase
             case "pre_scan_done":
                 PreScanDone = evt.Success;
                 WorkflowStatus = "预扫描完成";
+                if (!evt.Success)
+                    _log.Log($"预扫描事件失败: {evt.Message}", LogLevel.Error);
                 break;
             case "plan_done":
                 PlanDone = evt.Success;
                 WorkflowStatus = evt.Success ? "规划完成" : "规划失败";
+                if (!evt.Success)
+                    _log.Log($"规划事件失败: {evt.Message}", LogLevel.Error);
                 break;
             case "motion_done":
             case "scan_done":
                 ScanDone = evt.Success;
                 WorkflowStatus = evt.Success ? "扫查完成" : "扫查失败";
+                if (!evt.Success)
+                    _log.Log($"扫查事件失败: {evt.Message}", LogLevel.Error);
                 break;
             case "error":
                 WorkflowStatus = $"错误: {evt.Message}";
+                _log.Log($"机器人上报错误: {evt.Message}", LogLevel.Error);
                 break;
         }
         RefreshNextStep();

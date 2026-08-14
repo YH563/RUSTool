@@ -3,7 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using RUSTool.Communication;
 
-namespace RUSTool.Services;
+namespace RUSTool.Services.Robot;
 
 /// <summary>
 /// 基于 BridgeClient 的机器人业务实现。协议字符串（Commands.*）只在这一层出现，
@@ -57,6 +57,9 @@ public sealed class RobotService : IRobotService
     public Task<CommandResult> StopJogImmediateAsync()
         => _client.SendAsync(Commands.StopJogImmediate);
 
+    public Task<CommandResult> SetMode(double mode)
+        => _client.SendAsync(Commands.SetMode, [mode]);
+
     // ── 驱动控制 ──
 
     public Task<CommandResult> RobotEnableAsync(double enabled)
@@ -97,11 +100,11 @@ public sealed class RobotService : IRobotService
     public Task<CommandResult> PauseAsync()
         => _client.SendAsync(Commands.Pause);
 
-    public Task<CommandResult> ResumeAsync()
-        => _client.SendAsync(Commands.Resume);
+    public Task<CommandResult> ResumeAsync(double mode=1, double enable=1)
+        => _client.SendAsync(Commands.Resume, [mode, enable]);
 
-    public Task<CommandResult> ResetAsync()
-        => _client.SendAsync(Commands.Reset);
+    public Task<CommandResult> ResetAsync(double mode = 1, double enable = 1)
+        => _client.SendAsync(Commands.Reset, [mode, enable]);
 
     public Task<CommandResult> QueryPreScanDoneAsync()
         => _client.SendAsync(Commands.QueryPreScanDone);

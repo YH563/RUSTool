@@ -1,10 +1,11 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using RUSTool.Services;
+using RUSTool.Services.Logging;
+using RUSTool.Services.Robot;
 using System;
 using System.Threading.Tasks;
 
-namespace RUSTool.ViewModels;
+namespace RUSTool.ViewModels.Connection;
 
 /// <summary>
 /// 连接 / 驱动 VM：连接、断开、上使能、切换驱动、状态查询。
@@ -14,6 +15,7 @@ public partial class ConnectionViewModel : ViewModelBase
 {
     private readonly IRobotService _robot;
     private readonly RobotSession _session;
+    private readonly ILogService _log;
 
     [ObservableProperty] private bool _isConnected;
     [ObservableProperty] private bool _isEnabled;
@@ -23,10 +25,11 @@ public partial class ConnectionViewModel : ViewModelBase
     /// <summary>当前驱动：0=真实，1=仿真。</summary>
     [ObservableProperty] private int _selectedDriver = 1;
 
-    public ConnectionViewModel(IRobotService robot, RobotSession session)
+    public ConnectionViewModel(IRobotService robot, RobotSession session, ILogService log)
     {
         _robot = robot;
         _session = session;
+        _log = log;
         _session.Driver = SelectedDriver;
         _robot.ConnectionChanged += connected =>
         {
@@ -55,6 +58,7 @@ public partial class ConnectionViewModel : ViewModelBase
         {
             StatusText = "连接失败";
             ErrorMessage = ex.Message;
+            _log.Log($"连接失败: {ex.Message}", LogLevel.Error);
         }
     }
 
@@ -67,13 +71,17 @@ public partial class ConnectionViewModel : ViewModelBase
             IsEnabled = r.Success;
             _session.IsEnabled = r.Success;
             if (!r.Success)
+            {
                 ErrorMessage = $"上使能失败: {r.Message}";
+                _log.Log($"上使能失败: {r.Message}", LogLevel.Error);
+            }
         }
         catch (Exception ex)
         {
             IsEnabled = false;
             _session.IsEnabled = false;
             ErrorMessage = $"上使能失败: {ex.Message}";
+            _log.Log($"上使能失败: {ex.Message}", LogLevel.Error);
         }
     }
 
@@ -98,6 +106,8 @@ public partial class ConnectionViewModel : ViewModelBase
         IsEnabled = r.Success;
         _session.IsEnabled = r.Success;
         ErrorMessage = r.Success ? "" : $"上使能失败: {r.Message}";
+        if (!r.Success)
+            _log.Log($"上使能失败: {r.Message}", LogLevel.Error);
     }
 
     /// <summary>下使能。</summary>
@@ -108,7 +118,10 @@ public partial class ConnectionViewModel : ViewModelBase
         if (r.Success)
             IsEnabled = false;
         else
+        {
             ErrorMessage = $"下使能失败: {r.Message}";
+            _log.Log($"下使能失败: {r.Message}", LogLevel.Error);
+        }
         _session.IsEnabled = IsEnabled;
     }
 
@@ -118,7 +131,10 @@ public partial class ConnectionViewModel : ViewModelBase
     {
         var r = await _robot.SwitchDriverAsync(SelectedDriver);
         if (!r.Success)
+        {
             ErrorMessage = $"切换驱动失败: {r.Message}";
+            _log.Log($"切换驱动失败: {r.Message}", LogLevel.Error);
+        }
     }
 
     /// <summary>按参数切换驱动（菜单用，0=真实，1=仿真）。</summary>
@@ -129,7 +145,10 @@ public partial class ConnectionViewModel : ViewModelBase
         _session.Driver = driver;
         var r = await _robot.SwitchDriverAsync(driver);
         if (!r.Success)
+        {
             ErrorMessage = $"切换驱动失败: {r.Message}";
+            _log.Log($"切换驱动失败: {r.Message}", LogLevel.Error);
+        }
     }
 
     /// <summary>查询连接状态。</summary>

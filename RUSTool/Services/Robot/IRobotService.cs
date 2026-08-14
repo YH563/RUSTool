@@ -3,7 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using RUSTool.Communication;
 
-namespace RUSTool.Services;
+namespace RUSTool.Services.Robot;
 
 /// <summary>
 /// 机器人业务服务接口。上层（ViewModel）只依赖此接口，
@@ -57,6 +57,12 @@ public interface IRobotService : IDisposable
     /// <summary>立即停止点动。</summary>
     Task<CommandResult> StopJogImmediateAsync();
 
+    /// <summary>
+    /// 设置模式
+    /// </summary>
+    /// <returns></returns>
+    Task<CommandResult> SetMode(double mode);
+
     // ── 驱动控制 ──
 
     /// <summary>上/下使能（1/0）。</summary>
@@ -98,10 +104,10 @@ public interface IRobotService : IDisposable
     Task<CommandResult> PauseAsync();
 
     /// <summary>恢复。</summary>
-    Task<CommandResult> ResumeAsync();
+    Task<CommandResult> ResumeAsync(double mode=1, double enable=1);
 
     /// <summary>复位流程。</summary>
-    Task<CommandResult> ResetAsync();
+    Task<CommandResult> ResetAsync(double mode = 1, double enable = 1);
 
     /// <summary>查询预扫描是否完成，Result[0]=1/0。</summary>
     Task<CommandResult> QueryPreScanDoneAsync();

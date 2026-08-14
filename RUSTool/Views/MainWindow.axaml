@@ -65,14 +65,20 @@
                         <TextBlock Text="{Binding Session.ConnectText}" FontSize="12"
                                    Foreground="#616161" VerticalAlignment="Center" />
                     </StackPanel>
-
-                    <!-- 使能状态灯 -->
+                    <!-- 运动状态（空闲 / 手动 / 扫查中 / 已暂停） -->
                     <StackPanel Orientation="Horizontal" Spacing="6">
-                        <Ellipse Width="8" Height="8" VerticalAlignment="Center"
-                                 Fill="{Binding Session.IsEnabled, Converter={StaticResource BoolToBrush}}" />
-                        <TextBlock Text="{Binding Session.EnableText}" FontSize="12"
+                        <Ellipse Width="8" Height="8" VerticalAlignment="Center">
+                            <Ellipse.Fill>
+                                <MultiBinding Converter="{StaticResource ModeStatusToBrush}">
+                                    <Binding Path="Session.Mode" />
+                                    <Binding Path="Session.IsPaused" />
+                                </MultiBinding>
+                            </Ellipse.Fill>
+                        </Ellipse>
+                        <TextBlock Text="{Binding Session.ModeText}" FontSize="12"
                                    Foreground="#616161" VerticalAlignment="Center" />
                     </StackPanel>
+
 
                     <Rectangle Width="1" Height="20" Fill="#E0E0E0" VerticalAlignment="Center" />
 
@@ -91,20 +97,6 @@
                     </StackPanel>
 
                     <Rectangle Width="1" Height="20" Fill="#E0E0E0" VerticalAlignment="Center" />
-
-                    <!-- 运动状态（空闲 / 手动 / 扫查中 / 已暂停） -->
-                    <StackPanel Orientation="Horizontal" Spacing="6">
-                        <Ellipse Width="8" Height="8" VerticalAlignment="Center">
-                            <Ellipse.Fill>
-                                <MultiBinding Converter="{StaticResource ModeStatusToBrush}">
-                                    <Binding Path="Session.Mode" />
-                                    <Binding Path="Session.IsPaused" />
-                                </MultiBinding>
-                            </Ellipse.Fill>
-                        </Ellipse>
-                        <TextBlock Text="{Binding Session.ModeText}" FontSize="12"
-                                   Foreground="#616161" VerticalAlignment="Center" />
-                    </StackPanel>
 
                     <!-- 急停 -->
                     <Button x:Name="EstopButton" Content="急停" Padding="22,8" FontSize="14"
@@ -125,6 +117,12 @@
                             </Style>
                         </Button.Styles>
                     </Button>
+
+                    <!-- 急停恢复 -->
+                    <Button Content="急停恢复" Padding="14,8" FontSize="14"
+                            FontWeight="Bold" Foreground="#FFFFFF" Background="#2E7D32"
+                            BorderBrush="#2E7D32" CornerRadius="8"
+                            Command="{Binding Control.ResetCommand}" />
                 </StackPanel>
             </Grid>
         </Border>

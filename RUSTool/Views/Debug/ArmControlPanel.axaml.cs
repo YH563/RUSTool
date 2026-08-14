@@ -1,6 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Input;
-using RUSTool.ViewModels;
+using RUSTool.ViewModels.Robot;
 
 namespace RUSTool.Views.Debug;
 

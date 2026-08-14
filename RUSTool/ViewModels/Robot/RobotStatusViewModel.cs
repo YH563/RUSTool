@@ -1,10 +1,10 @@
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using RUSTool.Communication;
-using RUSTool.Services;
+using RUSTool.Services.Robot;
 using System;
 
-namespace RUSTool.ViewModels;
+namespace RUSTool.ViewModels.Robot;
 
 /// <summary>
 /// 机械臂状态 HUD VM：订阅 /state 状态流，把状态帧转换成 UI 可绑定的属性。

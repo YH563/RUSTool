@@ -19,6 +19,7 @@ public static class Commands
     // ── 任务级指令 ──
     public const string Connect = "connect";
     public const string Shutdown = "shutdown";
+    public const string SetMode = "set_mode";
     public const string PreScanStart = "pre_scan_start";
     public const string PreScanEnd = "pre_scan_end";
     public const string SetStartPose = "set_start_pose";

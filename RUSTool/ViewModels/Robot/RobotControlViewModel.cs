@@ -1,10 +1,11 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using RUSTool.Services;
+using RUSTool.Services.Logging;
+using RUSTool.Services.Robot;
 using System;
 using System.Threading.Tasks;
 
-namespace RUSTool.ViewModels;
+namespace RUSTool.ViewModels.Robot;
 
 /// <summary>
 /// 机械臂手动控制 VM：MoveJ / MoveL、点动（开始/结束）、停止、全局急停。
@@ -13,6 +14,7 @@ namespace RUSTool.ViewModels;
 public partial class RobotControlViewModel : ViewModelBase
 {
     private readonly IRobotService _robot;
+    private readonly ILogService _log;
 
     // 服务器连接状态（只读，连接动作由 ConnectionViewModel 负责）
     [ObservableProperty] private bool _isConnected;
@@ -24,26 +26,33 @@ public partial class RobotControlViewModel : ViewModelBase
     [ObservableProperty] private int _jogRefFrame = 2;   // 0=关节, 2=基坐标, 4=工具
     [ObservableProperty] private double _jogMaxDistance; // 0=无限
 
-    public RobotControlViewModel(IRobotService robot)
+    public RobotControlViewModel(IRobotService robot, ILogService log)
     {
         _robot = robot;
+        _log = log;
         _robot.ConnectionChanged += connected => IsConnected = connected;
     }
 
-    /// <summary>关节空间运动（输入格式: 0.1,-0.5,1.2,0,0.3,0）。</summary>
+    /// <summary>关节空间运动（输入格式: 度值 0,45,-30,0,90,0，自动转换为弧度下发）。</summary>
     [RelayCommand]
     private async Task MoveJ(string input)
     {
         try
         {
             var joints = Array.ConvertAll(input.Split(',', StringSplitOptions.TrimEntries), double.Parse);
+            for (var i = 0; i < joints.Length; i++)
+                joints[i] *= Math.PI / 180.0;
             var result = await _robot.MoveJAsync(joints);
             if (!result.Success)
+            {
                 ErrorMessage = $"MoveJ 失败: {result.Message}";
+                _log.Log($"MoveJ 失败: {result.Message}", LogLevel.Error);
+            }
         }
-        catch
+        catch (Exception ex)
         {
-            ErrorMessage = "MoveJ 参数格式错误，示例: 0.1,-0.5,1.2,0,0.3,0";
+            ErrorMessage = "MoveJ 参数格式错误，示例: 0,45,-30,0,90,0 (角度)";
+            _log.Log($"MoveJ 参数格式错误: {ex.Message}", LogLevel.Error);
         }
     }
 
@@ -56,11 +65,15 @@ public partial class RobotControlViewModel : ViewModelBase
             var pose = Array.ConvertAll(input.Split(',', StringSplitOptions.TrimEntries), double.Parse);
             var result = await _robot.MoveLAsync(pose);
             if (!result.Success)
+            {
                 ErrorMessage = $"MoveL 失败: {result.Message}";
+                _log.Log($"MoveL 失败: {result.Message}", LogLevel.Error);
+            }
         }
-        catch
+        catch (Exception ex)
         {
             ErrorMessage = "MoveL 参数格式错误，示例: 0.3,0,0.5,3.14,0,0";
+            _log.Log($"MoveL 参数格式错误: {ex.Message}", LogLevel.Error);
         }
     }
 
@@ -75,6 +88,10 @@ public partial class RobotControlViewModel : ViewModelBase
     /// <summary>全局急停：停止所有运动（任务级 stop）。</summary>
     [RelayCommand]
     private Task StopAllMotion() => _robot.StopAsync();
+
+    /// <summary>急停恢复：清除急停状态，恢复运动。</summary>
+    [RelayCommand]
+    private Task Reset() => _robot.ResetAsync();
     
     /// <summary>
     /// 暂停运动

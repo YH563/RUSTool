@@ -2,8 +2,8 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-             xmlns:vm="using:RUSTool.ViewModels"
-             mc:Ignorable="d" d:DesignWidth="700" d:DesignHeight="350"
+             xmlns:vm="using:RUSTool.ViewModels.Robot"
+             mc:Ignorable="d" d:DesignWidth="600" d:DesignHeight="350"
              x:Class="RUSTool.Views.Debug.ArmControlPanel"
              x:DataType="vm:RobotControlViewModel">
     <Grid ColumnDefinitions="1.0*,Auto,1.2*" Margin="8">
@@ -116,7 +116,7 @@
                 <StackPanel Spacing="4">
                     <TextBlock Text="关节空间运动" FontSize="12" Foreground="#888888"/>
                     <Grid ColumnDefinitions="*,Auto">
-                        <TextBox x:Name="MoveJInput" PlaceholderText="q1,q2,q3,q4,q5,q6"
+                        <TextBox x:Name="MoveJInput" PlaceholderText="q1,q2,q3,q4,q5,q6 (角度)"
                                  FontSize="13" VerticalAlignment="Center"/>
                         <Button Grid.Column="1" Content="执行" Margin="6,0,0,0"
                                 Command="{Binding MoveJCommand}"

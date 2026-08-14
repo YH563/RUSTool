@@ -1,13 +1,16 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:RUSTool.ViewModels"
              x:Class="RUSTool.Views.Debug.LogView"
+             x:DataType="vm:MainViewModel"
              Background="Transparent">
     <Grid>
         <ListBox x:Name="LogListBox" Background="Transparent" BorderThickness="0"
+                 ItemsSource="{Binding Log.Entries}"
                  ScrollViewer.HorizontalScrollBarVisibility="Disabled">
             <ListBox.ItemTemplate>
                 <DataTemplate>
-                    <TextBlock Text="{Binding}" FontSize="12" Foreground="#616161"
+                    <TextBlock Text="{Binding Formatted}" FontSize="12" Foreground="#616161"
                                Margin="8,2" TextWrapping="NoWrap" />
                 </DataTemplate>
             </ListBox.ItemTemplate>
