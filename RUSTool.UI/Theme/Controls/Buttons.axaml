@@ -1,0 +1,201 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+    ════════════════════════════════════════════════════════════════════════════
+      按钮 Button
+    ════════════════════════════════════════════════════════════════════════════
+
+      为什么整套重写模板，而不是只调 Fluent 的属性？
+        Fluent 按钮在 hover / pressed 时会切回它自己的灰调，
+        只覆盖 Background 的结果就是"蓝按钮一悬停就变灰"。
+        所以这里模板自己写，各状态颜色全部显式声明。
+
+      变体（用 Classes，可叠加尺寸类）：
+        <Button Content="保存" Classes="accent" />     主操作
+        <Button Content="急停" Classes="danger" />     危险 / 急停
+        <Button Content="恢复" Classes="success" />    确认 / 复位
+        <Button Content="清空" Classes="ghost" />      工具条 / 图标按钮
+        <Button Content="..." Classes="accent sm" />   组合：主色 + 小尺寸
+
+      尺寸：默认 32px 高，sm = 26，lg = 38。
+      高度由 MinHeight 统一 → 不会再出现并排按钮高低差几像素的情况。
+    -->
+
+    <Styles.Resources>
+        <ResourceDictionary>
+
+            <ControlTheme x:Key="{x:Type Button}" TargetType="Button">
+
+                <!-- ── 默认外观：白底 + 描边，用于"次要操作" ── -->
+                <Setter Property="Background" Value="{DynamicResource SurfaceBaseBrush}" />
+                <!-- 边框用 Strong 而不是 Default：
+                     默认边框色太淡，白底按钮会"漂"在页面上、边界不清，
+                     交互元素必须让人一眼看出"这里可以点"。 -->
+                <Setter Property="BorderBrush" Value="{DynamicResource BorderStrongBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+                <Setter Property="CornerRadius" Value="{DynamicResource RadiusMd}" />
+                <Setter Property="MinHeight" Value="{DynamicResource ControlHeightMd}" />
+                <Setter Property="Padding" Value="14,6" />
+                <Setter Property="FontSize" Value="{DynamicResource FontSizeBodyLg}" />
+                <Setter Property="FontWeight" Value="{DynamicResource FontWeightMedium}" />
+                <Setter Property="HorizontalContentAlignment" Value="Center" />
+                <Setter Property="VerticalContentAlignment" Value="Center" />
+                <Setter Property="Cursor" Value="Hand" />
+
+                <Setter Property="Template">
+                    <ControlTemplate>
+                        <Border Name="PART_Root"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="{TemplateBinding CornerRadius}">
+                            <ContentPresenter Name="PART_ContentPresenter"
+                                              Content="{TemplateBinding Content}"
+                                              ContentTemplate="{TemplateBinding ContentTemplate}"
+                                              Padding="{TemplateBinding Padding}"
+                                              HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter>
+
+                <!-- ── 状态规则 ──
+                     这里一律设置【控件自身】的 Background / BorderBrush，而不是
+                     /template/ 里的 Border。因为模板内元素已经用 TemplateBinding
+                     绑定了这两个属性，改控件属性会自动同步，且不必和模板绑定争优先级。 -->
+
+                <Style Selector="^:pointerover">
+                    <Setter Property="Background" Value="{DynamicResource SurfaceHoverBrush}" />
+                    <Setter Property="BorderBrush" Value="{DynamicResource BorderStrongBrush}" />
+                </Style>
+                <Style Selector="^:pressed">
+                    <Setter Property="Background" Value="{DynamicResource SurfacePressedBrush}" />
+                    <Setter Property="BorderBrush" Value="{DynamicResource BorderStrongBrush}" />
+                </Style>
+                <!-- ── 禁用态 ──
+                     ⚠ 这里刻意【不】用 Opacity 来实现禁用：
+                       蓝底 + 40% 透明 = 一块淡蓝，眼睛读出来是"浅色按钮"，不是"不能点的按钮"，
+                       而且文字(白)也跟着变淡，白字+淡蓝底的对比反而很难读。
+                     Win11 的做法是彻底去色 —— 实心按钮一旦禁用就变成中性灰块，
+                     形状还在、颜色消失，一眼就能判定"不可用"。 -->
+                <Style Selector="^:disabled">
+                    <Setter Property="Background" Value="{DynamicResource SurfaceDisabledBrush}" />
+                    <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}" />
+                    <Setter Property="Foreground" Value="{DynamicResource TextDisabledBrush}" />
+                    <Setter Property="Cursor" Value="Arrow" />
+                </Style>
+
+                <!-- 键盘焦点只改边框色。鼠标点击不会触发 focus-visible，避免到处是焦点框 -->
+                <Style Selector="^:focus-visible">
+                    <Setter Property="BorderBrush" Value="{DynamicResource BorderFocusBrush}" />
+                </Style>
+
+                <!-- ══════════════════════════════════════════════════════
+                     变体 Variants
+                     权重说明：类(.accent)与伪类(:pointerover)各算 1 分。
+                       .accent              权重 1
+                       .accent:pointerover  权重 2  ← 正确覆盖上面两条
+                     权重相同时以"后定义"为准，所以变体必须写在默认状态之后。
+                     ══════════════════════════════════════════════════════ -->
+
+                <!-- ── accent：主操作（连接 / 启动扫描 / 保存）── -->
+                <Style Selector="^.accent">
+                    <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+                    <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+                    <Setter Property="Foreground" Value="{DynamicResource TextOnAccentBrush}" />
+                </Style>
+                <Style Selector="^.accent:pointerover">
+                    <Setter Property="Background" Value="{DynamicResource AccentHoverBrush}" />
+                    <Setter Property="BorderBrush" Value="{DynamicResource AccentHoverBrush}" />
+                </Style>
+                <Style Selector="^.accent:pressed">
+                    <Setter Property="Background" Value="{DynamicResource AccentPressedBrush}" />
+                    <Setter Property="BorderBrush" Value="{DynamicResource AccentPressedBrush}" />
+                </Style>
+                <Style Selector="^.accent:disabled">
+                    <Setter Property="Background" Value="{DynamicResource SurfaceDisabledBrush}" />
+                    <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}" />
+                    <Setter Property="Foreground" Value="{DynamicResource TextDisabledBrush}" />
+                </Style>
+
+                <!-- ── danger：危险 / 急停。三态色阶预先定义，不再现场凑深色 ── -->
+                <Style Selector="^.danger">
+                    <Setter Property="Background" Value="{DynamicResource DangerSolidBrush}" />
+                    <Setter Property="BorderBrush" Value="{DynamicResource DangerSolidBrush}" />
+                    <Setter Property="Foreground" Value="{DynamicResource TextOnAccentBrush}" />
+                </Style>
+                <Style Selector="^.danger:pointerover">
+                    <Setter Property="Background" Value="{DynamicResource DangerSolidHoverBrush}" />
+                    <Setter Property="BorderBrush" Value="{DynamicResource DangerSolidHoverBrush}" />
+                </Style>
+                <Style Selector="^.danger:pressed">
+                    <Setter Property="Background" Value="{DynamicResource DangerSolidPressedBrush}" />
+                    <Setter Property="BorderBrush" Value="{DynamicResource DangerSolidPressedBrush}" />
+                </Style>
+                <Style Selector="^.danger:disabled">
+                    <Setter Property="Background" Value="{DynamicResource SurfaceDisabledBrush}" />
+                    <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}" />
+                    <Setter Property="Foreground" Value="{DynamicResource TextDisabledBrush}" />
+                </Style>
+
+                <!-- ── success：确认 / 复位（如"急停恢复"）── -->
+                <Style Selector="^.success">
+                    <Setter Property="Background" Value="{DynamicResource SuccessSolidBrush}" />
+                    <Setter Property="BorderBrush" Value="{DynamicResource SuccessSolidBrush}" />
+                    <Setter Property="Foreground" Value="{DynamicResource TextOnAccentBrush}" />
+                </Style>
+                <Style Selector="^.success:pointerover">
+                    <Setter Property="Background" Value="{DynamicResource SuccessSolidHoverBrush}" />
+                    <Setter Property="BorderBrush" Value="{DynamicResource SuccessSolidHoverBrush}" />
+                </Style>
+                <Style Selector="^.success:pressed">
+                    <Setter Property="Background" Value="{DynamicResource SuccessSolidPressedBrush}" />
+                    <Setter Property="BorderBrush" Value="{DynamicResource SuccessSolidPressedBrush}" />
+                </Style>
+                <Style Selector="^.success:disabled">
+                    <Setter Property="Background" Value="{DynamicResource SurfaceDisabledBrush}" />
+                    <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}" />
+                    <Setter Property="Foreground" Value="{DynamicResource TextDisabledBrush}" />
+                </Style>
+
+                <!-- ── ghost：工具条 / 图标按钮。无边框，靠 hover 底色提示可点 ── -->
+                <Style Selector="^.ghost">
+                    <Setter Property="Background" Value="Transparent" />
+                    <Setter Property="BorderBrush" Value="Transparent" />
+                    <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+                    <Setter Property="Padding" Value="10,6" />
+                </Style>
+                <Style Selector="^.ghost:pointerover">
+                    <Setter Property="Background" Value="{DynamicResource SurfaceHoverBrush}" />
+                    <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+                </Style>
+                <Style Selector="^.ghost:pressed">
+                    <Setter Property="Background" Value="{DynamicResource SurfacePressedBrush}" />
+                    <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+                </Style>
+                <Style Selector="^.ghost:disabled">
+                    <Setter Property="Background" Value="Transparent" />
+                    <Setter Property="BorderBrush" Value="Transparent" />
+                    <Setter Property="Foreground" Value="{DynamicResource TextDisabledBrush}" />
+                </Style>
+
+                <!-- ── 尺寸变体（可与其他变体叠加，如 "accent sm"）── -->
+                <Style Selector="^.sm">
+                    <Setter Property="MinHeight" Value="{DynamicResource ControlHeightSm}" />
+                    <Setter Property="Padding" Value="10,3" />
+                    <Setter Property="FontSize" Value="{DynamicResource FontSizeBody}" />
+                </Style>
+                <Style Selector="^.lg">
+                    <Setter Property="MinHeight" Value="{DynamicResource ControlHeightLg}" />
+                    <Setter Property="Padding" Value="18,9" />
+                    <Setter Property="FontSize" Value="{DynamicResource FontSizeSubtitle}" />
+                </Style>
+
+            </ControlTheme>
+
+        </ResourceDictionary>
+    </Styles.Resources>
+
+</Styles>

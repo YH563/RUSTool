@@ -1,0 +1,112 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:RUSTool.UI.ViewModels"
+             mc:Ignorable="d" d:DesignWidth="700" d:DesignHeight="350"
+             x:Class="RUSTool.UI.Views.Debug.ArmControlPanel"
+             x:DataType="vm:RobotControlViewModel">
+
+    <!--
+      手动 / 点动控制。
+
+      6 根轴是数据（Axes）+ 一个行模板，12 个按钮共用一份交互逻辑：
+      按下 → start_jog，松开 → stop_jog_decel（真机的点动就是"按住走、松手停"）。
+      交互写在 code-behind 里 —— Button 的 Click 命令表达不了"按住"这个语义。
+      轴标签随参考系在"X 方向 / 关节 1"之间切换：真机上这一步决定按下去走什么。
+    -->
+
+    <Grid ColumnDefinitions="1.05*,Auto,1.1*" Margin="16,10">
+
+        <!-- ═══ 左：点动 ═══ -->
+        <Grid Grid.Column="0" RowDefinitions="Auto,*,Auto">
+
+            <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,10">
+                <TextBlock Classes="panelTitle" Text="点动控制" />
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
+                    <TextBlock Classes="caption" Text="参考系" VerticalAlignment="Center" />
+                    <ComboBox MinWidth="112"
+                              ItemsSource="{Binding JogFrames}"
+                              SelectedIndex="{Binding JogFrameIndex}" />
+                </StackPanel>
+            </Grid>
+
+            <!-- 6 根轴：数据驱动，行模板只写一次 -->
+            <ItemsControl Grid.Row="1" ItemsSource="{Binding Axes}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:JogAxis">
+                        <Border Classes="sunken" Padding="10,3" Margin="0,2">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />
+
+                                <!-- Tag 只表示方向；轴信息来自按钮的 DataContext -->
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                                    <Button Classes="sm" Content="−" Width="52" Tag="neg" />
+                                    <Button Classes="sm" Content="+" Width="52" Tag="pos" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <!-- 点动速度：下发 start_jog 时的 speed 参数（1~100%） -->
+            <Grid Grid.Row="2" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10" Margin="0,10,0,0">
+                <TextBlock Classes="caption" Text="速度" VerticalAlignment="Center" />
+                <Slider Grid.Column="1" Minimum="1" Maximum="100" Value="{Binding JogSpeed}" />
+                <TextBlock Grid.Column="2" Classes="mono" Width="44" TextAlignment="Right"
+                           VerticalAlignment="Center"
+                           Text="{Binding JogSpeed, StringFormat='{}{0:F0}%'}" />
+            </Grid>
+        </Grid>
+
+        <Rectangle Grid.Column="1" Classes="dividerVertical" Margin="14,4" />
+
+        <!-- ═══ 右：运动指令 ═══ -->
+        <Grid Grid.Column="2" RowDefinitions="Auto,*,Auto">
+
+            <TextBlock Classes="panelTitle" Text="运动指令" Margin="0,0,0,10" />
+
+            <StackPanel Grid.Row="1" Spacing="14">
+
+                <StackPanel Spacing="4">
+                    <TextBlock Classes="caption" Text="关节空间运动 movej" />
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                        <TextBox Text="{Binding MoveJInput}"
+                                 PlaceholderText="q1,q2,q3,q4,q5,q6 (角度)" />
+                        <Button Grid.Column="1" Classes="accent" Content="执行"
+                                Command="{Binding MoveJCommand}" />
+                    </Grid>
+                </StackPanel>
+
+                <StackPanel Spacing="4">
+                    <TextBlock Classes="caption" Text="笛卡尔直线运动 movel" />
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                        <TextBox Text="{Binding MoveLInput}" PlaceholderText="x,y,z,rx,ry,rz" />
+                        <Button Grid.Column="1" Classes="accent" Content="执行"
+                                Command="{Binding MoveLCommand}" />
+                    </Grid>
+                </StackPanel>
+
+                <!-- 最近动作回显：指令有没有下发成功，用户看这里 -->
+                <Border Classes="sunken" Padding="10,8">
+                    <StackPanel Spacing="2">
+                        <TextBlock Classes="caption" Text="最近动作" />
+                        <TextBlock Classes="mono" Text="{Binding LastAction}"
+                                   TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                </Border>
+
+            </StackPanel>
+
+            <WrapPanel Grid.Row="2" Orientation="Horizontal"
+                       HorizontalAlignment="Right" ItemSpacing="8" Margin="0,12,0,0">
+                <Button Classes="sm" Content="停止点动" Command="{Binding StopJogCommand}" />
+                <Button Classes="sm" Content="偏移清零" Command="{Binding ResetJogCommand}" />
+                <Button Classes="sm" Content="暂停" Command="{Binding PauseCommand}" />
+                <Button Classes="sm" Content="继续" Command="{Binding ResumeCommand}" />
+            </WrapPanel>
+        </Grid>
+
+    </Grid>
+</UserControl>

@@ -1,0 +1,42 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="400" d:DesignHeight="400"
+             x:Class="RUSTool.UI.Views.Debug.UltrasoundView">
+
+    <!--
+      超声影像区。
+
+      ⚠ 这里刻意【破例】使用原始色阶 PaletteInk950 而不是语义色：
+        超声影像按 DICOM / 超声设备惯例必须是深底显示（灰阶回波靠深底才分得出层次），
+        它不随浅色/深色主题切换 —— 这是"内容"而不是"界面"。
+        主题的规则是"控件样式只引用 Semantic"，这里是内容画布，属于合理例外，
+        注释写在这里以免后人以为漏改了。
+    -->
+    <Border Classes="canvas" Background="{DynamicResource PaletteInk950}">
+        <Grid RowDefinitions="*,Auto">
+
+            <!-- 影像区：后续替换为 WriteableBitmap（Documentation 8.4 提到要复用实例避免 GC） -->
+            <Grid>
+                <!-- 模拟一条扫描线，避免整块纯黑看起来像没渲染 -->
+                <Rectangle Width="1" HorizontalAlignment="Center" Margin="0,24"
+                           Fill="{DynamicResource PalettePrimary400}" Opacity="0.5" />
+                <TextBlock Text="超声影像"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                           Foreground="{DynamicResource PaletteNeutral500}" />
+            </Grid>
+
+            <!-- 叠加信息：等宽字体，数字跳动时不会左右抖 -->
+            <StackPanel Grid.Row="1" Orientation="Horizontal"
+                        HorizontalAlignment="Right" Margin="12,0,12,8" Spacing="16">
+                <TextBlock Classes="mono" Text="增益 50%"
+                           Foreground="{DynamicResource PaletteNeutral300}" />
+                <TextBlock Classes="mono" Text="深度 5.0 cm"
+                           Foreground="{DynamicResource PaletteNeutral300}" />
+                <TextBlock Classes="mono" Text="帧 0"
+                           Foreground="{DynamicResource PaletteNeutral300}" />
+            </StackPanel>
+        </Grid>
+    </Border>
+</UserControl>

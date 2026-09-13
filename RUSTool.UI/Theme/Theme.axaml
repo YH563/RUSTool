@@ -1,0 +1,60 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+    ════════════════════════════════════════════════════════════════════════════
+      RUSTool 主题入口 —— 就在应用项目内（RUSTool.UI/Theme/），使用方只需引用这一个文件
+    ════════════════════════════════════════════════════════════════════════════
+
+      用法（在本项目的 App.axaml 中）：
+
+        <Application.Styles>
+            <FluentTheme />                                                     ← 基础模板
+            <StyleInclude Source="avares://RUSTool.UI/Theme/Theme.axaml" />     ← 本主题
+        </Application.Styles>
+
+      说明：本主题【有意】不包含 FluentTheme / SimpleTheme。
+            因为主题不应该替使用方决定"底层控件模板从哪来"。使用方先加载 FluentTheme，
+            再叠加本主题即可。
+
+      四层结构（换配色只需要动 ① 和 ②）：
+        ① Tokens/Palette.axaml     原始色阶 —— 全库唯一允许写 hex 的地方
+        ② Tokens/Semantic.axaml    语义色（Light/Dark 各一套）—— 控件唯一允许引用的颜色来源
+        ③ Bridges/Fluent.axaml     把 Fluent 的资源键重定向到 ②
+                                   → 让 TextBox/ComboBox/CheckBox/Slider/ScrollBar… 跟着换肤
+                                     好处：不碰模板内部、不需要 PART_XXX 名字、升级不易坏
+        ④ Controls/*.axaml         提供 Fluent 没有的能力（按钮 accent/danger 变体、文字语义类）
+
+      加载顺序（不要调换）：
+        Palette → Metrics → Typography → Semantic → Fluent 桥接
+        后四者都用 {StaticResource} 引用 Palette 的色阶，必须排在 Palette 之后。
+    -->
+
+    <Styles.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceInclude Source="avares://RUSTool.UI/Theme/Tokens/Palette.axaml" />
+                <ResourceInclude Source="avares://RUSTool.UI/Theme/Tokens/Metrics.axaml" />
+                <ResourceInclude Source="avares://RUSTool.UI/Theme/Tokens/Typography.axaml" />
+                <ResourceInclude Source="avares://RUSTool.UI/Theme/Tokens/Semantic.axaml" />
+                <ResourceInclude Source="avares://RUSTool.UI/Theme/Bridges/Fluent.axaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Styles.Resources>
+
+    <!-- ══ 控件样式 ══
+         顺序有讲究：Base 必须在最前 —— 它负责窗口默认字体/背景/前景色，
+         后加载的控件样式要在此基础上叠加；反之会被 Window 级的 Setter 盖掉。
+         每个文件都可以独立增删，Theme.axaml 是唯一的汇总点。
+
+         现有文件与职责：
+           Base     窗口、文字语义类、分隔线、状态灯
+           Buttons  按钮（默认/accent/danger/success/ghost × sm/md/lg）
+           Menus    菜单栏、下拉菜单项、右键菜单、分隔线
+           Overlays 浮层（ComboBox 下拉、Flyout、ToolTip）—— 圆角与阴影在这里 -->
+    <StyleInclude Source="avares://RUSTool.UI/Theme/Controls/Base.axaml" />
+    <StyleInclude Source="avares://RUSTool.UI/Theme/Controls/Buttons.axaml" />
+    <StyleInclude Source="avares://RUSTool.UI/Theme/Controls/Menus.axaml" />
+    <StyleInclude Source="avares://RUSTool.UI/Theme/Controls/Overlays.axaml" />
+
+</Styles>

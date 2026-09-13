@@ -1,0 +1,175 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+    ════════════════════════════════════════════════════════════════════════════
+      语义色 Semantic —— 控件样式【唯一】允许引用的颜色来源
+    ════════════════════════════════════════════════════════════════════════════
+
+      命名规则：<用途><状态>Brush
+
+        Surface*       表面：页面 / 卡片 / 下沉 / 浮层 / 悬停 / 选中 / 禁用
+        Border*        边框：Subtle(轻分隔) / Default(标准) / Strong / Focus
+        Text*          文字：Primary / Secondary / Tertiary / Disabled / OnAccent
+        Accent*        主色：强调、主按钮、选中态
+        Status*        状态灯实心色（空闲/信息/成功/警告/危险）
+        *Subtle*       语义色的"浅底版本"，用于提示条与状态标签
+
+      两套主题在这里各写一份同名资源，控件用 {DynamicResource XxxBrush} 引用，
+      切主题时自动跟随。本文件只引用 Palette 的色阶，自身不写 hex ——
+      这样"改配色只改 Palette"这条规则才真正成立。
+    -->
+
+    <ResourceDictionary.ThemeDictionaries>
+
+        <!-- ════════════════════════════════════════════════════════════════
+             浅色主题（默认）—— 明亮环境 / 临床 / 手术室
+             ════════════════════════════════════════════════════════════════ -->
+        <ResourceDictionary x:Key="Light">
+
+            <!-- ── 表面：靠"白→灰"的明度差分层次，不靠阴影堆叠 ── -->
+            <SolidColorBrush x:Key="SurfacePageBrush"     Color="{StaticResource PaletteNeutral50}" />
+            <SolidColorBrush x:Key="SurfaceBaseBrush"     Color="{StaticResource PaletteNeutral0}" />
+            <SolidColorBrush x:Key="SurfaceSunkenBrush"   Color="{StaticResource PaletteNeutral100}" />
+            <SolidColorBrush x:Key="SurfaceRaisedBrush"   Color="{StaticResource PaletteNeutral0}" />
+            <SolidColorBrush x:Key="SurfaceHoverBrush"    Color="{StaticResource PaletteNeutral150}" />
+            <SolidColorBrush x:Key="SurfacePressedBrush"  Color="{StaticResource PaletteNeutral200}" />
+            <SolidColorBrush x:Key="SurfaceSelectedBrush" Color="{StaticResource PalettePrimary50}" />
+            <!-- 禁用底：取 Neutral150 而不是 Neutral100 ——
+                 Neutral100(#F1F5F9) 和页面底 Neutral50(#F8FAFC) 只差 7 级明度，
+                 禁用按钮会"消失在页面里"，看起来不像一个控件。
+                 禁用态的诉求是「看得出这里有控件，但它不能点」，所以要有轮廓、不能有对比。 -->
+            <SolidColorBrush x:Key="SurfaceDisabledBrush" Color="{StaticResource PaletteNeutral150}" />
+
+            <!-- ── 边框 ── -->
+            <SolidColorBrush x:Key="BorderSubtleBrush"  Color="{StaticResource PaletteNeutral150}" />
+            <SolidColorBrush x:Key="BorderDefaultBrush" Color="{StaticResource PaletteNeutral200}" />
+            <SolidColorBrush x:Key="BorderStrongBrush"  Color="{StaticResource PaletteNeutral300}" />
+            <SolidColorBrush x:Key="BorderFocusBrush"   Color="{StaticResource PalettePrimary600}" />
+
+            <!-- ── 文字：只保留 4 级，层级靠明度差而不是字号乱拉 ── -->
+            <SolidColorBrush x:Key="TextPrimaryBrush"   Color="{StaticResource PaletteNeutral800}" />
+            <SolidColorBrush x:Key="TextSecondaryBrush" Color="{StaticResource PaletteNeutral600}" />
+            <SolidColorBrush x:Key="TextTertiaryBrush"  Color="{StaticResource PaletteNeutral500}" />
+            <SolidColorBrush x:Key="TextDisabledBrush"  Color="{StaticResource PaletteNeutral400}" />
+            <SolidColorBrush x:Key="TextOnAccentBrush"  Color="{StaticResource PaletteNeutral0}" />
+            <SolidColorBrush x:Key="TextAccentBrush"    Color="{StaticResource PalettePrimary600}" />
+
+            <!-- ── 主色 ── -->
+            <SolidColorBrush x:Key="AccentBrush"        Color="{StaticResource PalettePrimary600}" />
+            <SolidColorBrush x:Key="AccentHoverBrush"   Color="{StaticResource PalettePrimary500}" />
+            <SolidColorBrush x:Key="AccentPressedBrush" Color="{StaticResource PalettePrimary700}" />
+            <SolidColorBrush x:Key="AccentSubtleBrush"  Color="{StaticResource PalettePrimary50}" />
+
+            <!-- ── 状态灯实心色（连接灯 / 运动状态灯 / 扫描步骤灯）── -->
+            <SolidColorBrush x:Key="StatusIdleBrush"    Color="{StaticResource PaletteNeutral400}" />
+            <SolidColorBrush x:Key="StatusInfoBrush"    Color="{StaticResource PalettePrimary500}" />
+            <SolidColorBrush x:Key="StatusSuccessBrush" Color="{StaticResource PaletteSuccess500}" />
+            <SolidColorBrush x:Key="StatusWarningBrush" Color="{StaticResource PaletteWarning500}" />
+            <SolidColorBrush x:Key="StatusDangerBrush"  Color="{StaticResource PaletteDanger500}" />
+
+            <!-- ── 成功 ── -->
+            <SolidColorBrush x:Key="SuccessSubtleBgBrush"     Color="{StaticResource PaletteSuccess50}" />
+            <SolidColorBrush x:Key="SuccessSubtleBorderBrush" Color="{StaticResource PaletteSuccess200}" />
+            <SolidColorBrush x:Key="SuccessTextBrush"         Color="{StaticResource PaletteSuccess700}" />
+            <SolidColorBrush x:Key="SuccessSolidBrush"        Color="{StaticResource PaletteSuccess600}" />
+            <SolidColorBrush x:Key="SuccessSolidHoverBrush"   Color="{StaticResource PaletteSuccess700}" />
+            <SolidColorBrush x:Key="SuccessSolidPressedBrush" Color="{StaticResource PaletteSuccess800}" />
+
+            <!-- ── 警告 ── -->
+            <SolidColorBrush x:Key="WarningSubtleBgBrush"     Color="{StaticResource PaletteWarning50}" />
+            <SolidColorBrush x:Key="WarningSubtleBorderBrush" Color="{StaticResource PaletteWarning200}" />
+            <SolidColorBrush x:Key="WarningTextBrush"         Color="{StaticResource PaletteWarning700}" />
+            <SolidColorBrush x:Key="WarningSolidBrush"        Color="{StaticResource PaletteWarning600}" />
+
+            <!-- ── 危险 / 急停（三态一次定义好，杜绝行内样式补丁）── -->
+            <SolidColorBrush x:Key="DangerSubtleBgBrush"     Color="{StaticResource PaletteDanger50}" />
+            <SolidColorBrush x:Key="DangerSubtleBorderBrush" Color="{StaticResource PaletteDanger200}" />
+            <SolidColorBrush x:Key="DangerTextBrush"         Color="{StaticResource PaletteDanger700}" />
+            <SolidColorBrush x:Key="DangerSolidBrush"        Color="{StaticResource PaletteDanger600}" />
+            <SolidColorBrush x:Key="DangerSolidHoverBrush"   Color="{StaticResource PaletteDanger700}" />
+            <SolidColorBrush x:Key="DangerSolidPressedBrush" Color="{StaticResource PaletteDanger800}" />
+
+            <!-- ── 信息（复用主色，不再单独挑一个蓝）── -->
+            <SolidColorBrush x:Key="InfoSubtleBgBrush"     Color="{StaticResource PalettePrimary50}" />
+            <SolidColorBrush x:Key="InfoSubtleBorderBrush" Color="{StaticResource PalettePrimary200}" />
+            <SolidColorBrush x:Key="InfoTextBrush"         Color="{StaticResource PalettePrimary700}" />
+
+            <!-- ── 遮罩 / 焦点环 ── -->
+            <SolidColorBrush x:Key="ScrimBrush"     Color="{StaticResource PaletteScrim}" />
+            <SolidColorBrush x:Key="FocusRingBrush" Color="{StaticResource PaletteFocusRing}" />
+
+        </ResourceDictionary>
+
+        <!-- ════════════════════════════════════════════════════════════════
+             深色主题 —— 暗室 / 夜间值守 / 手术间调暗灯光
+             注意：深色不是把浅色"反相"。表面用墨色阶梯靠明度差分层次，
+             卡片基本不用阴影（深色底上看不见阴影，只会发脏）。
+             语义色的"浅底版本"改用低透明度叠加，比调一个专用深色更自然。
+             ════════════════════════════════════════════════════════════════ -->
+        <ResourceDictionary x:Key="Dark">
+
+            <SolidColorBrush x:Key="SurfacePageBrush"     Color="{StaticResource PaletteInk950}" />
+            <SolidColorBrush x:Key="SurfaceBaseBrush"     Color="{StaticResource PaletteInk850}" />
+            <SolidColorBrush x:Key="SurfaceSunkenBrush"   Color="{StaticResource PaletteInk900}" />
+            <SolidColorBrush x:Key="SurfaceRaisedBrush"   Color="{StaticResource PaletteInk800}" />
+            <SolidColorBrush x:Key="SurfaceHoverBrush"    Color="{StaticResource PaletteInk700}" />
+            <SolidColorBrush x:Key="SurfacePressedBrush"  Color="{StaticResource PaletteInk600}" />
+            <SolidColorBrush x:Key="SurfaceSelectedBrush" Color="{StaticResource PalettePrimary900}" />
+            <SolidColorBrush x:Key="SurfaceDisabledBrush" Color="{StaticResource PaletteInk900}" />
+
+            <SolidColorBrush x:Key="BorderSubtleBrush"  Color="{StaticResource PaletteInk700}" />
+            <SolidColorBrush x:Key="BorderDefaultBrush" Color="{StaticResource PaletteInk600}" />
+            <SolidColorBrush x:Key="BorderStrongBrush"  Color="{StaticResource PaletteInk500}" />
+            <SolidColorBrush x:Key="BorderFocusBrush"   Color="{StaticResource PalettePrimary400}" />
+
+            <SolidColorBrush x:Key="TextPrimaryBrush"   Color="{StaticResource PaletteNeutral100}" />
+            <SolidColorBrush x:Key="TextSecondaryBrush" Color="{StaticResource PaletteNeutral300}" />
+            <SolidColorBrush x:Key="TextTertiaryBrush"  Color="{StaticResource PaletteNeutral400}" />
+            <SolidColorBrush x:Key="TextDisabledBrush"  Color="{StaticResource PaletteNeutral500}" />
+            <SolidColorBrush x:Key="TextOnAccentBrush"  Color="{StaticResource PaletteNeutral0}" />
+            <SolidColorBrush x:Key="TextAccentBrush"    Color="{StaticResource PalettePrimary300}" />
+
+            <SolidColorBrush x:Key="AccentBrush"        Color="{StaticResource PalettePrimary500}" />
+            <SolidColorBrush x:Key="AccentHoverBrush"   Color="{StaticResource PalettePrimary400}" />
+            <SolidColorBrush x:Key="AccentPressedBrush" Color="{StaticResource PalettePrimary600}" />
+            <SolidColorBrush x:Key="AccentSubtleBrush"  Color="{StaticResource PalettePrimary900}" />
+
+            <SolidColorBrush x:Key="StatusIdleBrush"    Color="{StaticResource PaletteNeutral500}" />
+            <SolidColorBrush x:Key="StatusInfoBrush"    Color="{StaticResource PalettePrimary400}" />
+            <SolidColorBrush x:Key="StatusSuccessBrush" Color="{StaticResource PaletteSuccess500}" />
+            <SolidColorBrush x:Key="StatusWarningBrush" Color="{StaticResource PaletteWarning500}" />
+            <SolidColorBrush x:Key="StatusDangerBrush"  Color="{StaticResource PaletteDanger500}" />
+
+            <SolidColorBrush x:Key="SuccessSubtleBgBrush"     Color="#2612B76A" />
+            <SolidColorBrush x:Key="SuccessSubtleBorderBrush" Color="#4D12B76A" />
+            <SolidColorBrush x:Key="SuccessTextBrush"         Color="{StaticResource PaletteSuccess200}" />
+            <SolidColorBrush x:Key="SuccessSolidBrush"        Color="{StaticResource PaletteSuccess500}" />
+            <SolidColorBrush x:Key="SuccessSolidHoverBrush"   Color="{StaticResource PaletteSuccess600}" />
+            <SolidColorBrush x:Key="SuccessSolidPressedBrush" Color="{StaticResource PaletteSuccess700}" />
+
+            <SolidColorBrush x:Key="WarningSubtleBgBrush"     Color="#26F79009" />
+            <SolidColorBrush x:Key="WarningSubtleBorderBrush" Color="#4DF79009" />
+            <SolidColorBrush x:Key="WarningTextBrush"         Color="{StaticResource PaletteWarning200}" />
+            <SolidColorBrush x:Key="WarningSolidBrush"        Color="{StaticResource PaletteWarning500}" />
+
+            <SolidColorBrush x:Key="DangerSubtleBgBrush"     Color="#26F04438" />
+            <SolidColorBrush x:Key="DangerSubtleBorderBrush" Color="#4DF04438" />
+            <SolidColorBrush x:Key="DangerTextBrush"         Color="{StaticResource PaletteDanger200}" />
+            <SolidColorBrush x:Key="DangerSolidBrush"        Color="{StaticResource PaletteDanger500}" />
+            <SolidColorBrush x:Key="DangerSolidHoverBrush"   Color="{StaticResource PaletteDanger600}" />
+            <SolidColorBrush x:Key="DangerSolidPressedBrush" Color="{StaticResource PaletteDanger700}" />
+
+            <SolidColorBrush x:Key="InfoSubtleBgBrush"     Color="#261F8CAF" />
+            <SolidColorBrush x:Key="InfoSubtleBorderBrush" Color="#4D1F8CAF" />
+            <SolidColorBrush x:Key="InfoTextBrush"         Color="{StaticResource PalettePrimary200}" />
+
+            <SolidColorBrush x:Key="ScrimBrush"     Color="#B30A111F" />
+            <SolidColorBrush x:Key="FocusRingBrush" Color="#554AACCB" />
+
+        </ResourceDictionary>
+
+    </ResourceDictionary.ThemeDictionaries>
+
+</ResourceDictionary>
+

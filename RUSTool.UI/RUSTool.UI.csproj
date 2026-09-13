@@ -1,0 +1,52 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>WinExe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <LangVersion>latest</LangVersion>
+
+        <!--
+          命名空间 / 程序集都叫 RUSTool.UI：
+          界面代码统一落在 RUSTool.UI.* 下，纯逻辑层的命名空间保持 RUSTool.*。
+          设计系统（令牌 + 控件样式）也在本项目内，见 Theme/ —— 只含 XAML 资源，
+          不产出 C# 类型，所以不再单独拆一个主题工程。
+        -->
+        <RootNamespace>RUSTool.UI</RootNamespace>
+        <AssemblyName>RUSTool.UI</AssemblyName>
+        <ApplicationManifest>app.manifest</ApplicationManifest>
+        <!-- 应用程序，不参与打包 -->
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <!-- 应用图标等静态资源打进程序集 -->
+        <AvaloniaResource Include="Assets\**" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <!--
+          依赖方向单向：RUSTool.UI（界面）→ RUSTool.Core（纯逻辑）。
+
+          Core 提供：bridge 通信协议 / 传输、机器人业务服务、服务契约
+          （IRobotService / ILogService / RobotSession / BridgeProtocol）。
+          Core 不引用 Avalonia，也不反向引用本项目 —— 界面的东西全部留在这一层。
+
+          设计系统（Theme/ 下的令牌 + 控件样式）已并入本项目：
+          它只含 XAML 资源、不产出任何 C# 类型，单独成工程反而多一层引用。
+        -->
+        <ProjectReference Include="..\RUSTool.Core\RUSTool.Core.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Avalonia" Version="12.1.0" />
+        <PackageReference Include="Avalonia.Desktop" Version="12.1.0" />
+        <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.0" />
+        <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.0" />
+        <!-- 开发期离屏截图：不开窗、没有显示器也能把界面渲染成 PNG（见 preview.sh） -->
+        <PackageReference Include="Avalonia.Headless" Version="12.1.0" />
+        <!-- MVVM 源生成器（ObservableProperty / RelayCommand），与主程序保持同版本 -->
+        <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    </ItemGroup>
+
+</Project>

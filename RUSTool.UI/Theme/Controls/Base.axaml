@@ -1,0 +1,130 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+    ════════════════════════════════════════════════════════════════════════════
+      基础 Base —— 窗口、文字、以及一组可复用的文字语义类
+    ════════════════════════════════════════════════════════════════════════════
+
+      ⚠ 关于字体：旧配置里字体族第一候选是 "Times New Roman"（衬线体），
+        在装了该字体的机器上整个界面会以衬线字渲染 —— 这是界面"显土"的主因之一。
+        这里统一改为无衬线；中文回退顺序保证在 Windows / Linux 下都能正常显示。
+
+      文字语义类（用 Classes 指定，避免每个 TextBlock 都写一遍颜色和字号）：
+        <TextBlock Classes="pageTitle"    Text="扫查工作流" />   页面主标题 16/SemiBold
+        <TextBlock Classes="sectionTitle" Text="机械臂指令" />   卡片标题   14/SemiBold
+        <TextBlock Classes="caption"      Text="单位: mm" />     辅助说明   11/三级色
+        <TextBlock Classes="secondary"    Text="未连接" />       次级正文   12/二级色
+        <TextBlock Classes="mono"         Text="12.500" />       数值/日志  12/等宽
+        <TextBlock Classes="metric"       Text="36.5" />         大读数     28/SemiBold
+    -->
+
+    <!-- ── 窗口默认 ── -->
+    <Style Selector="Window">
+        <Setter Property="FontFamily" Value="{DynamicResource FontUi}" />
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeBodyLg}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+        <Setter Property="Background" Value="{DynamicResource SurfacePageBrush}" />
+    </Style>
+
+    <!-- ── 文字默认 ──
+         字号取 Body(12)：这是数据密集型界面最合适的主力字号，
+         旧代码里 12 出现了 45 次，本身就是事实标准，这里把它固化为默认值。 -->
+    <Style Selector="TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeBody}" />
+        <Setter Property="TextWrapping" Value="NoWrap" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!-- ── 文字语义类 ── -->
+    <Style Selector="TextBlock.pageTitle">
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeTitle}" />
+        <Setter Property="FontWeight" Value="{DynamicResource FontWeightSemiBold}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+    </Style>
+
+    <Style Selector="TextBlock.sectionTitle">
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeSubtitle}" />
+        <Setter Property="FontWeight" Value="{DynamicResource FontWeightSemiBold}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+    </Style>
+
+    <Style Selector="TextBlock.secondary">
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeBodyLg}" />
+    </Style>
+
+    <Style Selector="TextBlock.caption">
+        <Setter Property="Foreground" Value="{DynamicResource TextTertiaryBrush}" />
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeCaption}" />
+    </Style>
+
+    <Style Selector="TextBlock.unit">
+        <Setter Property="Foreground" Value="{DynamicResource TextTertiaryBrush}" />
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeCaption}" />
+        <Setter Property="Margin" Value="4,0,0,0" />
+    </Style>
+
+    <!-- 数值、坐标、日志：等宽才能对齐，且数字跳动时不会左右抖 -->
+    <Style Selector="TextBlock.mono">
+        <Setter Property="FontFamily" Value="{DynamicResource FontMono}" />
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeBody}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+    </Style>
+
+    <!-- 大读数（角度 / 深度 / 速度） -->
+    <Style Selector="TextBlock.metric">
+        <Setter Property="FontFamily" Value="{DynamicResource FontMono}" />
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeMetric}" />
+        <Setter Property="FontWeight" Value="{DynamicResource FontWeightSemiBold}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+    </Style>
+
+    <!-- 语义文字色：只改颜色，字号沿用当前设置 -->
+    <Style Selector="TextBlock.success">
+        <Setter Property="Foreground" Value="{DynamicResource SuccessTextBrush}" />
+    </Style>
+    <Style Selector="TextBlock.warning">
+        <Setter Property="Foreground" Value="{DynamicResource WarningTextBrush}" />
+    </Style>
+    <Style Selector="TextBlock.danger">
+        <Setter Property="Foreground" Value="{DynamicResource DangerTextBrush}" />
+    </Style>
+    <Style Selector="TextBlock.accent">
+        <Setter Property="Foreground" Value="{DynamicResource TextAccentBrush}" />
+    </Style>
+
+    <!-- ── 分隔线：旧代码用 <Rectangle Fill="#E0E0E0"/> 到处画，这里统一成一个类 ── -->
+    <Style Selector="Rectangle.divider">
+        <Setter Property="Fill" Value="{DynamicResource BorderSubtleBrush}" />
+        <Setter Property="Height" Value="1" />
+    </Style>
+    <Style Selector="Rectangle.dividerVertical">
+        <Setter Property="Fill" Value="{DynamicResource BorderSubtleBrush}" />
+        <Setter Property="Width" Value="1" />
+    </Style>
+
+    <!-- ── 状态灯：一个 Ellipse 挂上语义类即可 ── -->
+    <Style Selector="Ellipse.dot">
+        <Setter Property="Width" Value="{DynamicResource StatusDotMd}" />
+        <Setter Property="Height" Value="{DynamicResource StatusDotMd}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Ellipse.dot.idle">
+        <Setter Property="Fill" Value="{DynamicResource StatusIdleBrush}" />
+    </Style>
+    <Style Selector="Ellipse.dot.info">
+        <Setter Property="Fill" Value="{DynamicResource StatusInfoBrush}" />
+    </Style>
+    <Style Selector="Ellipse.dot.success">
+        <Setter Property="Fill" Value="{DynamicResource StatusSuccessBrush}" />
+    </Style>
+    <Style Selector="Ellipse.dot.warning">
+        <Setter Property="Fill" Value="{DynamicResource StatusWarningBrush}" />
+    </Style>
+    <Style Selector="Ellipse.dot.danger">
+        <Setter Property="Fill" Value="{DynamicResource StatusDangerBrush}" />
+    </Style>
+
+</Styles>

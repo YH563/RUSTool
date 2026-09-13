@@ -1,0 +1,146 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:RUSTool.UI.ViewModels"
+             xmlns:debug="using:RUSTool.UI.Views.Debug"
+             mc:Ignorable="d" d:DesignWidth="1600" d:DesignHeight="850"
+             x:Class="RUSTool.UI.Views.Clinical.ClinicalWorkspace"
+             x:DataType="vm:MainViewModel">
+
+    <!--
+      临床工作区。按 Docs/UI.md 第五节的设计稿搭出来，
+      顺便验证主题在"大字号、少控件、触控友好"场景下的表现。
+
+      与工程师模式的差别（设计文档的核心主张）：
+        · 只暴露一条线性流水线 + 急停，没有点动 6 轴、没有原始回执、没有日志；
+        · 字号更大（读数用 metric 类 = 28 号）、按钮更高（lg = 38）；
+        · 状态用三色灯表达，数值只留一个临床最关心的"末端接触力"。
+    -->
+
+    <Grid ColumnDefinitions="*,6,340" Margin="16,12">
+
+        <!-- ═══ 左：主视图（随阶段切换的内容区） ═══ -->
+        <Border Classes="card">
+            <Grid RowDefinitions="Auto,*">
+                <Border Classes="cardHeader">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Classes="panelTitle" Text="扫查视图" />
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="16">
+
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <Ellipse Classes="dot"
+                                         Classes.success="{Binding Session.IsConnected}"
+                                         Classes.idle="{Binding Session.IsIdle}" />
+                                <TextBlock Classes="caption" Text="{Binding Session.ConnectText}" />
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <Ellipse Classes="dot"
+                                         Classes.idle="{Binding Session.IsIdle}"
+                                         Classes.info="{Binding Session.IsManual}"
+                                         Classes.warning="{Binding Session.IsScanning}"
+                                         Classes.danger="{Binding Session.IsHalted}" />
+                                <TextBlock Classes="caption" Text="{Binding Session.ModeText}" />
+                            </StackPanel>
+
+                            <Border Classes="tag">
+                                <TextBlock Text="{Binding Scan.CurrentStage}" />
+                            </Border>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <Grid Grid.Row="1">
+                    <debug:Scene3DView />
+
+                    <!-- 临床 HUD 只留一项：末端接触力（用 metric 大读数） -->
+                    <Border Background="{DynamicResource SurfaceRaisedBrush}"
+                            BorderBrush="{DynamicResource BorderDefaultBrush}"
+                            BorderThickness="1"
+                            CornerRadius="{DynamicResource RadiusMd}"
+                            BoxShadow="{DynamicResource ShadowMd}"
+                            Padding="14,10"
+                            HorizontalAlignment="Right" VerticalAlignment="Top" Margin="12">
+                        <StackPanel Spacing="2">
+                            <TextBlock Classes="caption" Text="末端接触力" />
+                            <TextBlock Classes="metric"
+                                       Text="{Binding Status.ContactForce, StringFormat='{}{0:F1} N'}" />
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </Grid>
+        </Border>
+
+        <GridSplitter Grid.Column="1" />
+
+        <!-- ═══ 右：步骤向导（临床的心智模型就是这条流水线） ═══ -->
+        <Border Grid.Column="2" Classes="card">
+            <Grid RowDefinitions="Auto,Auto,*,Auto,Auto">
+
+                <Border Classes="cardHeader">
+                    <TextBlock Classes="panelTitle" Text="扫查流程" />
+                </Border>
+
+                <!-- 患者信息 -->
+                <Border Grid.Row="1" Classes="sunken" Margin="16,12,16,0" Padding="12,10">
+                    <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto"
+                          RowSpacing="4" ColumnSpacing="10">
+                        <TextBlock Classes="caption" Text="姓名" />
+                        <TextBlock Grid.Column="1" Text="示例患者"
+                                   FontWeight="{DynamicResource FontWeightSemiBold}" />
+                        <TextBlock Grid.Row="1" Classes="caption" Text="检查号" />
+                        <TextBlock Grid.Row="1" Grid.Column="1" Classes="mono"
+                                   Text="US-20260913-0042" />
+                        <TextBlock Grid.Row="2" Classes="caption" Text="部位" />
+                        <TextBlock Grid.Row="2" Grid.Column="1" Text="腹部（肝右叶）" />
+                    </Grid>
+                </Border>
+
+                <!-- 4 步：与工程师模式共用同一份状态机数据（只是投影不同） -->
+                <ItemsControl Grid.Row="2" ItemsSource="{Binding Scan.Steps}" Margin="16,12">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:ScanStep">
+                            <Border Background="{DynamicResource SurfaceSunkenBrush}"
+                                    CornerRadius="{DynamicResource RadiusMd}"
+                                    Padding="12,8" Margin="0,3">
+                                <Grid ColumnDefinitions="Auto,*,Auto">
+                                    <Ellipse Classes="dot"
+                                             Classes.idle="{Binding IsPending}"
+                                             Classes.info="{Binding IsActive}"
+                                             Classes.success="{Binding IsDone}" />
+                                    <StackPanel Grid.Column="1" Margin="10,0,0,0">
+                                        <TextBlock Text="{Binding Title}"
+                                                   FontWeight="{DynamicResource FontWeightSemiBold}" />
+                                        <TextBlock Classes="caption" Text="{Binding Hint}" />
+                                    </StackPanel>
+                                    <TextBlock Grid.Column="2" Classes="caption"
+                                               Text="{Binding Detail}" />
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <!-- 下一步：按钮文案直接说"该做什么"，是向导感的关键 -->
+                <Button Grid.Row="3" Classes="accent lg" Margin="16,0,16,10"
+                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                        Content="{Binding Scan.NextAction}"
+                        Command="{Binding Scan.ExecuteCommand}" />
+
+                <!-- 安全：急停永远可达 -->
+                <Grid Grid.Row="4" ColumnDefinitions="*,8,*" Margin="16,0,16,16">
+                    <Button Classes="danger lg" Content="急停"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                            FontWeight="{DynamicResource FontWeightBold}"
+                            Command="{Binding Session.EmergencyStopCommand}" />
+                    <Button Grid.Column="2" Classes="success lg" Content="急停恢复"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                            FontWeight="{DynamicResource FontWeightBold}"
+                            Command="{Binding Session.ResetEmergencyCommand}" />
+                </Grid>
+            </Grid>
+        </Border>
+
+    </Grid>
+</UserControl>

@@ -1,0 +1,122 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:RUSTool.UI.ViewModels"
+             xmlns:debug="using:RUSTool.UI.Views.Debug"
+             mc:Ignorable="d" d:DesignWidth="1600" d:DesignHeight="850"
+             x:Class="RUSTool.UI.Views.Debug.DebugWorkspace"
+             x:DataType="vm:MainViewModel">
+
+    <!--
+      工程师工作区：上排 3 块（3D / 影像 / 曲线）+ 下排 3 块（指令 / 回放 / 日志）。
+
+      每块卡片用 Classes="card"、卡片头用 Classes="cardHeader"（自带 40 高与底边线）——
+      "底色 + 阴影 + 圆角 + 分隔线"四件事一处定义、六处复用，改一次全局生效。
+    -->
+
+    <Grid RowDefinitions="*,Auto" Margin="16,12">
+
+        <!-- ═══ 上排：3D / 影像 / 曲线 ═══ -->
+        <Grid ColumnDefinitions="3*,6,2*,6,2*">
+
+            <Border Classes="card" MinWidth="320">
+                <Grid RowDefinitions="Auto,*">
+                    <Border Classes="cardHeader">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Classes="panelTitle" Text="3D 场景" />
+                            <TextBlock Grid.Column="1" Classes="caption" Text="视角 默认" />
+                        </Grid>
+                    </Border>
+                    <Grid Grid.Row="1">
+                        <debug:Scene3DView />
+                        <!-- 状态 HUD：悬浮右上角，IsHitTestVisible=False（在视图内部设置） -->
+                        <debug:RobotStatusOverlay DataContext="{Binding Status}" />
+                    </Grid>
+                </Grid>
+            </Border>
+
+            <GridSplitter Grid.Column="1" />
+
+            <Border Grid.Column="2" Classes="card" MinWidth="220">
+                <Grid RowDefinitions="Auto,*">
+                    <Border Classes="cardHeader">
+                        <TextBlock Classes="panelTitle" Text="超声影像" />
+                    </Border>
+                    <debug:UltrasoundView Grid.Row="1" />
+                </Grid>
+            </Border>
+
+            <GridSplitter Grid.Column="3" />
+
+            <Border Grid.Column="4" Classes="card" MinWidth="220">
+                <Grid RowDefinitions="Auto,*">
+                    <Border Classes="cardHeader">
+                        <TextBlock Classes="panelTitle" Text="数据曲线" />
+                    </Border>
+                    <debug:ChartPanel Grid.Row="1" />
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- ═══ 下排：指令 / 回放 / 日志 ═══ -->
+        <Grid Grid.Row="1" ColumnDefinitions="1.8*,6,1.3*,6,1*" Height="380" Margin="0,12,0,0">
+
+            <!-- 机器人指令：同一状态机的两个投影（手动 / 扫查），用 Carousel 切换 -->
+            <Border Classes="card" MinWidth="280">
+                <Grid RowDefinitions="Auto,*">
+                    <Border Classes="cardHeader">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Classes="panelTitle" Text="机器人指令" />
+                            <ComboBox Grid.Column="1" MinWidth="112"
+                                      SelectedIndex="{Binding RobotModeIndex, Mode=TwoWay}">
+                                <ComboBoxItem Content="手动模式" />
+                                <ComboBoxItem Content="扫查模式" />
+                            </ComboBox>
+                        </Grid>
+                    </Border>
+                    <Carousel Grid.Row="1" SelectedIndex="{Binding RobotModeIndex}">
+                        <debug:ArmControlPanel DataContext="{Binding Control}" />
+                        <debug:ScanWorkflowPanel DataContext="{Binding Scan}" />
+                    </Carousel>
+                </Grid>
+            </Border>
+
+            <GridSplitter Grid.Column="1" />
+
+            <Border Grid.Column="2" Classes="card" MinWidth="220">
+                <Grid RowDefinitions="Auto,*">
+                    <Border Classes="cardHeader">
+                        <TextBlock Classes="panelTitle" Text="回放" />
+                    </Border>
+                    <debug:ReplayModule Grid.Row="1" DataContext="{Binding Replay}" />
+                </Grid>
+            </Border>
+
+            <GridSplitter Grid.Column="3" />
+
+            <Border Grid.Column="4" Classes="card" MinWidth="240">
+                <Grid RowDefinitions="Auto,*">
+                    <Border Classes="cardHeader">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Classes="panelTitle" Text="日志" />
+                                <Border Classes="tag neutral">
+                                    <TextBlock Text="{Binding Log.Entries.Count, StringFormat='{}{0} 条'}" />
+                                </Border>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                                <CheckBox Content="只看警告" IsChecked="{Binding Log.WarningOnly}"
+                                          VerticalAlignment="Center" />
+                                <Button Classes="sm ghost" Content="清空"
+                                        Command="{Binding Log.ClearCommand}" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                    <debug:LogView Grid.Row="1" DataContext="{Binding Log}" />
+                </Grid>
+            </Border>
+        </Grid>
+
+    </Grid>
+</UserControl>

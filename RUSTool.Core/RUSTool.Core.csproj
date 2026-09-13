@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <!--
+          本程序集是纯逻辑层：通信协议/传输 + 机器人业务服务 + 服务契约。
+          它不得引用 Avalonia、Silk.NET、OpenGL 或任何 XAML —— 界面的东西都留在 RUSTool 项目里。
+
+          源文件都带显式 namespace（与拆分前一致），因此 RootNamespace 只影响今后在此新建
+          文件的默认命名空间；设为 RUSTool 可保证新增文件不会落到 RUSTool.Core.* 下。
+        -->
+        <RootNamespace>RUSTool</RootNamespace>
+
+        <!-- 公共契约（IRobotService / ILogService / BridgeProtocol / RobotSession）是本层的对外
+             面貌，XML 注释随编译产出，将来若要把它单独作为库引用时 IntelliSense 直接可用。 -->
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <!-- CS1591 = 公共成员缺 XML 注释。本层类型全部带中文注释，保持为零即可。 -->
+        <NoWarn>$(NoWarn);CS1591</NoWarn>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <!--
+          Core 内唯一使用 MVVM 基础类型的文件是 Services/Robot/RobotSession.cs（共享会话状态，
+          需要属性变更通知供各 VM 绑定）。CommunityToolkit.Mvvm 自身不依赖任何 UI 框架，
+          只提供 INotifyPropertyChanged / SetProperty 的实现，因此不违反
+          「本层不认识 Avalonia」这条约束。
+
+          将来若要彻底剥离这唯一的第三方依赖：把该类里 4 个 [ObservableProperty] 字段改成
+          手写属性（配一个 ~20 行的 INotifyPropertyChanged 基类）即可，调用方无需改动。
+          版本与 RUSTool 项目保持一致。
+        -->
+        <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    </ItemGroup>
+
+</Project>

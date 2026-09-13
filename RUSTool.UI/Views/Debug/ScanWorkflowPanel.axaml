@@ -1,0 +1,91 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:RUSTool.UI.ViewModels"
+             mc:Ignorable="d" d:DesignWidth="520" d:DesignHeight="320"
+             x:Class="RUSTool.UI.Views.Debug.ScanWorkflowPanel"
+             x:DataType="vm:ScanWorkflowViewModel">
+
+    <!--
+      扫查工作流：步骤状态建模成 StepState，四盏灯用主题的 dot 类表达
+      （待办灰 / 进行中蓝 / 完成绿），一眼看得出流程走到哪。
+
+      按钮按前置条件 IsEnabled —— "执行"在规划完成前点不动，
+      这是真机上的安全底线，不只是界面细节。
+    -->
+
+    <Grid RowDefinitions="Auto,*,Auto" Margin="16,10">
+
+        <!-- ── 状态条：当前阶段 + 下一步 ── -->
+        <Border Background="{DynamicResource InfoSubtleBgBrush}"
+                BorderBrush="{DynamicResource InfoSubtleBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="{DynamicResource RadiusMd}"
+                Padding="12,8">
+            <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto" RowSpacing="2">
+                <TextBlock Classes="caption" Text="当前阶段" />
+                <TextBlock Grid.Column="2" Text="{Binding CurrentStage}"
+                           FontWeight="{DynamicResource FontWeightSemiBold}" />
+                <TextBlock Grid.Row="1" Classes="caption" Text="下一步" />
+                <TextBlock Grid.Row="1" Grid.Column="2" Classes="accent"
+                           FontWeight="{DynamicResource FontWeightSemiBold}"
+                           Text="{Binding NextAction}" />
+            </Grid>
+        </Border>
+
+        <!-- ── 四步流程 ── -->
+        <ItemsControl Grid.Row="1" ItemsSource="{Binding Steps}" Margin="0,8,0,0">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:ScanStep">
+                    <Border Classes="sunken" Padding="10,4" Margin="0,2">
+                        <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+
+                            <!-- 步骤灯：待办 / 进行中 / 完成，三态互斥 -->
+                            <Ellipse Classes="dot"
+                                     Classes.idle="{Binding IsPending}"
+                                     Classes.info="{Binding IsActive}"
+                                     Classes.success="{Binding IsDone}" />
+
+                            <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <TextBlock Text="{Binding Index}"
+                                               Foreground="{DynamicResource TextTertiaryBrush}" />
+                                    <TextBlock Text="{Binding Title}"
+                                               FontWeight="{DynamicResource FontWeightSemiBold}" />
+                                </StackPanel>
+                                <TextBlock Classes="caption" Text="{Binding Hint}" />
+                            </StackPanel>
+
+                            <!-- 产物摘要：告诉用户这一步"做出了什么" -->
+                            <Border Grid.Column="2" Classes="tag neutral"
+                                    IsVisible="{Binding HasDetail}">
+                                <TextBlock Text="{Binding Detail}" />
+                            </Border>
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <!-- ── 流程控制 ── -->
+        <WrapPanel Grid.Row="2" Orientation="Horizontal" ItemSpacing="6" Margin="0,8,0,0">
+            <Button Classes="sm" Content="结束预扫查"
+                    Command="{Binding EndPreScanCommand}" />
+            <Button Classes="sm" Content="设为起点" IsEnabled="{Binding CanSetStart}"
+                    Command="{Binding SetStartPoseCommand}" />
+            <Button Classes="sm" Content="设为终点" IsEnabled="{Binding CanSetEnd}"
+                    Command="{Binding SetEndPoseCommand}" />
+            <Button Classes="sm" Content="开始规划" IsEnabled="{Binding CanPlan}"
+                    Command="{Binding PlanCommand}" />
+            <Button Classes="sm accent" Content="执行" IsEnabled="{Binding CanExecute}"
+                    Command="{Binding ExecuteCommand}" />
+            <Button Classes="sm" Content="暂停" Command="{Binding PauseCommand}" />
+            <Button Classes="sm" Content="恢复" Command="{Binding ResumeCommand}" />
+            <Button Classes="sm danger" Content="停止" Command="{Binding StopCommand}" />
+            <Button Classes="sm" Content="复位" Command="{Binding ResetCommand}" />
+            <Button Classes="sm ghost" Content="刷新状态"
+                    Command="{Binding RefreshStatusCommand}" />
+        </WrapPanel>
+    </Grid>
+</UserControl>

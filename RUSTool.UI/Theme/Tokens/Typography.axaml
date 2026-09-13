@@ -1,0 +1,53 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=System.Runtime">
+
+    <!--
+    ════════════════════════════════════════════════════════════════════════════
+      排版 Typography —— 字体族 / 字号 / 字重
+    ════════════════════════════════════════════════════════════════════════════
+
+      ⚠ 旧配置里字体族的第一个候选是 "Times New Roman"（衬线体）。
+        在装有该字体的机器上，整个界面会以衬线字渲染 —— 这是"看起来土"
+        最主要的原因之一。UI 一律用无衬线体，衬线体只用于印刷正文。
+
+      字号只保留 6 级（旧代码里有 11/12/13/14/15/16/24 共 7 种，且 12 占了 45 处）。
+      选档原则：能在 6 档里找到就不新建。
+    -->
+
+    <!-- 字体族：先西文（Inter 由 Avalonia.Fonts.Inter 提供），再中文回退。
+         顺序很重要 —— 西文在前能让数字/字母更紧凑好看，中文自动回退到 Noto/YaHei。 -->
+    <FontFamily x:Key="FontUi">Inter, Segoe UI Variable Text, Segoe UI, Noto Sans CJK SC, Microsoft YaHei UI, PingFang SC, sans-serif</FontFamily>
+    <!-- 等宽：日志、坐标数值、寄存器值 -->
+    <FontFamily x:Key="FontMono">Cascadia Mono, JetBrains Mono, Consolas, DejaVu Sans Mono, monospace</FontFamily>
+
+    <!-- ─── 字号（px）───
+         Caption  11  辅助说明、单位、时间戳
+         Body     12  表格、日志、紧凑标签       ← 界面主力
+         BodyLg   13  按钮、输入框、正文
+         Subtitle 14  卡片标题、小标题
+         Title    16  页面标题、区块标题
+         Display  20  大数值读数（如角度、深度）
+         Metric   28  仪表盘主数值
+    -->
+    <sys:Double x:Key="FontSizeCaption">11</sys:Double>
+    <sys:Double x:Key="FontSizeBody">12</sys:Double>
+    <sys:Double x:Key="FontSizeBodyLg">13</sys:Double>
+    <sys:Double x:Key="FontSizeSubtitle">14</sys:Double>
+    <sys:Double x:Key="FontSizeTitle">16</sys:Double>
+    <sys:Double x:Key="FontSizeDisplay">20</sys:Double>
+    <sys:Double x:Key="FontSizeMetric">28</sys:Double>
+
+    <!-- ─── 字重（Avalonia 用 FontWeight 枚举，直接用字符串即可）───
+         只有 4 档：Normal / Medium / SemiBold / Bold。
+         不要用 Light 或 Black —— 在小字号下会糊。 -->
+    <FontWeight x:Key="FontWeightNormal">Normal</FontWeight>
+    <FontWeight x:Key="FontWeightMedium">Medium</FontWeight>
+    <FontWeight x:Key="FontWeightSemiBold">SemiBold</FontWeight>
+    <FontWeight x:Key="FontWeightBold">Bold</FontWeight>
+
+    <!-- ─── 行高倍率 ─── -->
+    <sys:Double x:Key="LineHeightTight">1.25</sys:Double>
+    <sys:Double x:Key="LineHeightNormal">1.5</sys:Double>
+
+</ResourceDictionary>

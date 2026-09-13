@@ -1,0 +1,86 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+    ════════════════════════════════════════════════════════════════════════════
+      浮层 Overlay —— 下拉列表 / Flyout / 工具提示
+    ════════════════════════════════════════════════════════════════════════════
+
+      这里的每一处覆盖都在解决一个【具体】的观感问题，而不是"顺手美化"：
+
+      ① ComboBox 下拉的四个角
+         Fluent 给下拉面板写的是 CornerRadius="0,0,4,4" —— 上面两个角是【直角】。
+         它的本意是让面板紧贴输入框、看起来"连成一体"，但实际效果是：
+         · 顶部两角是尖的，底部两角是圆的，同一条边上出现两种圆角，边框因此显得"脏"；
+         · 面板贴住输入框，两块不同底色的矩形直接相接，接缝处会出现一道深色描边，
+           也就是"四个角有黑边"里最容易被看见的那部分。
+         本文件的做法：四角统一 8px 圆角 + 与输入框留 4px 间距。
+         分开成两块浮起来的层，是 Win11 下拉的标准形态，也顺手消灭了那道接缝。
+
+      ② hover / 选中项是"通栏色带"
+         Fluent 的项高亮铺满整个面板宽度，且是直角。
+         给项加 4px 圆角 + 面板 4px 内边距后，高亮变成一块浮在面板里的圆角块。
+
+      ③ 工具提示：同样给圆角，且收紧内边距 —— 小气泡里留 12px 内边距会显得空。
+    -->
+
+    <!-- ── ComboBox 下拉面板 ──
+         Border#PopupBorder 是 Fluent 模板里那一层外壳的名字（已确认存在于 12.1.0）。
+         用名字而不是"模板里第一个 Border"，是为了不误伤模板内部的其它 Border。
+
+         ⚠ 阴影走 ShadowOverlay 令牌，而它默认是 none —— 原因是一次实测踩出来的：
+           弹层是独立窗口，阴影和圆角都依赖窗口 alpha 被合成器合成。
+           在没有合成器的 X11 桌面上（xprop -root _NET_WM_CM_S0 查不到），alpha 会被丢弃，
+           半透明阴影直接变成【实心黑】，四个角立刻出现黑边。
+           想看阴影就把令牌换成具体值（Metrics.axaml 里有说明），不要在这里写死。 -->
+    <Style Selector="ComboBox /template/ Border#PopupBorder">
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusOverlay}" />
+        <Setter Property="Background" Value="{DynamicResource SurfaceRaisedBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderDefaultBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="BoxShadow" Value="{DynamicResource ShadowOverlay}" />
+        <Setter Property="Padding" Value="{DynamicResource OverlayPadding}" />
+        <!-- 清掉 Fluent 给面板留的顶部外边距：它原本用来"贴住"输入框，
+             现在改成留间距，这个 margin 会和 VerticalOffset 叠加成 8px 的大缝。 -->
+        <Setter Property="Margin" Value="0" />
+    </Style>
+
+    <!-- 下拉与输入框之间留 4px 缝。
+         不这么做的话，面板会紧贴控件，圆角无处体现、边界也分不开。 -->
+    <Style Selector="ComboBox /template/ Popup#PART_Popup">
+        <Setter Property="VerticalOffset" Value="4" />
+    </Style>
+
+    <!-- ── 下拉项 ──
+         高 32、左右 12、圆角 4：与菜单项同一套尺规，
+         因为它们在用户眼里就是同一种东西 —— "一列可以选的条目"。 -->
+    <Style Selector="ComboBoxItem">
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusSm}" />
+        <Setter Property="MinHeight" Value="{DynamicResource ControlHeightMd}" />
+        <Setter Property="Padding" Value="{DynamicResource MenuItemPadding}" />
+    </Style>
+
+    <!-- ── Flyout / ContextMenu 的宿主面板 ──
+         与菜单面板同一套参数：浮层之间必须长得一样，
+         否则同一个界面里"右键弹出的"和"菜单栏弹出的"看起来像两个程序。 -->
+    <Style Selector="FlyoutPresenter">
+        <Setter Property="Background" Value="{DynamicResource SurfaceRaisedBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderDefaultBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusOverlay}" />
+        <Setter Property="Padding" Value="{DynamicResource OverlayPadding}" />
+    </Style>
+    <Style Selector="FlyoutPresenter /template/ Border">
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusOverlay}" />
+        <Setter Property="BoxShadow" Value="{DynamicResource ShadowOverlay}" />
+    </Style>
+
+    <!-- ── ToolTip ──
+         小气泡用 RadiusMd(6) 而不是 8：尺寸越小的圆角越要小，
+         否则一个 20px 高的气泡配 8px 圆角会变成"胶囊"，像按钮而不像提示。 -->
+    <Style Selector="ToolTip">
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusMd}" />
+        <Setter Property="Padding" Value="8,4" />
+    </Style>
+
+</Styles>

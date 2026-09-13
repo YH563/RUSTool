@@ -1,0 +1,112 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:RUSTool.UI.ViewModels"
+             mc:Ignorable="d" d:DesignWidth="320" d:DesignHeight="420"
+             x:Class="RUSTool.UI.Views.Debug.RobotStatusOverlay"
+             x:DataType="vm:RobotStatusViewModel"
+             IsHitTestVisible="False">
+
+    <!--
+      ══════════════════════════════════════════════════════════════════════════
+        机械臂状态 HUD —— 悬浮在 3D 场景右上角
+      ══════════════════════════════════════════════════════════════════════════
+
+      HUD 跟主题走：浅色主题 = 白卡片浮在浅灰场景上，
+      深色主题 = Ink800 卡片浮在 Ink950 上，两种情况下层次都成立。
+      数值用等宽字体（数字跳动时不会左右抖），字号 / 颜色收敛成
+      hudLabel / hudValue 两个类，18 个 TextBlock 不必各自再写一遍。
+    -->
+
+    <UserControl.Styles>
+        <!-- 数值：等宽 + 一级文字色 -->
+        <Style Selector="TextBlock.hudValue">
+            <Setter Property="FontFamily" Value="{DynamicResource FontMono}" />
+            <Setter Property="FontSize" Value="{DynamicResource FontSizeBody}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+        </Style>
+        <!-- 分组标题：三级文字色，比数值低一级 -->
+        <Style Selector="TextBlock.hudGroupTitle">
+            <Setter Property="FontSize" Value="{DynamicResource FontSizeCaption}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextTertiaryBrush}" />
+        </Style>
+        <!-- 分组底：下沉一档，和 HUD 卡片表面拉开层次 -->
+        <Style Selector="Border.hudGroup">
+            <Setter Property="Background" Value="{DynamicResource SurfaceSunkenBrush}" />
+            <Setter Property="CornerRadius" Value="{DynamicResource RadiusMd}" />
+            <Setter Property="Padding" Value="10,8" />
+        </Style>
+    </UserControl.Styles>
+
+    <Border Background="{DynamicResource SurfaceRaisedBrush}"
+            BorderBrush="{DynamicResource BorderDefaultBrush}"
+            BorderThickness="1"
+            CornerRadius="{DynamicResource RadiusLg}"
+            BoxShadow="{DynamicResource ShadowLg}"
+            Padding="14,12"
+            Width="300"
+            HorizontalAlignment="Right" VerticalAlignment="Top" Margin="12">
+        <StackPanel Spacing="10">
+
+            <!-- 标题行 -->
+            <TextBlock Classes="panelTitle" Text="机械臂状态" />
+
+            <!-- TCP 位置 -->
+            <Border Classes="hudGroup">
+                <StackPanel Spacing="6">
+                    <TextBlock Classes="hudGroupTitle" Text="TCP 位置（m / deg）" />
+                    <Grid ColumnDefinitions="*,*,*" RowDefinitions="Auto,Auto"
+                          ColumnSpacing="8" RowSpacing="2">
+                        <TextBlock Classes="hudValue" Text="{Binding FlangeX, StringFormat='X {0:F2}'}" />
+                        <TextBlock Grid.Column="1" Classes="hudValue" Text="{Binding FlangeY, StringFormat='Y {0:F2}'}" />
+                        <TextBlock Grid.Column="2" Classes="hudValue" Text="{Binding FlangeZ, StringFormat='Z {0:F2}'}" />
+                        <TextBlock Grid.Row="1" Classes="hudValue" Text="{Binding FlangeRx, StringFormat='Rx {0:F1}'}" />
+                        <TextBlock Grid.Row="1" Grid.Column="1" Classes="hudValue" Text="{Binding FlangeRy, StringFormat='Ry {0:F1}'}" />
+                        <TextBlock Grid.Row="1" Grid.Column="2" Classes="hudValue" Text="{Binding FlangeRz, StringFormat='Rz {0:F1}'}" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- 关节角度 -->
+            <Border Classes="hudGroup">
+                <StackPanel Spacing="6">
+                    <TextBlock Classes="hudGroupTitle" Text="关节角度（deg）" />
+                    <Grid ColumnDefinitions="*,*,*" RowDefinitions="Auto,Auto"
+                          ColumnSpacing="8" RowSpacing="2">
+                        <TextBlock Classes="hudValue" Text="{Binding Joint1, StringFormat='J1 {0:F1}'}" />
+                        <TextBlock Grid.Column="1" Classes="hudValue" Text="{Binding Joint2, StringFormat='J2 {0:F1}'}" />
+                        <TextBlock Grid.Column="2" Classes="hudValue" Text="{Binding Joint3, StringFormat='J3 {0:F1}'}" />
+                        <TextBlock Grid.Row="1" Classes="hudValue" Text="{Binding Joint4, StringFormat='J4 {0:F1}'}" />
+                        <TextBlock Grid.Row="1" Grid.Column="1" Classes="hudValue" Text="{Binding Joint5, StringFormat='J5 {0:F1}'}" />
+                        <TextBlock Grid.Row="1" Grid.Column="2" Classes="hudValue" Text="{Binding Joint6, StringFormat='J6 {0:F1}'}" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- 关节力矩 -->
+            <Border Classes="hudGroup">
+                <StackPanel Spacing="6">
+                    <TextBlock Classes="hudGroupTitle" Text="关节力矩（Nm）" />
+                    <Grid ColumnDefinitions="*,*,*" RowDefinitions="Auto,Auto"
+                          ColumnSpacing="8" RowSpacing="2">
+                        <TextBlock Classes="hudValue" Text="{Binding Torque1, StringFormat='J1 {0:F2}'}" />
+                        <TextBlock Grid.Column="1" Classes="hudValue" Text="{Binding Torque2, StringFormat='J2 {0:F2}'}" />
+                        <TextBlock Grid.Column="2" Classes="hudValue" Text="{Binding Torque3, StringFormat='J3 {0:F2}'}" />
+                        <TextBlock Grid.Row="1" Classes="hudValue" Text="{Binding Torque4, StringFormat='J4 {0:F2}'}" />
+                        <TextBlock Grid.Row="1" Grid.Column="1" Classes="hudValue" Text="{Binding Torque5, StringFormat='J5 {0:F2}'}" />
+                        <TextBlock Grid.Row="1" Grid.Column="2" Classes="hudValue" Text="{Binding Torque6, StringFormat='J6 {0:F2}'}" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- 接触力：示教器上比关节力矩更常看的一项 -->
+            <Grid ColumnDefinitions="Auto,*">
+                <TextBlock Classes="hudGroupTitle" Text="末端接触力" />
+                <TextBlock Grid.Column="1" Classes="hudValue" HorizontalAlignment="Right"
+                           Text="{Binding ContactForce, StringFormat='{}{0:F2} N'}" />
+            </Grid>
+
+        </StackPanel>
+    </Border>
+</UserControl>

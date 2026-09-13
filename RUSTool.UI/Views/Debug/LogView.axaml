@@ -1,0 +1,43 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:log="using:RUSTool.Services.Logging"
+             xmlns:vm="using:RUSTool.UI.ViewModels"
+             mc:Ignorable="d" d:DesignWidth="400" d:DesignHeight="400"
+             x:Class="RUSTool.UI.Views.Debug.LogView"
+             x:DataType="vm:LogViewModel">
+
+    <!--
+      日志面板。时间 / 级别 / 正文拆成固定宽度的列，时间与正文用等宽字体，天然对齐；
+      级别用主题的语义文字色（success / warning / danger），颜色跟着主题走。
+      新日志进来时列表自动滚到末尾（见 code-behind）。
+    -->
+    <ListBox x:Name="LogListBox"
+             Classes="flush"
+             ItemsSource="{Binding Entries}"
+             SelectedItem="{Binding Selected}"
+             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+        <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="log:LogEntry">
+                <Grid ColumnDefinitions="68,40,*" ColumnSpacing="8" Margin="0,1">
+                    <!-- 时间：等宽，宽度固定，避免不同位数把后面的列推来推去 -->
+                    <TextBlock Classes="mono" Text="{Binding TimeText}"
+                               FontSize="{DynamicResource FontSizeCaption}"
+                               Foreground="{DynamicResource TextTertiaryBrush}" />
+
+                    <!-- 级别：颜色来自主题语义类 -->
+                    <TextBlock Grid.Column="1" Classes="caption"
+                               Classes.success="{Binding IsSuccess}"
+                               Classes.warning="{Binding IsWarning}"
+                               Classes.danger="{Binding IsError}"
+                               Text="{Binding LevelText}" />
+
+                    <!-- 正文：等宽，方便比对回执里的数字 -->
+                    <TextBlock Grid.Column="2" Classes="mono" Text="{Binding Message}"
+                               TextTrimming="CharacterEllipsis" />
+                </Grid>
+            </DataTemplate>
+        </ListBox.ItemTemplate>
+    </ListBox>
+</UserControl>

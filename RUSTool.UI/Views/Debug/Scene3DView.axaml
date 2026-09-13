@@ -1,0 +1,42 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="600" d:DesignHeight="500"
+             x:Class="RUSTool.UI.Views.Debug.Scene3DView">
+
+    <!--
+      3D 场景占位。底色 / 文字色都走令牌，并补了一个 XYZ 坐标轴示意 ——
+      "什么都没有"的占位区最容易让人误以为程序挂了。
+      接入 RUSTool.Visualization 后替换这一块。
+    -->
+    <Border Classes="canvas" Background="{DynamicResource SurfaceSunkenBrush}">
+        <Grid>
+            <!-- 占位文字靠左：右上角常驻 HUD（宽 300），居中文字会被它切掉一半 -->
+            <TextBlock Text="3D 场景渲染区域"
+                       HorizontalAlignment="Left" VerticalAlignment="Center"
+                       Margin="24,0,0,0"
+                       Foreground="{DynamicResource TextTertiaryBrush}" />
+
+            <!-- 右下角坐标轴：X 蓝 / Y 绿 / Z 红（等宽字体下术语默认约定） -->
+            <Canvas Width="70" Height="70" HorizontalAlignment="Right"
+                    VerticalAlignment="Bottom" Margin="12">
+                <Line StartPoint="35,58" EndPoint="35,12"
+                      Stroke="{DynamicResource StatusDangerBrush}" StrokeThickness="2" />
+                <Line StartPoint="35,58" EndPoint="64,68"
+                      Stroke="{DynamicResource StatusSuccessBrush}" StrokeThickness="2" />
+                <Line StartPoint="35,58" EndPoint="6,68"
+                      Stroke="{DynamicResource StatusInfoBrush}" StrokeThickness="2" />
+                <TextBlock Canvas.Left="30" Canvas.Top="-2" Text="Z"
+                           FontSize="{DynamicResource FontSizeCaption}"
+                           Foreground="{DynamicResource TextTertiaryBrush}" />
+                <TextBlock Canvas.Left="62" Canvas.Top="58" Text="Y"
+                           FontSize="{DynamicResource FontSizeCaption}"
+                           Foreground="{DynamicResource TextTertiaryBrush}" />
+                <TextBlock Canvas.Left="2" Canvas.Top="58" Text="X"
+                           FontSize="{DynamicResource FontSizeCaption}"
+                           Foreground="{DynamicResource TextTertiaryBrush}" />
+            </Canvas>
+        </Grid>
+    </Border>
+</UserControl>

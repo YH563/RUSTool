@@ -1,0 +1,72 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+    ════════════════════════════════════════════════════════════════════════════
+      菜单 Menu / MenuItem / ContextMenu
+    ════════════════════════════════════════════════════════════════════════════
+
+      为什么要有这个文件？
+        菜单是"看起来像不像 Win11"最灵敏的地方 —— 用户每天都在点，
+        对它的圆角、行高、hover 底色、图标列对齐极其敏感。
+        Fluent 默认的菜单是：直角面板、紧凑行距、hover 高亮贴满整行、无阴影，
+        整体观感偏"Windows 8 时代"，与按钮（我们自己写的）不在一个年代。
+
+      Win11 菜单的四个特征（本文件逐条落实）：
+        ① 面板 8px 圆角 + 4px 内边距 → 圆角是外层的，项本身再有 4px 圆角，形成"双圆角"
+        ② 行高 32px、左右内边距 12px     → 行与行之间有呼吸感，不再是"挤在一起的文字"
+        ③ hover 是一块【圆角浅灰】而不是通栏色带 → 与项之间有 4px 内边距隔开，不贴边
+        ④ 图标列固定 20px 宽             → 有图标/无图标的项，文字左边缘严格对齐
+
+      资源键 vs 模板覆盖的分工：
+        · 颜色 / 内边距 / 行高 → 走 Bridges/Fluent.axaml 覆盖资源键（抗升级）
+        · 圆角 / 阴影          → 只能走 /template/，因为 Fluent 没给这两个留资源键
+    -->
+
+    <!-- ── 下拉面板本体 ──
+         这就是"菜单那一层"：圆角、边框、阴影三件套决定了它像不像一个现代浮层。
+         注意 Padding 只给 4：面板四周各留 4px，菜单项的圆角才不会被面板边缘切掉。 -->
+    <Style Selector="MenuFlyoutPresenter">
+        <Setter Property="Background" Value="{DynamicResource SurfaceRaisedBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderDefaultBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusOverlay}" />
+        <Setter Property="Padding" Value="{DynamicResource OverlayPadding}" />
+    </Style>
+
+    <!-- 圆角与阴影都走令牌：RadiusOverlay / ShadowOverlay。
+         没有合成器的 X11 桌面会把弹层的透明圆角与半透明阴影渲染成实心黑，
+         也就是"四个角有黑边"—— 所以这两个令牌默认是 0 / none，
+         有合成器时改令牌即可拿回 Win11 观感，不用动这个文件。 -->
+    <Style Selector="MenuFlyoutPresenter /template/ Border">
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusOverlay}" />
+        <Setter Property="BoxShadow" Value="{DynamicResource ShadowOverlay}" />
+    </Style>
+
+    <!-- ── 菜单项 ──
+         MinHeight 32 + Padding 12,0 是 Win11 的尺寸；
+         CornerRadius 4 让 hover 高亮变成"圆角块" —— 直角高亮是旧版 Windows 的味道。 -->
+    <Style Selector="MenuItem">
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusSm}" />
+        <Setter Property="Padding" Value="{DynamicResource MenuItemPadding}" />
+        <Setter Property="MinHeight" Value="{DynamicResource MenuItemHeight}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+    </Style>
+
+    <!-- ── 顶部菜单栏项（"文件" / "视图" 这一层）──
+         Menu 的直接子项才吃这条规则，下拉里的项不受影响 ——
+         顶栏项是"横排的一行字"，行高和内边距必须比下拉项小，否则工具栏会被撑高。 -->
+    <Style Selector="Menu > MenuItem">
+        <Setter Property="MinHeight" Value="28" />
+        <Setter Property="Padding" Value="10,4" />
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusSm}" />
+    </Style>
+
+    <!-- ── 分隔线 ──
+         ⚠ 这里【不】写 Selector="Separator"：菜单里的分隔符确实是 Separator，
+         但同一个类型也用在 ToolBar/ListBox 等地方，通配会连它们一起改掉。
+         菜单分隔符的高度与上下留白由 Bridges/Fluent.axaml 里的
+         MenuFlyoutSeparatorThemeHeight / MenuFlyoutSeparatorThemePadding 两个键控制 ——
+         资源键天然只作用于菜单，比选择器精确，也不会误伤别处。 -->
+
+</Styles>

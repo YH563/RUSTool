@@ -1,0 +1,102 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=System.Runtime">
+
+    <!--
+    ════════════════════════════════════════════════════════════════════════════
+      度量 Metrics —— 间距 / 圆角 / 控件尺寸 / 阴影
+    ════════════════════════════════════════════════════════════════════════════
+
+      为什么需要它？
+        旧代码里有 30 多种不同的 Padding/Margin 组合（Padding="10,4"、"8,6"、
+        "22,8"、"14,8"…），连并排的「急停」和「急停恢复」内边距都不同，
+        所以两个按钮高度差 8px，一眼就看出"没对齐"。
+
+      解决方式：
+        所有间距只能从下面这条 4 的倍数阶梯里取，且同一层级的元素必须用同一档。
+        节奏一致 = 看起来整齐 = 看起来专业。这是"好看"里最廉价也最有效的一条。
+    -->
+
+    <!-- ─── 间距阶梯（4 基数）─── -->
+    <sys:Double x:Key="SpaceXxs">2</sys:Double>   <!-- 图标与文字之间 -->
+    <sys:Double x:Key="SpaceXs">4</sys:Double>    <!-- 紧邻元素 -->
+    <sys:Double x:Key="SpaceSm">8</sys:Double>    <!-- 同组元素 -->
+    <sys:Double x:Key="SpaceMd">12</sys:Double>   <!-- 组内分隔 -->
+    <sys:Double x:Key="SpaceLg">16</sys:Double>   <!-- 卡片内边距（标准） -->
+    <sys:Double x:Key="SpaceXl">24</sys:Double>   <!-- 区块之间 -->
+    <sys:Double x:Key="Space2Xl">32</sys:Double>  <!-- 页面级留白 -->
+
+    <!-- ─── 圆角 ─── -->
+    <CornerRadius x:Key="RadiusXs">3</CornerRadius>       <!-- 小标签 -->
+    <CornerRadius x:Key="RadiusSm">4</CornerRadius>       <!-- 输入框、小按钮、菜单项 -->
+    <CornerRadius x:Key="RadiusMd">6</CornerRadius>       <!-- 标准按钮、卡片 -->
+    <CornerRadius x:Key="RadiusLg">10</CornerRadius>      <!-- 大卡片 -->
+    <CornerRadius x:Key="RadiusPill">999</CornerRadius>   <!-- 胶囊按钮、状态标签 -->
+
+    <!-- ─── 浮层（菜单 / 下拉 / 提示气泡）───
+         ⚠ 默认是 0 而不是 Win11 的 8 —— 这是被 X11 的现实逼出来的取舍。
+
+         弹层在桌面上是【独立窗口】，圆角外侧就是窗口的透明区域：
+           · 有合成器（picom / mutter / kwin）时 → 透明区被正确合成，圆角是圆的、阴影是柔的；
+           · 没有合成器时（xprop -root _NET_WM_CM_S0 查不到）→ alpha 被直接丢弃，
+             透明区渲染成【纯黑】。于是弹层四个角出现黑边 —— 这就是"下拉四个角有黑边"
+             的真正原因，跟配色、边框、阴影代码都无关。
+
+         所以默认 0：任何环境下都不会出错，层次改由 1px 边框表达。
+         确认自己机器上有合成器之后，把它改成 8，即可拿回完整的 Win11 观感
+         （同时把 ShadowOverlay 从 none 换成下面注释里的值）。
+
+         注意：不要给浮层用 RadiusLg(10)，那会和卡片混为一谈，浮层需要自己的一档。 -->
+    <CornerRadius x:Key="RadiusOverlay">0</CornerRadius>
+    <Thickness x:Key="OverlayPadding">4</Thickness>
+
+    <!-- ─── 菜单项 ───
+         Win11 菜单项高 32、左右内边距 12、图标列固定 20 宽。
+         图标列固定宽度是为了让"有图标"和"没图标"的菜单项文字左边缘对齐 ——
+         旧代码里用空格凑对齐，换个字体就全歪了。 -->
+    <sys:Double x:Key="MenuItemHeight">32</sys:Double>
+    <Thickness x:Key="MenuItemPadding">12,0</Thickness>
+    <sys:Double x:Key="MenuIconColumnWidth">20</sys:Double>
+
+    <!-- ─── 控件尺寸 ───
+         旧代码里按钮高度全靠 Padding 撑，导致同一行按钮高度不一。
+         新规则：按钮/输入框高度由 Height 固定，Padding 只管水平方向。 -->
+    <sys:Double x:Key="ControlHeightSm">26</sys:Double>
+    <sys:Double x:Key="ControlHeightMd">32</sys:Double>   <!-- 默认 -->
+    <sys:Double x:Key="ControlHeightLg">38</sys:Double>
+    <sys:Double x:Key="IconSizeSm">14</sys:Double>
+    <sys:Double x:Key="IconSizeMd">16</sys:Double>
+    <sys:Double x:Key="StatusDotSm">6</sys:Double>        <!-- 小状态灯 -->
+    <sys:Double x:Key="StatusDotMd">8</sys:Double>        <!-- 标准状态灯 -->
+    <sys:Double x:Key="StatusDotLg">10</sys:Double>
+
+    <!-- ─── 布局常量 ─── -->
+    <sys:Double x:Key="ToolbarHeight">48</sys:Double>     <!-- 顶部工具栏 -->
+    <sys:Double x:Key="CardHeaderHeight">40</sys:Double>  <!-- 卡片标题栏 -->
+    <sys:Double x:Key="DividerThickness">1</sys:Double>
+
+    <!-- ─── 阴影层级（Elevation）───
+         统一用带透明度的 #0F172A 而不是纯黑 —— 纯黑阴影落在浅灰背景上会发脏。
+         格式：offsetX offsetY blur spread #AARRGGBB（alpha 必须显式写，否则是实心色块）
+           sm = 卡片静置；md = 卡片悬浮；lg = 弹窗；overlay = 菜单/下拉等浮层
+
+         ShadowOverlay 用双层：贴边的一层很轻（勾出轮廓），外扩的一层很散（做柔和过渡）。
+         Win11 的浮层观感几乎全靠这两层叠出来，单层阴影会显得"像贴纸一样平"。
+         逗号分隔多个阴影是本格式唯一支持多层的写法。
+
+         ⚠ 默认是 none：没有合成器的桌面会把半透明阴影渲染成实心黑（同 RadiusOverlay 的说明）。
+         有合成器时把它换成：
+             0 2 4 0 #140F172A, 0 8 16 0 #260F172A
+         注意 none 是 BoxShadows 的合法取值（表示"无阴影"），不是占位符。 -->
+    <BoxShadows x:Key="ShadowSm">0 1 2 0 #140F172A</BoxShadows>
+    <BoxShadows x:Key="ShadowMd">0 2 6 0 #1A0F172A</BoxShadows>
+    <BoxShadows x:Key="ShadowLg">0 8 24 0 #240F172A</BoxShadows>
+    <BoxShadows x:Key="ShadowOverlay">none</BoxShadows>
+
+    <!-- ─── 动效时长（毫秒）───
+         120ms 用于颜色/背景过渡（几乎无感但让界面"活"）；
+         180ms 用于位移/展开。 -->
+    <sys:Double x:Key="DurationFast">0.12</sys:Double>
+    <sys:Double x:Key="DurationNormal">0.18</sys:Double>
+
+</ResourceDictionary>

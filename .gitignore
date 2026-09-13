@@ -1,5 +1,13 @@
-RUSTool/bin/
+# 构建产物：对所有项目生效（新增项目时无需再改本文件）
+[Bb]in/
+[Oo]bj/
+
+# IDE / 工具缓存
 .idea/
-RUSTool/obj/
-RUSTool/.VSCodeCounter
 .VSCodeCounter/
+
+# 运行期日志（LogService 默认写入 "logs"）
+logs/
+
+# 界面截图：由 RUSTool.UI/preview.sh 本地生成，属临时产物
+RUSTool.UI/preview/

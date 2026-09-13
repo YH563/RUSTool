@@ -1,0 +1,23 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="RUSTool.UI.App"
+             RequestedThemeVariant="Light">
+
+    <!--
+      加载顺序即优先级：后加载的覆盖先加载的。
+
+        FluentTheme                       提供未重写控件的底层模板（ComboBox、ScrollBar…）
+        Theme/Theme.axaml                 设计系统：令牌 + 控件样式（本项目内，见 Theme/）
+        Styles/AppLayout.axaml            本项目的应用级布局类（卡片、面板头…）
+
+      第 2 行是"接入主题"的唯一开关：去掉它，界面立刻退回 Fluent 默认外观；
+      第 3 行只放【应用自己的布局约定】（卡片怎么摆、面板头多高），
+      换配色不该动它，改布局也不该动主题 —— 两边的职责就是这么切开的。
+    -->
+    <Application.Styles>
+        <FluentTheme />
+        <StyleInclude Source="avares://RUSTool.UI/Theme/Theme.axaml" />
+        <StyleInclude Source="avares://RUSTool.UI/Styles/AppLayout.axaml" />
+    </Application.Styles>
+
+</Application>

@@ -1,0 +1,123 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:RUSTool.UI.ViewModels"
+        xmlns:debug="using:RUSTool.UI.Views.Debug"
+        xmlns:clinical="using:RUSTool.UI.Views.Clinical"
+        mc:Ignorable="d" d:DesignWidth="1600" d:DesignHeight="900"
+        x:Class="RUSTool.UI.Views.MainWindow"
+        x:DataType="vm:MainViewModel"
+        Title="RUSTool"
+        Width="1600" Height="900"
+        MinWidth="1280" MinHeight="720">
+
+    <!--
+    ════════════════════════════════════════════════════════════════════════════
+      主窗口
+    ════════════════════════════════════════════════════════════════════════════
+
+      窗口自身【不设】Background / FontFamily：这两件事由主题的 Controls/Base.axaml
+      统一负责（SurfacePageBrush + FontUi）。一旦在这里写死底色，
+      切深色主题时窗口底色就不会跟着变 —— 这是"主题没全覆盖"的典型症状。
+
+      工具栏高度取令牌 ToolbarHeight(48)：48 高装 32 高的按钮，上下各留 8px 余量；
+      40 高只剩 4px，视觉上"顶天立地"。
+    -->
+
+    <Grid RowDefinitions="Auto,*">
+
+        <!-- ═══ 共享工具栏 ═══ -->
+        <Border Classes="toolbar">
+            <Grid ColumnDefinitions="Auto,*,Auto" Margin="16,0">
+
+                <!-- 左：标题 + 当前模式标签 -->
+                <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                    <TextBlock Classes="pageTitle" Text="RUSTool" VerticalAlignment="Center" />
+                    <Border Classes="tag">
+                        <TextBlock Text="{Binding ModeName}" />
+                    </Border>
+                </StackPanel>
+
+                <!-- 中：标准菜单栏。每个顶级项都起了名字，供 preview.sh 的 open 参数展开后截图 -->
+                <Menu Grid.Column="1" VerticalAlignment="Center" Margin="24,0,0,0">
+                    <MenuItem x:Name="MenuFile" Header="文件">
+                        <MenuItem Header="新建场景" />
+                        <MenuItem Header="打开场景…" />
+                        <Separator />
+                        <MenuItem Header="退出" />
+                    </MenuItem>
+                    <MenuItem x:Name="MenuConnect" Header="连接">
+                        <MenuItem Header="连接" Command="{Binding Session.ConnectCommand}" />
+                        <MenuItem Header="断开连接" Command="{Binding Session.DisconnectCommand}" />
+                        <MenuItem Header="关闭设备" Command="{Binding Session.DisableRobotCommand}" />
+                    </MenuItem>
+                    <MenuItem x:Name="MenuView" Header="视图">
+                        <MenuItem Header="工程师模式" Command="{Binding SwitchToDebugCommand}" />
+                        <MenuItem Header="临床模式" Command="{Binding SwitchToClinicalCommand}" />
+                        <Separator />
+                        <MenuItem Header="重置视角" />
+                    </MenuItem>
+                    <MenuItem x:Name="MenuHelp" Header="帮助">
+                        <MenuItem Header="关于" />
+                    </MenuItem>
+                </Menu>
+
+                <!-- 右：常驻状态 + 驱动切换 + 安全操作 -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="16"
+                            VerticalAlignment="Center">
+
+                    <!-- 连接状态灯：颜色的选择交给主题的语义类，ViewModel 只报"通/断" -->
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Ellipse Classes="dot"
+                                 Classes.success="{Binding Session.IsConnected}"
+                                 Classes.idle="{Binding Session.IsIdle}" />
+                        <TextBlock Classes="secondary" Text="{Binding Session.ConnectText}" />
+                    </StackPanel>
+
+                    <!-- 运动状态灯：空闲 / 手动 / 扫查中 / 已暂停，四态互斥 -->
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Ellipse Classes="dot"
+                                 Classes.idle="{Binding Session.IsIdle}"
+                                 Classes.info="{Binding Session.IsManual}"
+                                 Classes.warning="{Binding Session.IsScanning}"
+                                 Classes.danger="{Binding Session.IsHalted}" />
+                        <TextBlock Classes="secondary" Text="{Binding Session.ModeText}" />
+                    </StackPanel>
+
+                    <Rectangle Classes="dividerVertical" Height="20" />
+
+                    <!-- 驱动切换（真实 / 仿真）：分段按钮组 -->
+                    <StackPanel Orientation="Horizontal">
+                        <Button Classes="segLeft" Content="真实"
+                                Classes.segOn="{Binding Session.IsRealDriver}"
+                                Command="{Binding Session.SwitchDriverCommand}"
+                                CommandParameter="0" />
+                        <Button Classes="segRight" Content="仿真"
+                                Classes.segOn="{Binding Session.UseSimulator}"
+                                Command="{Binding Session.SwitchDriverCommand}"
+                                CommandParameter="1" />
+                    </StackPanel>
+
+                    <Rectangle Classes="dividerVertical" Height="20" />
+
+                    <!-- 急停 / 恢复：都用 lg 尺寸，两个按钮高度必然一致 ——
+                         两个按钮都用 lg 尺寸，高度必然一致。 -->
+                    <Button x:Name="EstopButton" Classes="danger lg" Content="急停"
+                            FontWeight="{DynamicResource FontWeightBold}"
+                            Command="{Binding Session.EmergencyStopCommand}" />
+                    <Button Classes="success lg" Content="急停恢复"
+                            FontWeight="{DynamicResource FontWeightBold}"
+                            Command="{Binding Session.ResetEmergencyCommand}" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ═══ 内容区（按模式切换） ═══ -->
+        <Grid Grid.Row="1">
+            <debug:DebugWorkspace IsVisible="{Binding IsDebugMode}" />
+            <clinical:ClinicalWorkspace IsVisible="{Binding IsClinicalMode}" />
+        </Grid>
+
+    </Grid>
+</Window>

@@ -1,0 +1,132 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+    ════════════════════════════════════════════════════════════════════════════
+      应用级布局类 AppLayout —— 本展示程序自己的约定，不属于设计系统
+    ════════════════════════════════════════════════════════════════════════════
+
+      为什么单独一个文件、而不是塞进 Theme/？
+        Theme/ 只回答"控件长什么样"（按钮、输入框、菜单、浮层…）；
+        而"卡片怎么摆、面板头多高、分隔怎么画"是【应用】层面的布局决策 ——
+        换配色不该动布局，改布局也不该动设计系统。
+
+      这里所有颜色 / 圆角 / 阴影都引用主题令牌，一个 hex 都没有：
+
+        卡片   = SurfaceBase(白/墨850) + 1px BorderSubtle + RadiusLg
+        下沉区 = SurfaceSunken（如流程步骤行的底）
+        阴影   = ShadowSm
+
+      ⚠ 深色主题下卡片【不靠阴影】区分层次 —— 深色底上看不见阴影，堆阴影只会发脏。
+        层次改由「表面明度差 + 1px 边框」表达，这也是 Win11 深色的做法。
+
+      卡片只需要一个类：
+        Classes="card"   ← 底色 + 阴影 + 圆角 + 边框，四个硬编码值收敛成一个语义类
+    -->
+
+    <!-- ── 卡片：内容分区的基本单位（工程师工作区用 6 个：上排 3 + 下排 3）── -->
+    <Style Selector="Border.card">
+        <Setter Property="Background" Value="{DynamicResource SurfaceBaseBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusLg}" />
+        <Setter Property="BoxShadow" Value="{DynamicResource ShadowSm}" />
+        <!-- 内容圆角裁切：否则面板内的深色影像区会溢出卡片圆角 -->
+        <Setter Property="ClipToBounds" Value="True" />
+    </Style>
+
+    <!-- ── 卡片标题栏：高度与 Metrics 的 CardHeaderHeight(40) 对齐 ──
+         旧代码每个面板都手写 RowDefinitions="40,*" 且内边距 16 与 10 混用，
+         并排看就"没对齐"。这里统一成 40 + 左右 16(=SpaceLg)。 -->
+    <Style Selector="Border.cardHeader">
+        <Setter Property="Height" Value="{DynamicResource CardHeaderHeight}" />
+        <Setter Property="Padding" Value="16,0" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}" />
+        <Setter Property="BorderThickness" Value="0,0,0,1" />
+    </Style>
+
+    <!-- 卡片标题文字：16 号页面标题偏大，卡片内用 14/SemiBold 最合适 -->
+    <Style Selector="TextBlock.panelTitle">
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeSubtitle}" />
+        <Setter Property="FontWeight" Value="{DynamicResource FontWeightSemiBold}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!-- ── 下沉区：需要"凹进去"的小块（流程步骤行、影片区、时间轴槽）──
+         旧写法 Background="#FAFAFA" / "#F0F0F0" 各有 5 处，
+         两种几乎一样的灰并排出现就是"糊"的来源，这里统一成一个。 -->
+    <Style Selector="Border.sunken">
+        <Setter Property="Background" Value="{DynamicResource SurfaceSunkenBrush}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusMd}" />
+    </Style>
+
+    <!-- 影像 / 渲染画布：内容区自己带内衬，圆角只保留底部（贴合卡片头） -->
+    <Style Selector="Border.canvas">
+        <Setter Property="CornerRadius" Value="0,0,9,9" />
+        <Setter Property="ClipToBounds" Value="True" />
+    </Style>
+
+    <!-- ── 工具栏：顶部那条（底色 + 1px 底边线，都取自主题令牌）── -->
+    <Style Selector="Border.toolbar">
+        <Setter Property="Background" Value="{DynamicResource SurfaceBaseBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}" />
+        <Setter Property="BorderThickness" Value="0,0,0,1" />
+        <Setter Property="Height" Value="{DynamicResource ToolbarHeight}" />
+    </Style>
+
+    <!-- ── 无边框列表（日志、下拉内容）── -->
+    <Style Selector="ListBox.flush">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="0" />
+    </Style>
+
+    <!-- ── 分段按钮组：两个按钮拼成一组（真实 / 仿真 切换）──
+         两个按钮各自圆角取令牌（只圆外角），再用 -1px 负边距压掉重合的那条边框。 -->
+    <Style Selector="Button.segLeft">
+        <Setter Property="CornerRadius" Value="6,0,0,6" />
+        <Setter Property="Padding" Value="12,0" />
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeBody}" />
+    </Style>
+    <Style Selector="Button.segRight">
+        <Setter Property="CornerRadius" Value="0,6,6,0" />
+        <Setter Property="Padding" Value="12,0" />
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeBody}" />
+        <Setter Property="Margin" Value="-1,0,0,0" />
+    </Style>
+    <!-- 分段组里"当前生效"的那个：主色底 -->
+    <Style Selector="Button.segOn">
+        <Setter Property="Background" Value="{DynamicResource AccentSubtleBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextAccentBrush}" />
+    </Style>
+
+    <!-- ── 网格分隔条：透明热区，避免"一条灰杠"把界面切碎 ── -->
+    <Style Selector="GridSplitter">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Width" Value="6" />
+    </Style>
+
+    <!-- ── 小标签（Tag / Pill）：模式名、单位、计数等 ──
+         一个类搞定，底色 / 文字色都跟着主题走，不必逐处写死字号与前景色。 -->
+    <Style Selector="Border.tag">
+        <Setter Property="Background" Value="{DynamicResource AccentSubtleBrush}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusPill}" />
+        <Setter Property="Padding" Value="8,2" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.tag > TextBlock">
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeCaption}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextAccentBrush}" />
+    </Style>
+
+    <!-- 中性标签（不带主色，用于"计数 / 单位"这类纯说明） -->
+    <Style Selector="Border.tag.neutral">
+        <Setter Property="Background" Value="{DynamicResource SurfaceSunkenBrush}" />
+    </Style>
+    <Style Selector="Border.tag.neutral > TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+    </Style>
+
+</Styles>

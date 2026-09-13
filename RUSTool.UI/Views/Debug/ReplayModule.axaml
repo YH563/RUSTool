@@ -1,0 +1,66 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:RUSTool.UI.ViewModels"
+             mc:Ignorable="d" d:DesignWidth="680" d:DesignHeight="200"
+             x:Class="RUSTool.UI.Views.Debug.ReplayModule"
+             x:DataType="vm:ReplayViewModel">
+
+    <!--
+      记录 / 回放：时间轴是真正的 Slider（顺便让主题里的滑轨 / 滑块配色有地方验证），
+      播放 / 步进 / 跳到 A-B 点都接上命令，速度下拉绑 SpeedIndex ——
+      选了倍率，播放进度就按倍率推进。
+    -->
+
+    <Grid RowDefinitions="Auto,Auto,Auto" Margin="16,10">
+
+        <!-- ── 时间轴 ── -->
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+            <Slider Minimum="0" Maximum="{Binding TotalSeconds}" Value="{Binding Position}"
+                    VerticalAlignment="Center" />
+            <TextBlock Grid.Column="1" Classes="mono" Text="{Binding TimeText}"
+                       Foreground="{DynamicResource TextSecondaryBrush}"
+                       VerticalAlignment="Center" />
+        </Grid>
+
+        <!-- ── 播放控制 ── -->
+        <WrapPanel Grid.Row="1" Orientation="Horizontal"
+                   HorizontalAlignment="Center" ItemSpacing="6" Margin="0,10">
+            <Button Classes="sm" Content="⏮" Command="{Binding JumpStartCommand}" />
+            <Button Classes="sm" Content="◀◀" Command="{Binding StepBackCommand}" />
+            <!-- 播放键是这一组的主操作：用 accent 变体，不再手写 #D0E8F8/#5B9BD5 -->
+            <Button Classes="accent" Content="▶" Width="52"
+                    Command="{Binding TogglePlayCommand}" />
+            <Button Classes="sm" Content="▶▶" Command="{Binding StepForwardCommand}" />
+            <Button Classes="sm" Content="⏭" Command="{Binding JumpEndCommand}" />
+
+            <Rectangle Classes="dividerVertical" Height="20" Margin="4,0" />
+
+            <TextBlock Classes="caption" Text="速度" VerticalAlignment="Center" />
+            <ComboBox Width="76" SelectedIndex="{Binding SpeedIndex}">
+                <ComboBoxItem>0.5x</ComboBoxItem>
+                <ComboBoxItem>1.0x</ComboBoxItem>
+                <ComboBoxItem>1.5x</ComboBoxItem>
+                <ComboBoxItem>2.0x</ComboBoxItem>
+            </ComboBox>
+
+            <Button Classes="sm" Content="A" Width="32" Command="{Binding SetMarkACommand}" />
+            <Button Classes="sm" Content="B" Width="32" Command="{Binding SetMarkBCommand}" />
+            <CheckBox Content="循环" IsChecked="{Binding Loop}" VerticalAlignment="Center" />
+            <Button Classes="sm" Content="导出" Command="{Binding ExportCommand}" />
+        </WrapPanel>
+
+        <!-- ── 数据选择 ── -->
+        <Grid Grid.Row="2" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+            <TextBlock Classes="caption" Text="回放数据" VerticalAlignment="Center" />
+            <ComboBox Grid.Column="1" HorizontalAlignment="Left" MinWidth="180"
+                      SelectedIndex="{Binding SourceIndex}">
+                <ComboBoxItem>最近一次扫查</ComboBoxItem>
+                <ComboBoxItem>已保存记录 01</ComboBoxItem>
+                <ComboBoxItem>已保存记录 02</ComboBoxItem>
+            </ComboBox>
+            <Button Grid.Column="2" Classes="sm" Content="浏览…" Command="{Binding BrowseCommand}" />
+        </Grid>
+    </Grid>
+</UserControl>

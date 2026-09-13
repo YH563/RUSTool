@@ -1,0 +1,112 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+    ════════════════════════════════════════════════════════════════════════════
+      原始色板 Palette —— 全项目【唯一】允许出现 "#RRGGBB" 的地方
+    ════════════════════════════════════════════════════════════════════════════
+
+      分层规则（记住这一条，界面就不会花）：
+
+        ① Palette.axaml  ← 原始色阶。只讲"这是哪种蓝"，不讲用途。   【本文件】
+        ② Semantic.axaml ← 语义色。"这个蓝用于强调/危险/成功"。
+        ③ Controls/*.axaml ← 控件样式。只引用 ②，禁止引用 ①、禁止写 hex。
+
+      好处：将来换配色，只改 ① 和 ②；控件样式一行都不用动。
+
+      为什么之前的界面显得脏？
+        旧代码里有 58 个不同的 hex，其中灰色就占 22 种
+        （#E5E5E5 / #E8E8E8 / #EBEBEB / #F0F0F0 / #F2F2F2 / #F5F5F5 / #FAFAFA …），
+        相邻两级肉眼几乎一样，并排出现时就会"糊"在一起。
+        本文件把灰色压缩成一条有节奏的阶梯，每一级都有明确分工。
+    -->
+
+    <!-- ────────────────────────────────────────────────────────────────────
+         中性色（冷灰 Slate）
+         界面 90% 的面积由它构成 —— 它决定了"干不干净"，比主色重要得多。
+         冷灰（微微偏蓝）比纯灰更显精密，符合仪器/医疗设备观感。
+         ──────────────────────────────────────────────────────────────────── -->
+    <Color x:Key="PaletteNeutral0">#FFFFFF</Color>   <!-- 卡片、浮层表面 -->
+    <Color x:Key="PaletteNeutral25">#FCFDFE</Color>  <!-- 极浅底（表头等） -->
+    <Color x:Key="PaletteNeutral50">#F8FAFC</Color>  <!-- 页面背景 -->
+    <Color x:Key="PaletteNeutral100">#F1F5F9</Color> <!-- 次级背景、分组区 -->
+    <Color x:Key="PaletteNeutral150">#E9EEF4</Color> <!-- 悬停底色 -->
+    <Color x:Key="PaletteNeutral200">#E2E8F0</Color> <!-- 标准边框 -->
+    <Color x:Key="PaletteNeutral300">#CBD5E1</Color> <!-- 强边框、分隔线 -->
+    <Color x:Key="PaletteNeutral400">#94A3B8</Color> <!-- 禁用文字、占位符 -->
+    <Color x:Key="PaletteNeutral500">#64748B</Color> <!-- 三级文字 -->
+    <Color x:Key="PaletteNeutral600">#475569</Color> <!-- 二级文字 -->
+    <Color x:Key="PaletteNeutral700">#334155</Color> <!-- 一级正文 -->
+    <Color x:Key="PaletteNeutral800">#1E293B</Color> <!-- 标题 -->
+    <Color x:Key="PaletteNeutral900">#0F172A</Color> <!-- 最高对比、阴影基色 -->
+
+    <!-- ────────────────────────────────────────────────────────────────────
+         主色（青蓝 Cyan-Blue）
+         这是"仪器感"的来源：比 Google 蓝更偏青，接近超声机的高亮色。
+         一个色相、十级明度，保证深浅色放在一起也协调。
+         ──────────────────────────────────────────────────────────────────── -->
+    <Color x:Key="PalettePrimary50">#F0F9FC</Color>  <!-- 选中项底色 -->
+    <Color x:Key="PalettePrimary100">#DCF0F7</Color> <!-- 信息条底色 -->
+    <Color x:Key="PalettePrimary200">#B8E1EF</Color>
+    <Color x:Key="PalettePrimary300">#86CBE0</Color> <!-- 深色主题下的高亮 -->
+    <Color x:Key="PalettePrimary400">#4AACCB</Color>
+    <Color x:Key="PalettePrimary500">#1F8CAF</Color> <!-- 浅色主题悬停 -->
+    <Color x:Key="PalettePrimary600">#0B6E99</Color> <!-- 主色本体 -->
+    <Color x:Key="PalettePrimary700">#0A5A7D</Color> <!-- 按下 -->
+    <Color x:Key="PalettePrimary800">#0C4A66</Color>
+    <Color x:Key="PalettePrimary900">#0E3D54</Color> <!-- 深色主题主色 -->
+
+    <!-- ────────────────────────────────────────────────────────────────────
+         语义色：成功 / 警告 / 危险 / 信息
+         每类只用 4 级 —— 文字(fg) / 底色(bg) / 边框(border) / 高亮(solid)。
+         旧代码里"危险"有三个红（#DC3545、#E5484D、#FF4444），
+         "成功"有两个绿（#4CAF50、#43A047），这是界面显得不统一的元凶。
+         ──────────────────────────────────────────────────────────────────── -->
+
+    <!-- 成功 -->
+    <Color x:Key="PaletteSuccess50">#ECFDF3</Color>
+    <Color x:Key="PaletteSuccess100">#D1FADF</Color>
+    <Color x:Key="PaletteSuccess200">#A6F4C5</Color>
+    <Color x:Key="PaletteSuccess500">#12B76A</Color>
+    <Color x:Key="PaletteSuccess600">#039855</Color>
+    <Color x:Key="PaletteSuccess700">#027A48</Color>
+    <Color x:Key="PaletteSuccess800">#05603A</Color>
+
+    <!-- 警告 -->
+    <Color x:Key="PaletteWarning50">#FFFAEB</Color>
+    <Color x:Key="PaletteWarning100">#FEF0C7</Color>
+    <Color x:Key="PaletteWarning200">#FEDF89</Color>
+    <Color x:Key="PaletteWarning500">#F79009</Color>
+    <Color x:Key="PaletteWarning600">#DC6803</Color>
+    <Color x:Key="PaletteWarning700">#B54708</Color>
+
+    <!-- 危险 -->
+    <Color x:Key="PaletteDanger50">#FEF3F2</Color>
+    <Color x:Key="PaletteDanger100">#FEE4E2</Color>
+    <Color x:Key="PaletteDanger200">#FECDCA</Color>
+    <Color x:Key="PaletteDanger500">#F04438</Color>
+    <Color x:Key="PaletteDanger600">#D92D20</Color>
+    <Color x:Key="PaletteDanger700">#B42318</Color>
+    <Color x:Key="PaletteDanger800">#912018</Color>
+
+    <!-- ────────────────────────────────────────────────────────────────────
+         墨色 Ink —— 深色主题专用的"表面阶梯"
+         深色界面不能把浅色界面简单反相：纯黑背景上的纯白卡片会刺眼。
+         正确做法是用一串"带蓝的深灰"，层级靠明度差拉开，而不是靠阴影。
+         ──────────────────────────────────────────────────────────────────── -->
+    <Color x:Key="PaletteInk950">#0A111F</Color>  <!-- 最深：深色主题的页面底 -->
+    <Color x:Key="PaletteInk900">#0F172A</Color>  <!-- 下沉区 -->
+    <Color x:Key="PaletteInk850">#141E33</Color>  <!-- 卡片表面 -->
+    <Color x:Key="PaletteInk800">#1B2537</Color>  <!-- 浮层、弹窗 -->
+    <Color x:Key="PaletteInk700">#243044</Color>  <!-- 悬停 -->
+    <Color x:Key="PaletteInk600">#2E3A50</Color>  <!-- 标准边框 -->
+    <Color x:Key="PaletteInk500">#3B4861</Color>  <!-- 强边框、按下 -->
+
+    <!-- ────────────────────────────────────────────────────────────────────
+         特殊色：遮罩 / 焦点环 / 半透明阴影基色
+         ──────────────────────────────────────────────────────────────────── -->
+    <Color x:Key="PaletteScrim">#0F172A73</Color>       <!-- 弹窗遮罩（45%） -->
+    <Color x:Key="PaletteFocusRing">#0B6E9955</Color>   <!-- 键盘焦点环（33%） -->
+    <Color x:Key="PaletteShadowTint">#0F172A</Color>    <!-- 阴影统一用这个色相，比纯黑自然 -->
+
+</ResourceDictionary>
