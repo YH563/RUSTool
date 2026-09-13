@@ -36,6 +36,11 @@
           它只含 XAML 资源、不产出任何 C# 类型，单独成工程反而多一层引用。
         -->
         <ProjectReference Include="..\RUSTool.Core\RUSTool.Core.csproj" />
+        <!--
+          3D 图形栈的隔离容器。界面只认识 RobotViewport 这一个类型（数据入口是纯 float 列表），
+          Silk.NET / OpenGL / RobotSimulation 全部关在那个工程里，不进入本项目。
+        -->
+        <ProjectReference Include="..\RUSTool.Visualization\RUSTool.Visualization.csproj" />
     </ItemGroup>
 
     <ItemGroup>

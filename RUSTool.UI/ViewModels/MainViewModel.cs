@@ -2,6 +2,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using RUSTool.Services.Logging;
 using RUSTool.Services.Robot;
+using System;
 
 namespace RUSTool.UI.ViewModels;
 
@@ -78,4 +79,14 @@ public sealed partial class MainViewModel : ViewModelBase
 
     [RelayCommand]
     private void SwitchToClinical() => IsDebugMode = false;
+
+    /// <summary>
+    /// 「重置视角」请求。3D 视口的相机是图形栈内部的显示状态（属于视图层），
+    /// VM 既不认识也不该碰它 —— 这里只发信号，由 3D 视图自己复位相机。
+    /// 于是菜单项可以用普通 Command 绑定，无需把控件类型泄漏进 VM。
+    /// </summary>
+    public event Action? ViewResetRequested;
+
+    [RelayCommand]
+    private void ResetView() => ViewResetRequested?.Invoke();
 }

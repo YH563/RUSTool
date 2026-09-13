@@ -56,7 +56,7 @@
                         <MenuItem Header="工程师模式" Command="{Binding SwitchToDebugCommand}" />
                         <MenuItem Header="临床模式" Command="{Binding SwitchToClinicalCommand}" />
                         <Separator />
-                        <MenuItem Header="重置视角" />
+                        <MenuItem Header="重置视角" Command="{Binding ResetViewCommand}" />
                     </MenuItem>
                     <MenuItem x:Name="MenuHelp" Header="帮助">
                         <MenuItem Header="关于" />

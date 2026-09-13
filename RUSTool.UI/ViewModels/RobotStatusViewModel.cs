@@ -51,6 +51,20 @@ public sealed partial class RobotStatusViewModel : ViewModelBase
     /// <summary>状态流帧率（Hz），用于判断链路是否健康。</summary>
     [ObservableProperty] private double _frameRate;
 
+    /// <summary>
+    /// 关节角（弧度），直接喂给 3D 视口。
+    ///
+    /// <para>
+    /// 与上面 6 个「显示用」度数是同一份数据的两种投影：3D 图形库内部单位就是弧度 / 米，
+    /// 再换算一次只会引入无谓误差，所以这里原样透传（换算只发生在需要给人看的那一侧）。
+    /// </para>
+    /// <para>
+    /// 每帧换一个新数组：Avalonia 按【引用变化】触发绑定更新，原地改内容不会通知。
+    /// 6 个 float 的分配量可以忽略。
+    /// </para>
+    /// </summary>
+    [ObservableProperty] private float[] _jointsRadians = new float[6];
+
     /// <summary>是否已连上控制通道（未连接时 HUD 各读数保持为 0）。</summary>
     [ObservableProperty] private bool _isConnected;
 
@@ -72,6 +86,9 @@ public sealed partial class RobotStatusViewModel : ViewModelBase
             Joint4 = Deg(state.JointPos, 3);
             Joint5 = Deg(state.JointPos, 4);
             Joint6 = Deg(state.JointPos, 5);
+
+            // 3D 视口的同一份关节角（弧度，不换算）—— 姿态与上面几行来自同一帧，不会各说各话。
+            JointsRadians = ToFloats(state.JointPos, 6);
 
             // 法兰位姿：位置本身就是米，姿态是弧度 → 度。
             FlangeX = At(state.FlangePos, 0);
@@ -103,6 +120,18 @@ public sealed partial class RobotStatusViewModel : ViewModelBase
     /// <summary>取数组第 i 个元素，越界返回 0（状态帧初期字段可能不全）。</summary>
     private static double At(double[] values, int index)
         => index < values.Length ? values[index] : 0;
+
+    /// <summary>
+    /// 前 count 个元素转成 float 数组（图形库用 float）。
+    /// 字段不全时补 0：宁可让机械臂停在零位，也不要因为少了两个关节就整帧不动。
+    /// </summary>
+    private static float[] ToFloats(double[] values, int count)
+    {
+        var result = new float[count];
+        for (var i = 0; i < count && i < values.Length; i++)
+            result[i] = (float)values[i];
+        return result;
+    }
 
     /// <summary>弧度 → 度。</summary>
     private static double Deg(double[] values, int index) => At(values, index) * 180 / Math.PI;

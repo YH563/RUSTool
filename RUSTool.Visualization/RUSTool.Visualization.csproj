@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <LangVersion>latest</LangVersion>
+        <!-- Silk.NET 的 GL 绑定签名里有裸指针（如 BufferData 的 void*），没有它编译不过。 -->
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <!-- 库工程，但只服务于本解决方案，不作为 NuGet 包发布。 -->
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <!--
+          3D 内核：RobotSimulation（见 README.md）。
+            · Core   —— 场景图 / 几何 / 点云 / 渲染抽象（纯 CPU，零 GL）
+            · Robot  —— URDF 解析 + 正运动学（纯 CPU）
+            · OpenGL —— Silk.NET 后端（公开面不暴露任何 GL 类型）
+          三者都不依赖 Avalonia，所以「把 GL 画进 Avalonia」这件事只发生在本项目里。
+
+          版本 0.1.0 同时存在于 nuget.org 与本机离线源 /home/hp/nuget-local-feed，
+          离线时把该目录加进 NuGet 源即可（见 README.md「离线安装」）。
+        -->
+        <PackageReference Include="RobotSimulation.Core" Version="0.1.0" />
+        <PackageReference Include="RobotSimulation.Robot" Version="0.1.0" />
+        <PackageReference Include="RobotSimulation.OpenGL" Version="0.1.0" />
+
+        <!--
+          本项目唯一允许出现的界面依赖：Avalonia 提供 OpenGlControlBase（它会给我们一个
+          GL 上下文和一个 framebuffer），Silk.NET.OpenGL 把 Avalonia 的过程地址包成 GL 门面。
+          这两样【只在本工程内可见】，RUSTool.UI 引用本项目时不会传递出去
+          （PackageReference 默认 PrivateAssets=compile 的传递行为：UI 仍能编译，但不该用、也没用）。
+        -->
+        <PackageReference Include="Avalonia" Version="12.1.0" />
+        <PackageReference Include="Silk.NET.OpenGL" Version="2.23.0" />
+    </ItemGroup>
+
+    <!--
+      测试/演示模型（URDF + mesh）随编译复制到输出目录，并被引用本项目的主程序一并带上，
+      因此加载路径可以固定写 `AppContext.BaseDirectory/Assets/...`，
+      与「从哪个工作目录启动程序」无关。见 Assets/Models/README.md。
+    -->
+    <ItemGroup>
+        <None Remove="Assets\**\*" />
+        <Content Include="Assets\**\*" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+
+</Project>

@@ -42,6 +42,14 @@ RUSTool.sln
 │   ├── app.manifest          ← 应用程序清单
 │   └── preview.sh            ← 一条命令跑界面 / 拍截图
 │
+├── RUSTool.Visualization/    ← 类库 · 图形栈的隔离容器（Silk.NET / OpenGL 只在这里出现）
+│   ├── Controls/
+│   │   └── RobotViewport.cs  — 内嵌 3D 视口（OpenGlControlBase）：GL 生命周期 + 每帧 + 相机 / 拾取
+│   ├── Scene/
+│   │   └── RobotScene.cs     — 场景装配（默认场景 + URDF 模型 + 关节驱动）：纯 CPU，可脱离 GL 检查
+│   ├── Assets/Models/        — URDF + mesh（随编译复制到输出目录；见该目录 README）
+│   └── README.md             — 图形栈的边界与数据契约（界面层只需要看这一页）
+│
 └── tests/RUSTool.Core.Tests/ ← 单元测试（xUnit · 不依赖网络 / 界面 / 图形栈）
     └── ScanStateMachineTests.cs
 ```
@@ -55,6 +63,8 @@ RUSTool.sln
 | **接口在 Core，实现在界面层** | 范例：`ILogService` 在 Core，`LogService` 在界面层（需 `Dispatcher.UIThread`） |
 | **命名空间不随项目名变** | `RUSTool.Core` 内的类型命名空间仍是 `RUSTool.Communication.*` / `RUSTool.Services.*`，与拆分前完全一致，故调用方 `using` 无需改动 |
 | **设计系统不单独成工程** | 令牌与控件样式放在 `RUSTool.UI/Theme/`，只含 XAML 资源；不产出 C# 类型，也不依赖任何业务代码 |
+| **图形栈只在一个工程里** | `Silk.NET` / `OpenGL` / `RobotSimulation` 只出现在 `RUSTool.Visualization`；`RUSTool.UI` 与 `RUSTool.Core` 都不得引用它们 |
+| **界面只认识一个图形类型** | `RUSTool.UI` 唯一允许使用的 3D 类型是 `RobotViewport`，数据入口是纯 `float` 列表 —— 图形栈换实现（或再换一个引擎）界面代码不用改 |
 
 ## 分层调用关系
 
@@ -90,9 +100,37 @@ View  ← 绑定 →  ViewModel                    ┐
 | **Views** | `RUSTool.UI` | 界面呈现（配色走主题语义类，无值转换器） | AXAML 文件 |
 | **Styles** | `RUSTool.UI` | 应用级布局类 | `AppLayout.axaml` |
 | **Composition Root** | `RUSTool.UI` | 依赖图组装：全项目唯一 new 具体实现的地方 | `App.CreateMainViewModel` |
-| **Visualization** | ⬜ 待拆为独立项目 | 3D 场景、数据图表 | 机器人仿真场景、实时曲线 |
+| **Visualization** | `RUSTool.Visualization` | 3D 场景与渲染：把图形栈（Silk.NET / OpenGL / RobotSimulation）关在一个工程里，对界面只暴露一个控件 | `RobotViewport`（GL 生命周期 + 每帧 + 相机 / 拾取）、`RobotScene`（URDF 模型 + 关节驱动） |
 | **Data** | ⬜ 待拆为独立项目 | 数据库/持久化 | SQLite、PostgreSQL 仓储实现 |
 | **Infrastructure** | ⬜ 待拆为独立项目 | 跨切面基础设施 | 配置、IoC 容器、异常处理 |
+
+## 3D 内嵌是怎么接的
+
+一条原则：**GL 的获取与 framebuffer 的绑定留在控件里，数据以普通值传进来。**
+
+```
+/state（后端）→ RobotStatusViewModel.JointsRadians（弧度；界面层只做转发，不换算）
+                        │ XAML 绑定 —— 编译期检查，路径写错编译不过
+                        ▼
+                  RobotViewport.JointValues（在 RUSTool.Visualization 里）
+                        │ 邮箱：UI 线程写、渲染线程取走（取走即置空，同一帧不会重复应用）
+                        ▼
+                  RobotScene.ApplyJointValues → URDF 关节的 Transform
+                        │ 渲染线程：update → clear → render → 请求下一帧
+                        ▼
+                  控件自己的 framebuffer（Avalonia 交给我们的那一个）
+```
+
+三条约定：
+
+1. **场景图归渲染线程独占。** 界面线程只往邮箱里放一个 `float` 快照，绝不跨线程碰场景对象。
+2. **失败一律降级，绝不白屏。** 缺模型 → 场景只剩网格与坐标轴；拿不到桌面 GL
+   （无显卡 / 平台选了 ANGLE-ES / headless 截图）→ 控件不绘制，界面隐藏它，底层的主题化占位自然露出；
+   原因经 `Failed` 事件同时写到界面文字与 stderr。
+3. **两端各自换算。** 3D 只吃弧度（图形库内部单位），HUD 显示度数（给人看）——
+   同一份 `/state` 数据的两种投影，互不牵就。
+
+于是 `Scene3DView.axaml` 就是三层叠放：底层占位（无 GL 时的空状态）、中层 `RobotViewport`、顶层角标（GPU / FPS / 拾取结果）。
 
 ## 流程编排与状态机
 
@@ -142,8 +180,9 @@ Idle ──► PreScanning ──► Posing ──► Planning ──► Ready �
   · 新增界面 / VM / 样式   → RUSTool.UI/ 对应目录；配色一律走 Theme/ 的语义类，不要写值转换器
   · 调整配色 / 控件样式   → RUSTool.UI/Theme/（改 Tokens/Semantic.axaml 即可换肤，控件样式不用动）
   · 新增数据库（SQLite）  → 另开 RUSTool.Data 项目（Core 依赖它、界面再依赖 Core）
-  · 新增 3D 仿真窗        → 另开 RUSTool.Visualization 项目后由 RUSTool.UI 引用
-                            （Silk.NET / OpenGL 依赖不得泄漏进界面层与逻辑层）
+  · 新增 3D 仿真窗        → 界面加一个 View，渲染侧改 RUSTool.Visualization
+                            （Silk.NET / OpenGL 依赖不得泄漏进界面层与逻辑层；
+                              数据契约见 RUSTool.Visualization/README.md —— 界面只认识 RobotViewport）
 ```
 
 ## 拆分进度
@@ -153,13 +192,18 @@ Idle ──► PreScanning ──► Posing ──► Planning ──► Ready �
 | `RUSTool.Core` | ✅ 已拆出 | Communication + Services.Robot + ILogService 契约 |
 | `RUSTool.UI/Theme` | ✅ 已并入 UI | 设计系统：令牌 + 控件样式，只含 XAML 资源，不产出 C# 类型；原独立 `RUSTool.Theme` 工程已删除 |
 | `RUSTool.UI` | ✅ 已是唯一应用 | 完整应用：界面 + 设计系统（`Theme/`）+ 业务接线（引用 Core）；原 `RUSTool/` 项目已删除 |
-| `RUSTool.Visualization` | ⬜ 待拆 | 嵌入 RobotSimulation 3D 渲染时拆出（图形栈的隔离容器） |
+| `RUSTool.Visualization` | ✅ 已拆出 | 图形栈隔离容器：`RobotViewport`（`OpenGlControlBase` 宿主：GL 生命周期 / 每帧 / 相机拾取）+ `RobotScene`（URDF 模型 + 关节驱动）+ 随编译复制到输出目录的模型资产 |
 | `tests/RUSTool.Core.Tests` | ✅ 已建 | 扫查状态机 54 个用例；无需网络 / GL，`dotnet test` 即可跑 |
 
 > 原 `RUSTool/` 项目已删除。它的界面能力（语义类配色、主题化）由 `RUSTool.UI` 取代；
 > 业务能力（composition root、连接 / 使能 / 驱动切换、`LogService`、点动「按住走松手停」、
 > 日志自动滚动）已全部迁入 `RUSTool.UI`，协议文档与 `app.manifest` / 图标也一并迁移。
 > `RUSTool.Core` 与测试从未引用该项目，因此删除对它们是零影响（编译器可证）。
+
+> `RUSTool.Visualization` 是**新增**工程（不是迁移）：把 3D 内核 `RobotSimulation`
+> （`Core` / `Robot` / `OpenGL`，0.1.0，nuget.org 与本机离线源都有）接进 Avalonia。
+> `RUSTool.UI` 只引用它、不引用 Silk.NET；无 GL 时（离屏截图、无显卡机器）它自动降级为设计好的空状态，
+> 因此 `preview.sh` 的产出与以前一样可用。
 
 > 原 `RUSTool.Theme` 独立工程与 `tools/`（`RUSTool.Theme.Gallery` 主题画廊、
 > `RUSTool.UI.Showcase` 演示副本）也已删除：设计系统整体并入 `RUSTool.UI/Theme/`，

@@ -2,18 +2,28 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:RUSTool.UI.ViewModels"
+             xmlns:viz="using:RUSTool.Visualization.Controls"
              mc:Ignorable="d" d:DesignWidth="600" d:DesignHeight="500"
-             x:Class="RUSTool.UI.Views.Debug.Scene3DView">
+             x:Class="RUSTool.UI.Views.Debug.Scene3DView"
+             x:DataType="vm:MainViewModel">
 
     <!--
-      3D 场景占位。底色 / 文字色都走令牌，并补了一个 XYZ 坐标轴示意 ——
-      "什么都没有"的占位区最容易让人误以为程序挂了。
-      接入 RUSTool.Visualization 后替换这一块。
+      3D 场景由三层叠放组成，每层只管一件事：
+
+        ① 底层 —— 主题化占位（底色 + 文字 + XYZ 坐标轴示意）。
+           它同时是【无 GL 时的降级界面】：显卡 / 驱动 / 桌面 GL 不可用时 GL 控件什么都不画，
+           这一层就露出来，用户看到的是"设计好的空状态"，而不是一块黑屏。
+        ② 中层 —— 真实的 3D 视口（RUSTool.Visualization 的 RobotViewport）。
+           JointValues 直接绑 /state 的关节角（弧度），机械臂姿态与右上角 HUD 的读数来自同一帧。
+        ③ 顶层 —— 角标：GPU / 模型加载报告 / FPS / 拾取结果。
+           IsHitTestVisible=False：它不能挡住 3D 视口的相机操作（左键转 / 中键平移 / 右键缩放）。
     -->
     <Border Classes="canvas" Background="{DynamicResource SurfaceSunkenBrush}">
         <Grid>
-            <!-- 占位文字靠左：右上角常驻 HUD（宽 300），居中文字会被它切掉一半 -->
-            <TextBlock Text="3D 场景渲染区域"
+            <!-- ① 占位 / 降级层：占位文字靠左，右上角常驻 HUD（宽 300），居中文字会被它切掉一半 -->
+            <TextBlock x:Name="FallbackText"
+                       Text="3D 场景渲染区域"
                        HorizontalAlignment="Left" VerticalAlignment="Center"
                        Margin="24,0,0,0"
                        Foreground="{DynamicResource TextTertiaryBrush}" />
@@ -37,6 +47,19 @@
                            FontSize="{DynamicResource FontSizeCaption}"
                            Foreground="{DynamicResource TextTertiaryBrush}" />
             </Canvas>
+
+            <!-- ② 3D 视口：关节角来自状态帧（弧度）；初始化失败时它自己隐藏，不去打扰上面那层 -->
+            <viz:RobotViewport x:Name="Viewport"
+                               JointValues="{Binding Status.JointsRadians}" />
+
+            <!-- ③ 角标：GPU / 模型 / FPS / 拾取。左对齐 + 省略号，窄面板里也不会撑破卡片 -->
+            <TextBlock x:Name="ViewportStatus"
+                       Classes="caption"
+                       HorizontalAlignment="Left" VerticalAlignment="Bottom"
+                       Margin="12,0,0,10"
+                       TextTrimming="CharacterEllipsis"
+                       IsHitTestVisible="False"
+                       Foreground="{DynamicResource TextTertiaryBrush}" />
         </Grid>
     </Border>
 </UserControl>
