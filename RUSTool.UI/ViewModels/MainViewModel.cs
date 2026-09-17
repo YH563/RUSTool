@@ -22,6 +22,7 @@ public sealed partial class MainViewModel : ViewModelBase
     public MainViewModel(IRobotService robot, RobotSession session, ILogService log)
     {
         _robot = robot;
+        LogService = log;
 
         // 构造顺序：日志最先，其余 VM 都要往里写。
         Log = new LogViewModel(log);
@@ -31,6 +32,13 @@ public sealed partial class MainViewModel : ViewModelBase
         Scan = new ScanWorkflowViewModel(robot, log);
         Replay = new ReplayViewModel(log);
     }
+
+    /// <summary>
+    /// 日志服务本体（<see cref="Log"/> 面板展示的就是它的集合）。
+    /// 供视图层写诊断用 —— 3D 视口的就绪 / 初始化失败原因要进同一个面板与同一份落盘文件；
+    /// 这是 Core 的接口（不是控件类型），所以把它暴露给视图不违反「VM 不认识图形栈」。
+    /// </summary>
+    public ILogService LogService { get; }
 
     // ── 子 ViewModel（界面按这些名字绑定）──
 

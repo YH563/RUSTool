@@ -2,7 +2,8 @@
 
     <PropertyGroup>
         <OutputType>WinExe</OutputType>
-        <TargetFramework>net10.0</TargetFramework>
+        <!-- 目标框架与 RUSTool.Core / RUSTool.Visualization（以及它们引用的仿真包）保持一致：net8.0。 -->
+        <TargetFramework>net8.0</TargetFramework>
         <Nullable>enable</Nullable>
         <LangVersion>latest</LangVersion>
 
@@ -37,7 +38,8 @@
         -->
         <ProjectReference Include="..\RUSTool.Core\RUSTool.Core.csproj" />
         <!--
-          3D 图形栈的隔离容器。界面只认识 RobotViewport 这一个类型（数据入口是纯 float 列表），
+          3D 图形栈的隔离容器。界面只认识它两个契约：RobotViewport（控件，数据入口是纯 float 列表）
+          与 ISimulationLogSink / SimulationLogBridge（日志出口，只有 1 个方法 + 4 档枚举）。
           Silk.NET / OpenGL / RobotSimulation 全部关在那个工程里，不进入本项目。
         -->
         <ProjectReference Include="..\RUSTool.Visualization\RUSTool.Visualization.csproj" />

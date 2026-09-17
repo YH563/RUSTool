@@ -29,9 +29,21 @@
                         </Grid>
                     </Border>
                     <Grid Grid.Row="1">
-                        <debug:Scene3DView />
-                        <!-- 状态 HUD：悬浮右上角，IsHitTestVisible=False（在视图内部设置） -->
-                        <debug:RobotStatusOverlay DataContext="{Binding Status}" />
+                        <!--
+                          GizmoTopInset：把右上角 HUD 的实测高度（含它自己的外边距）告诉 3D 视口，
+                          让右下角的朝向 gizmo 收在这块 HUD 下面 —— 库把 gizmo 钉在右下角、位置不可调，
+                          唯一的避让方式就是缩小，算法在 RobotViewport.ApplyGizmoLayout。
+                        -->
+                        <debug:Scene3DView GizmoTopInset="{Binding #StatusOverlay.Bounds.Height}" />
+
+                        <!--
+                          状态 HUD：悬浮右上角，IsHitTestVisible=False（在视图内部设置）。
+                          这里要自己收成内容大小（UserControl 默认会被 Grid 撑满整格），
+                          否则上面那个绑定量到的是整格高度，而不是 HUD 自己有多高。
+                        -->
+                        <debug:RobotStatusOverlay x:Name="StatusOverlay"
+                                                  DataContext="{Binding Status}"
+                                                  HorizontalAlignment="Right" VerticalAlignment="Top" />
                     </Grid>
                 </Grid>
             </Border>

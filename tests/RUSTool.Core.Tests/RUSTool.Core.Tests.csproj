@@ -1,7 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFramework>net10.0</TargetFramework>
+        <!-- 与被测工程 RUSTool.Core 同一个目标框架（整体回退到 .NET 8）。 -->
+        <TargetFramework>net8.0</TargetFramework>
         <Nullable>enable</Nullable>
         <IsPackable>false</IsPackable>
         <RootNamespace>RUSTool.Core.Tests</RootNamespace>

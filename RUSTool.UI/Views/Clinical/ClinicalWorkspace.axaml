@@ -52,10 +52,14 @@
                 </Border>
 
                 <Grid Grid.Row="1">
-                    <debug:Scene3DView />
+                    <!-- 右下角朝向 gizmo 要避开下面这块 HUD：把它的实测高度递给视口（同调试工作区） -->
+                    <debug:Scene3DView GizmoTopInset="{Binding #ContactForceOverlay.Bounds.Height}" />
 
-                    <!-- 临床 HUD 只留一项：末端接触力（用 metric 大读数） -->
-                    <Border Background="{DynamicResource SurfaceRaisedBrush}"
+                    <!-- 临床 HUD 只留一项：末端接触力（用 metric 大读数）。
+                         x:Name 只给上面那条绑定用：它得量到卡片自己的高度（Border 收成内容大小，
+                         实测高度 = 卡片 + 它 12 的外边距），而不是整格。 -->
+                    <Border x:Name="ContactForceOverlay"
+                            Background="{DynamicResource SurfaceRaisedBrush}"
                             BorderBrush="{DynamicResource BorderDefaultBrush}"
                             BorderThickness="1"
                             CornerRadius="{DynamicResource RadiusMd}"

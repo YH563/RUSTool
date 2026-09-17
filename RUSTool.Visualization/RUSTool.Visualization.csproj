@@ -1,7 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFramework>net10.0</TargetFramework>
+        <!--
+          目标框架跟仿真包对齐：RobotSimulation 0.2.0 的 lib 目录是 net8.0
+          （库自己在提交 376a90f 把 net10.0 回退成了 net8.0），本解决方案随之整体回到 net8.0。
+        -->
+        <TargetFramework>net8.0</TargetFramework>
         <Nullable>enable</Nullable>
         <LangVersion>latest</LangVersion>
         <!-- Silk.NET 的 GL 绑定签名里有裸指针（如 BufferData 的 void*），没有它编译不过。 -->
@@ -18,12 +22,22 @@
             · OpenGL —— Silk.NET 后端（公开面不暴露任何 GL 类型）
           三者都不依赖 Avalonia，所以「把 GL 画进 Avalonia」这件事只发生在本项目里。
 
-          版本 0.1.0 同时存在于 nuget.org 与本机离线源 /home/hp/nuget-local-feed，
+          版本 0.2.0 同时存在于 nuget.org 与本机离线源 /home/hp/nuget-local-feed，
           离线时把该目录加进 NuGet 源即可（见 README.md「离线安装」）。
+          0.2.0 相对 0.1.0 新增：屏幕空间朝向 gizmo（SceneGraph.ShowOrientationGizmo，库默认开启）、
+          选中对象显示自身坐标系、点云增量更新。
         -->
-        <PackageReference Include="RobotSimulation.Core" Version="0.1.0" />
-        <PackageReference Include="RobotSimulation.Robot" Version="0.1.0" />
-        <PackageReference Include="RobotSimulation.OpenGL" Version="0.1.0" />
+        <PackageReference Include="RobotSimulation.Core" Version="0.2.0" />
+        <PackageReference Include="RobotSimulation.Robot" Version="0.2.0" />
+        <PackageReference Include="RobotSimulation.OpenGL" Version="0.2.0" />
+
+        <!--
+          Logging/SimulationLogBridge.cs 直接把库的日志门面接到宿主日志出口上，
+          用到 ILoggerProvider / ILogger（这两个类型也是库自身的日志抽象）。
+          显式声明而不用「从 RobotSimulation.Core 传递过来」的隐式依赖：本项目确实在源码里用了它，
+          版本与库引用的一致（10.0.11，有 net8.0 资产）。
+        -->
+        <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.11" />
 
         <!--
           本项目唯一允许出现的界面依赖：Avalonia 提供 OpenGlControlBase（它会给我们一个

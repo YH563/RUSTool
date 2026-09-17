@@ -11,11 +11,14 @@
     <!--
       3D 场景由三层叠放组成，每层只管一件事：
 
-        ① 底层 —— 主题化占位（底色 + 文字 + XYZ 坐标轴示意）。
+        ① 底层 —— 主题化占位（底色 + 占位文字）。
            它同时是【无 GL 时的降级界面】：显卡 / 驱动 / 桌面 GL 不可用时 GL 控件什么都不画，
            这一层就露出来，用户看到的是"设计好的空状态"，而不是一块黑屏。
+           右下角的朝向 gizmo 由仿真包的渲染器绘制（库默认开启），界面不再自绘坐标轴。
         ② 中层 —— 真实的 3D 视口（RUSTool.Visualization 的 RobotViewport）。
            JointValues 直接绑 /state 的关节角（弧度），机械臂姿态与右上角 HUD 的读数来自同一帧。
+           GizmoTopInset 由工作区绑右上角 HUD 的实测高度：库把朝向 gizmo 钉在右下角、位置不可调，
+           视口按这个占位把它缩到 HUD 下面（界面上没有第二个地方需要知道这件事）。
         ③ 顶层 —— 角标：GPU / 模型加载报告 / FPS / 拾取结果。
            IsHitTestVisible=False：它不能挡住 3D 视口的相机操作（左键转 / 中键平移 / 右键缩放）。
     -->
@@ -28,25 +31,12 @@
                        Margin="24,0,0,0"
                        Foreground="{DynamicResource TextTertiaryBrush}" />
 
-            <!-- 右下角坐标轴：X 蓝 / Y 绿 / Z 红（等宽字体下术语默认约定） -->
-            <Canvas Width="70" Height="70" HorizontalAlignment="Right"
-                    VerticalAlignment="Bottom" Margin="12">
-                <Line StartPoint="35,58" EndPoint="35,12"
-                      Stroke="{DynamicResource StatusDangerBrush}" StrokeThickness="2" />
-                <Line StartPoint="35,58" EndPoint="64,68"
-                      Stroke="{DynamicResource StatusSuccessBrush}" StrokeThickness="2" />
-                <Line StartPoint="35,58" EndPoint="6,68"
-                      Stroke="{DynamicResource StatusInfoBrush}" StrokeThickness="2" />
-                <TextBlock Canvas.Left="30" Canvas.Top="-2" Text="Z"
-                           FontSize="{DynamicResource FontSizeCaption}"
-                           Foreground="{DynamicResource TextTertiaryBrush}" />
-                <TextBlock Canvas.Left="62" Canvas.Top="58" Text="Y"
-                           FontSize="{DynamicResource FontSizeCaption}"
-                           Foreground="{DynamicResource TextTertiaryBrush}" />
-                <TextBlock Canvas.Left="2" Canvas.Top="58" Text="X"
-                           FontSize="{DynamicResource FontSizeCaption}"
-                           Foreground="{DynamicResource TextTertiaryBrush}" />
-            </Canvas>
+            <!--
+              右下角的朝向 gizmo 不再由界面绘制：仿真包 0.2.0 的默认环境自带
+              （SceneGraph.ShowOrientationGizmo 默认为 true），由库的渲染器画进视口自己的右下角小视口 ——
+              跟随相机、恒定像素尺寸、不会被模型遮挡、也不参与拾取（尺寸/边距见库的
+              OrientationGizmoSize / OrientationGizmoMargin）。界面这边再画一份静态坐标轴只会和它叠在一起。
+            -->
 
             <!-- ② 3D 视口：关节角来自状态帧（弧度）；初始化失败时它自己隐藏，不去打扰上面那层 -->
             <viz:RobotViewport x:Name="Viewport"

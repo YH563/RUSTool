@@ -7,6 +7,7 @@ using RUSTool.Services.Robot;
 using RUSTool.UI.Services.Logging;
 using RUSTool.UI.ViewModels;
 using RUSTool.UI.Views;
+using RUSTool.Visualization.Logging;
 using System;
 using System.Linq;
 
@@ -53,6 +54,12 @@ public partial class App : Application
         // 所有后端指令的发送与结果都写进全局日志（同时落盘，便于事后追溯）。
         bridge.Logger = (message, isError) =>
             log.Log(message, isError ? LogLevel.Error : LogLevel.Info, "bridge");
+
+        // 图形栈的日志也接到同一个日志器：库内部的 ILogger 门面默认没有任何 provider，
+        // 不接这一步，URDF 资产解析 / 网格导入 / 加载失败就只存在于库内部（面板与落盘文件里一条都看不到）。
+        // 必须在这里做 —— 库的 Logger.Initialize 只生效一次，晚于第一条库日志就接不上了。
+        SimulationLogBridge.Attach(new SimulationLogSink(log));
+        log.Log("3D 图形栈日志已接入（来源 sim，最低等级 Debug）", LogLevel.Debug, "sim");
 
         IRobotService robot = new RobotService(bridge);
         var session = new RobotSession();

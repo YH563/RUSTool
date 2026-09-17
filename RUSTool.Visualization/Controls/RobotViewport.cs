@@ -38,6 +38,11 @@ namespace RUSTool.Visualization.Controls;
 /// 因此 RUSTool.UI 可以在不引用图形栈的前提下绑定它，也仍然能被离屏截图模式渲染。
 /// </para>
 /// <para>
+/// 数据之外还有一格布局入口 <see cref="GizmoTopInset"/>：界面右上角常常压着一块状态 HUD，而库把朝向
+/// gizmo 钉在**右下角**、位置不可调 —— 界面把 HUD 的实测高度递进来，视口自己把 gizmo 缩到它下面，
+/// 于是"覆盖层压住罗盘"这件事不需要界面去猜 gizmo 的算法。
+/// </para>
+/// <para>
 /// 初始化失败（无显卡、无桌面 GL、驱动不认）时本控件**不抛异常、不白屏**：
 /// 记下原因、把 <see cref="Failed"/> 交给界面、此后不再绘制 —— 叠在它下面的占位内容自然露出。
 /// </para>
@@ -56,12 +61,31 @@ public sealed class RobotViewport : OpenGlControlBase
     /// <summary>性能行的间隔（秒）。</summary>
     private const double StatsIntervalSeconds = 1.0;
 
+    // ── 朝向 gizmo 的布局（见 ApplyGizmoLayout）──
+    /// <summary>库的默认边长（逻辑像素）—— 上方没有覆盖层时的上限。</summary>
+    private const double GizmoMaxSize = 160;
+
+    /// <summary>再挤也不小于这个边长（逻辑像素），否则方向读不出来。</summary>
+    private const double GizmoMinSize = 56;
+
+    /// <summary>
+    /// 与视口右下边缘的间隙（逻辑像素）。库的默认是 16，这里取 12 —— 和卡片里其他角标（左下角
+    /// 那行状态文字的左右内衬）对齐，同一块画布里不留两种边距。
+    /// </summary>
+    private const double GizmoEdgeMargin = 12;
+
+    /// <summary>与顶部覆盖层之间的间隙（逻辑像素）：贴着画会被它的阴影压住。</summary>
+    private const double GizmoTopGap = 8;
+
     // ── 渲染状态：只在 GL 回调里存在，随上下文一起生灭 ──
     private GL? _gl;
     private IRenderContext? _graphics;
     private IRenderer? _renderer;
     private RobotScene? _robotScene;
     private GameObject? _selected;
+
+    /// <summary>上一次算 gizmo 尺寸用到的输入（视口高 / 缩放 / 覆盖层占位）：输入没变就不重算。</summary>
+    private (int PixelHeight, double Scaling, double TopInset) _gizmoLayout = (-1, -1, -1);
 
     // ── 关节帧邮箱：UI 线程只写这一格，渲染线程取走即置空（同一帧不会被重复应用）──
     private readonly object _jointsLock = new();
@@ -90,6 +114,25 @@ public sealed class RobotViewport : OpenGlControlBase
     {
         get => GetValue(JointValuesProperty);
         set => SetValue(JointValuesProperty, value);
+    }
+
+    /// <summary>
+    /// 视口顶部被界面覆盖层占掉的高度（逻辑像素）—— 例如 3D 卡片右上角那块「机械臂状态」HUD。
+    ///
+    /// <para>
+    /// 库把朝向 gizmo 钉在视口右下角、位置不可调，而覆盖层是从上往下压的：两者抢同一块地方时，
+    /// 能让路的只有 gizmo 的尺寸。填上覆盖层的实测高度即可（绑它的 <c>Bounds.Height</c>），
+    /// gizmo 会自动收在这条线下面；<c>0</c>（默认）＝ 上方没有覆盖层，用库的默认尺寸。
+    /// </para>
+    /// </summary>
+    public static readonly StyledProperty<double> GizmoTopInsetProperty =
+        AvaloniaProperty.Register<RobotViewport, double>(nameof(GizmoTopInset));
+
+    /// <inheritdoc cref="GizmoTopInsetProperty"/>
+    public double GizmoTopInset
+    {
+        get => GetValue(GizmoTopInsetProperty);
+        set => SetValue(GizmoTopInsetProperty, value);
     }
 
     /// <summary>GL 初始化完成（UI 线程）：携带 GPU / 版本 / 模型装配报告，供界面显示或记日志。</summary>
@@ -192,6 +235,9 @@ public sealed class RobotViewport : OpenGlControlBase
         _graphics.Resize(pixelWidth, pixelHeight);
 
         SceneGraph scene = _robotScene.Graph;
+
+        // 覆盖层（右上角 HUD）占掉的高度由界面递进来 —— 借这一步把 gizmo 收在它下面。
+        ApplyGizmoLayout(pixelHeight, scaling, scene);
         scene.Camera.AspectRatio = pixelWidth / (float)pixelHeight;
 
         // 取走本帧的关节值（取走即置空）。场景图归渲染线程独占，UI 线程只通过邮箱递数据。
@@ -231,6 +277,44 @@ public sealed class RobotViewport : OpenGlControlBase
                           $"平均 {stats.AverageFrameMilliseconds:F2} ms · 累计 {stats.FrameCount} 帧";
             Dispatcher.UIThread.Post(() => Stats?.Invoke(line));
         }
+    }
+
+    /// <summary>
+    /// 给朝向 gizmo 定尺寸：让它整块待在「顶部覆盖层下沿」以下。
+    ///
+    /// <para>
+    /// 算的是覆盖层下面还剩多大的正方形 —— <c>视口高 − 覆盖层占位 − 间隙 − 下边距</c>，
+    /// 再夹在 [<see cref="GizmoMinSize"/>, <see cref="GizmoMaxSize"/>] 之间。取值保守到把 gizmo 的
+    /// 整个正方形框进去（库的正交视野是箭头的 2.2 倍，罗盘只占正方形的 0.95，剩下的余量留给箭头端点），
+    /// 所以宁可小一点也不要贴上去。
+    /// </para>
+    /// <para>
+    /// 单位：库按【物理像素】量 gizmo（它与渲染面同一把尺），界面按【逻辑像素】量覆盖层，
+    /// 因此这里把逻辑量乘上 <c>RenderScaling</c> —— 于是 HiDPI 屏上 gizmo 的逻辑尺寸既不缩水，
+    /// 也不会因为覆盖层换算后看着更小就反过来放大到撞上 HUD。缩放为 1 时两把尺一样长，
+    /// 交给库的就是上面这些逻辑值本身（只有边距按本控件的 12，而不是库的 16）。
+    /// </para>
+    /// </summary>
+    private void ApplyGizmoLayout(int pixelHeight, double scaling, SceneGraph scene)
+    {
+        double inset = Math.Max(0d, GizmoTopInset);
+
+        // 输入没变（绝大多数帧都走这条）→ 不碰场景图。
+        if (_gizmoLayout == (pixelHeight, scaling, inset))
+            return;
+
+        _gizmoLayout = (pixelHeight, scaling, inset);
+
+        float margin = (float)Math.Round(GizmoEdgeMargin * scaling);
+        float cap = (float)(GizmoMaxSize * scaling);
+        float floor = (float)(GizmoMinSize * scaling);
+
+        // 从上往下逐段扣：覆盖层 → 间隙 → 下边距；剩下的高度就是正方形边长。
+        var available = (float)(pixelHeight - (inset + GizmoTopGap) * scaling - margin);
+        float size = Math.Clamp(available, floor, cap);
+
+        scene.OrientationGizmoMargin = margin;
+        scene.OrientationGizmoSize = size;
     }
 
     protected override void OnOpenGlDeinit(GlInterface gl)

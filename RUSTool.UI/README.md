@@ -19,7 +19,8 @@ RUSTool 的**唯一应用**：Avalonia + MVVM，界面皮肤全部来自项目�
 | MVVM | ✅ ViewModel 只暴露状态与命令、**没有一个值转换器**（配色走主题语义类） |
 | 业务 | ✅ 已接入 `RUSTool.Core`：`IRobotService` / `RobotSession` / `ILogService` |
 | 通信 | ✅ 经 `BridgeClient` 连后端 bridge（WebSocket：`/control` `/state` `/sensor`） |
-| 3D / 影像 / 曲线 | ⬜ 占位：静态图形与装饰性曲线，等 `RUSTool.Visualization` 拆出后替换 |
+| 3D | ✅ 已接 `RUSTool.Visualization`：真实 GL 视口 + 图形库自带的朝向 gizmo；拿不到桌面 GL 时降级为主题化空状态 |
+| 影像 / 曲线 | ⬜ 占位：静态图形与装饰性曲线，等真实数据源接入后替换 |
 
 **界面上的读数、日志、状态全部来自真实后端。** 连上 bridge 才有数据；
 没连上时工具栏显示「未连接 / 空闲」、HUD 读数为 0、日志为空 —— 这是正确行为，不是坏了。
@@ -46,6 +47,11 @@ cd RUSTool.UI
 截图落在 `RUSTool.UI/preview/`（已在 `.gitignore` 里忽略）。
 脚本会自己设好 `DOTNET_ROOT` / `PATH`（本机 dotnet 装在 `~/.dotnet`，没进 PATH）。
 
+**目标框架 ≠ 构建 SDK。** 四个工程都是 `net8.0`（跟随 `RobotSimulation` 库），但构建要用
+**.NET SDK 10**（本机 `~/.dotnet`）。用 SDK 8 跑 `dotnet build` 会失败：Avalonia 12 的源生成器
+要求 Roslyn 4.14+，加载不上就没人生成 `InitializeComponent`，整片报 `CS0103`。所以本仓库**不放**
+`global.json` 去钉 SDK 版本（钉了就编译不过）。
+
 本项目已在 `RUSTool.sln` 里，也可以整解决方案一起构建：
 
 ```bash
@@ -58,7 +64,7 @@ dotnet build RUSTool.sln
 
 ```
 RUSTool.UI/
-├── RUSTool.UI.csproj           WinExe · net10.0 · 引用 RUSTool.Core；内含设计系统 Theme/
+├── RUSTool.UI.csproj           WinExe · net8.0 · 引用 RUSTool.Core；内含设计系统 Theme/
 ├── Program.cs                  进程入口：正常启动 / --shot 离屏截图（复用同一份组装）
 ├── App.axaml(.cs)              应用入口 + 依赖图组装（composition root）
 ├── app.manifest                应用程序清单
@@ -66,7 +72,8 @@ RUSTool.UI/
 ├── README.md                   本文件
 │
 ├── Services/Logging/
-│   └── LogService.cs           ILogService 的 Avalonia 实现（Dispatcher marshal + 落盘）
+│   ├── LogService.cs           ILogService 的 Avalonia 实现（Dispatcher marshal + 落盘）
+│   └── SimulationLogSink.cs    3D 图形栈的日志出口实现（ISimulationLogSink → ILogService，来源 sim）
 │
 ├── Theme/                      【设计系统】原独立工程 RUSTool.Theme 已并入
 │   ├── Theme.axaml             唯一入口：汇总令牌 + 控件样式（App.axaml 只引用它）
@@ -96,7 +103,7 @@ RUSTool.UI/
     ├── MainWindow.axaml(.cs)   ← 与 ViewModels/MainViewModel 对应
     ├── Debug/                  工程师工作区
     │   ├── DebugWorkspace.axaml        上排 3D/影像/曲线 + 下排 指令/回放/日志
-    │   ├── Scene3DView.axaml           3D 场景占位
+    │   ├── Scene3DView.axaml           3D 场景：占位层 / RobotViewport / 角标 三层叠放
     │   ├── RobotStatusOverlay.axaml    3D 右上角 HUD
     │   ├── UltrasoundView.axaml        超声影像区
     │   ├── ChartPanel.axaml            数据曲线 + 图例联动
@@ -150,6 +157,7 @@ RUSTool.UI/
 var bridge = new BridgeClient();
 ILogService log = new LogService();                        // 契约在 Core，实现在界面层
 bridge.Logger = (m, e) => log.Log(m, e ? LogLevel.Error : LogLevel.Info, "bridge");
+SimulationLogBridge.Attach(new SimulationLogSink(log));     // 3D 图形栈的日志 → 同一份日志（来源 sim）
 IRobotService robot = new RobotService(bridge);
 var session = new RobotSession();                          // 全局共享状态（单例注入）
 return new MainViewModel(robot, session, log);
@@ -175,6 +183,9 @@ return new MainViewModel(robot, session, log);
   看后端异步事件（`pre_scan_done` / `plan_done` / `motion_done`）—— 前端不靠计时去猜。
 - **日志只有一份**：`LogService` 维护 `ObservableCollection<LogEntry>`（限长 500 + 按天落盘），
   `LogViewModel` 对它做增量镜像并按级别过滤 —— "只看警告"因此是真的会过滤。
+  3D 图形栈（`RobotSimulation`）的日志也汇进这一份：composition root 先挂
+  `SimulationLogBridge.Attach(new SimulationLogSink(log))`，来源列显示 `sim`（`sim·AssetResolver` 之类
+  按库内模块细分）。挂载必须早于任何库日志 —— 库的日志门面只认第一次初始化。
 - **点动是「按住走、松手停」**：`ArmControlPanel` 的 code-behind 在指针按下/松开时分别下发
   `start_jog` / `stop_jog_decel`，并处理"指针被系统抢走"（`PointerCaptureLost`）以免机械臂一直走。
 - **截图与正式启动共用同一份组装**，所以 `preview/*.png` 画的就是运行时那个界面。
@@ -186,6 +197,7 @@ return new MainViewModel(robot, session, log);
 | 项目 | 关系 |
 |---|---|
 | `RUSTool.Core` | 唯一业务依赖：通信协议 / 传输 + 机器人服务 + 服务契约。不得引用 Avalonia |
+| `RUSTool.Visualization` | 唯一允许出现 3D 图形栈（Silk.NET / OpenGL / `RobotSimulation`）的工程；本项目只引用它，且只认识两个契约：`RobotViewport`（数据）与 `ISimulationLogSink`（日志） |
 | `Theme/`（本项目内） | 设计系统：只含 XAML 资源（令牌 + 控件样式），不产出 C# 类型。原 `RUSTool.Theme` 工程已并入 |
 | `tests/RUSTool.Core.Tests` | 测 Core 的纯逻辑（扫查状态机）。不依赖网络 / 界面 / 图形栈 |
 
@@ -200,8 +212,9 @@ return new MainViewModel(robot, session, log);
 
 ## 七、已知边界
 
-- **3D / 影像 / 曲线是占位**：曲线是两条装饰性正弦（红 Fx、绿 Fy），不是真实力信号；
-  3D 场景是空区域。等 `RUSTool.Visualization` 拆出后替换。
+- **影像 / 曲线仍是占位**：曲线是两条装饰性正弦（红 Fx、绿 Fy），不是真实力信号。
+  3D 已接真实图形栈（`RUSTool.Visualization` → `RobotSimulation` 0.2.0）；拿不到桌面 GL 时
+  控件隐藏、露出主题化空状态，这不是故障。
 - **接触力是近似值**：状态帧里没有独立的接触力通道，HUD 的"末端接触力"用各关节力矩模和代替。
   后端一旦提供 `contact_force` 字段，只改 `RobotStatusViewModel.OnStateUpdated` 一行。
 - **深色弹层圆角为 0 是有意为之**：见 `Theme/README.md` ——
