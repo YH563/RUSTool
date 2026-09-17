@@ -1,8 +1,33 @@
-# RUSTool — 项目架构
+# RUSTool 架构设计（简体中文）
 
-## 解决方案结构
+> 状态：反映当前实现。配套文档：[`../README.md`](../README.md)（仓库入口）、[`../core/zh-CN.md`](../core/zh-CN.md)、[`../protocol/zh-CN.md`](../protocol/zh-CN.md)、[`../ui/zh-CN.md`](../ui/zh-CN.md)、[`../visualization/zh-CN.md`](../visualization/zh-CN.md)、[`../testing/zh-CN.md`](../testing/zh-CN.md)。
 
-依赖方向**单向**，由编译器强制：`RUSTool.UI`（界面）→ `RUSTool.Core`（逻辑）。
+本文按「谁该认识谁」的视角描述整体架构：工程边界、依赖方向、分层职责、关键设计决策（ADR）、扩展点与演进进度。
+
+---
+
+## 1. 目标与设计原则
+
+**目标**
+
+- 超声扫查机器人的**上位机**：真机 / 仿真两种驱动共用一套界面与业务逻辑（`switch_driver` 切换）。
+- 界面（Avalonia）不认识协议字符串；业务层（`RUSTool.Core`）不认识界面与图形栈。
+- 两套使用者（工程师 / 临床）共享同一份业务状态与同一个流程状态机，只是「投影」不同，业务逻辑不复制。
+- 同一份组装既可起真实窗口，也可离屏截图 —— 预览的界面就是运行时那个界面。
+
+**设计原则（按优先级）**
+
+1. **单一依赖方向**：`RUSTool.UI` → `RUSTool.Core` / `RUSTool.Visualization`，禁止反向引用（编译器强制）。
+2. **纯逻辑与框架分离**：`RUSTool.Core` 不得出现 Avalonia / XAML / Silk.NET / OpenGL —— 写了就编译不过。
+3. **接口在 Core，实现在界面层**：范例 `ILogService`（契约在 Core，`LogService` 在界面层，需要 `Dispatcher.UIThread`）。
+4. **图形栈只有一个出口**：Silk.NET / OpenGL / `RobotSimulation` 只出现在 `RUSTool.Visualization`。
+5. **状态变化只有一个入口**：流程走 `ScanStateMachine.TryFire()`，操作模式走 `RobotSession.TryEnter*` / `ExitToIdle`，连接类动作走 `SessionViewModel`。
+
+---
+
+## 2. 包含的工程与依赖方向
+
+依赖方向**单向**，由编译器强制：`RUSTool.UI`（界面）→ `RUSTool.Core`（逻辑）、`RUSTool.UI`（界面）→ `RUSTool.Visualization`（图形栈隔离容器）。
 
 ```
 RUSTool.sln
@@ -39,7 +64,7 @@ RUSTool.sln
 │   ├── Views/                ← MainWindow + Debug/（工程师）+ Clinical/（临床）
 │   ├── Styles/AppLayout.axaml ← 应用级布局类（card / cardHeader / tag …）
 │   ├── Assets/               ← 静态资源（应用图标）
-│   ├── Docs/                 ← 协议与设计文档（websocket_api / UI / avalonia_client_design）
+│   ├── README.md             ← 工程级说明（导航到 docs/ui/zh-CN.md）
 │   ├── app.manifest          ← 应用程序清单
 │   └── preview.sh            ← 一条命令跑界面 / 拍截图
 │
@@ -52,17 +77,20 @@ RUSTool.sln
 │   │   ├── ISimulationLogSink.cs  — 日志出口契约（一个方法 + 四档枚举）：界面层只需实现它
 │   │   └── SimulationLogBridge.cs — 库的 ILoggerProvider → ISimulationLogSink 的桥（等级映射 / 异常展开）
 │   ├── Assets/Models/        — URDF + mesh（随编译复制到输出目录；见该目录 README）
-│   └── README.md             — 图形栈的边界与数据契约（界面层只需要看这一页）
+│   └── README.md             — 工程级说明（导航到 docs/visualization/zh-CN.md、Assets/Models/README.md）
+│
+├── docs/                     ← 分模块文档（中文）：architecture / core / protocol / ui / visualization / testing
+│                               索引见 docs/README.md
 │
 └── tests/RUSTool.Core.Tests/ ← 单元测试（xUnit · 不依赖网络 / 界面 / 图形栈）
     └── ScanStateMachineTests.cs
 ```
 
-## 项目边界规则
+## 3. 项目边界规则
 
 | 规则 | 内容 |
 |---|---|
-| **依赖单向** | `RUSTool.UI` → `RUSTool.Core`；Core 不得反向引用界面层 |
+| **依赖单向** | `RUSTool.UI` → `RUSTool.Core`、`RUSTool.UI` → `RUSTool.Visualization`；两者都不得反向引用界面层 |
 | **Core 不认识 UI** | `RUSTool.Core` 内不得出现 `Avalonia.*`、XAML、窗口/控件类型；写了就编译不过 |
 | **接口在 Core，实现在界面层** | 范例：`ILogService` 在 Core，`LogService` 在界面层（需 `Dispatcher.UIThread`） |
 | **命名空间不随项目名变** | `RUSTool.Core` 内的类型命名空间仍是 `RUSTool.Communication.*` / `RUSTool.Services.*`，与拆分前完全一致，故调用方 `using` 无需改动 |
@@ -70,7 +98,7 @@ RUSTool.sln
 | **图形栈只在一个工程里** | `Silk.NET` / `OpenGL` / `RobotSimulation` 只出现在 `RUSTool.Visualization`；`RUSTool.UI` 与 `RUSTool.Core` 都不得引用它们 |
 | **界面只认识两个图形契约** | `RUSTool.UI` 允许出现的图形类型只有 `RobotViewport`（控件；数据入口是纯 `float` 列表）与 `ISimulationLogSink`（日志出口）—— 图形栈换实现（或再换一个引擎）界面代码不用改 |
 
-## 分层调用关系
+## 4. 分层调用关系
 
 ```
 View  ← 绑定 →  ViewModel                    ┐
@@ -91,7 +119,7 @@ View  ← 绑定 →  ViewModel                    ┐
         LogService（界面层实现：Dispatcher marshal）
 ```
 
-## 各层职责
+## 5. 各层职责
 
 | 层 | 所属项目 | 职责 | 示例 |
 |---|---|---|---|
@@ -108,7 +136,7 @@ View  ← 绑定 →  ViewModel                    ┐
 | **Data** | ⬜ 待拆为独立项目 | 数据库/持久化 | SQLite、PostgreSQL 仓储实现 |
 | **Infrastructure** | ⬜ 待拆为独立项目 | 跨切面基础设施 | 配置、IoC 容器、异常处理 |
 
-## 3D 内嵌是怎么接的
+## 6. 3D 内嵌是怎么接的
 
 一条原则：**GL 的获取与 framebuffer 的绑定留在控件里，数据以普通值传进来。**
 
@@ -141,7 +169,7 @@ View  ← 绑定 →  ViewModel                    ┐
 于是 `Scene3DView.axaml` 就是三层叠放：底层占位（无 GL 时的空状态）、中层 `RobotViewport`、顶层角标（GPU / FPS / 拾取结果）。
 右下角的朝向 gizmo 由图形库自己画（`RobotSimulation` 0.2.0 起默认开启），界面**不再自绘**坐标轴。
 
-## 流程编排与状态机
+## 7. 流程编排与状态机
 
 `IRobotService` 的每个方法都是**无状态**的：调一次，发一条指令。但界面上的「手动控制」「扫查流程」
 是**有顺序**的，不能用一堆散落的 bool 拼出来 —— 5 个 bool 有 32 种组合，其中 27 种是非法状态。
@@ -154,12 +182,18 @@ View  ← 绑定 →  ViewModel                    ┐
 三条使用规则：
 
 1. **所有状态变化都走 `TryFire()` 一个入口。** 非法转移返回 `false` 且状态不变，
-   调用方据此放弃发送命令。例：扫查执行中点手动控制会被拒绝，必须先点「停止」。
+   调用方据此放弃发送命令。例（接入后即生效）：扫查执行中点手动控制会被拒绝，必须先点「停止」。
 2. **`CanFire()` 与 `TryFire()` 用同一套判定** —— 界面按钮灰不灰，和点了能不能执行永远一致。
 3. **状态机不认识 `IRobotService`。** 发命令、订阅异步事件的活儿留给上层 Workflow
    （`ScanWorkflow` / `ManualWorkflow`，待接入）。
 
-### 扫查状态图
+> **接线现状（重要）**：`ScanStateMachine` 目前只有 **单测** 在用（54 个用例），
+> 界面侧的 `ScanWorkflowViewModel` 仍用自己的 `ScanStep` 列表做步骤门控，
+> `RobotSession.Mode` 也只在 `ExitToIdle()` 上被调用（`TryEnterManual` / `TryEnterScan` 暂无调用方）。
+> 也就是说：**状态机内核已就绪并被测试锁住，界面接线属于下一步** ——
+> 详见 [`../ui/zh-CN.md`](../ui/zh-CN.md) 的「已知边界」与本文第 9 节的扩展指南。
+
+### 7.1 扫查状态图
 
 ```
 Idle ──► PreScanning ──► Posing ──► Planning ──► Ready ──► Executing ──► Completed
@@ -174,7 +208,32 @@ Idle ──► PreScanning ──► Posing ──► Planning ──► Ready �
 - `Posing` 阶段必须**起点和终点都记录**才能开始规划（子条件门禁，转移表之外单独守一道）
 - 命令回执与异步事件**谁先到都算数**，迟到的那个是无害的自转移
 
-## 扩展指南
+## 8. 关键架构决策（ADR）
+
+| 编号 | 决策 | 说明 |
+|---|---|---|
+| ADR-001 | 依赖方向单向：`UI → Core`、`UI → Visualization` | 由编译器强制；`RUSTool.Core` 永不引用 Avalonia |
+| ADR-002 | 协议字符串只出现在 `RobotService` 一层 | 上层只依赖 `IRobotService`，换协议 / 换传输不动界面 |
+| ADR-003 | 命名空间不随工程名变（`RUSTool.Communication.*` / `RUSTool.Services.*`） | 拆分工程后调用方的 `using` 无需改动 |
+| ADR-004 | `ILogService` 契约在 Core，实现在界面层 | 实现需要 `Dispatcher.UIThread`，属框架能力 |
+| ADR-005 | 设计系统不单独成工程 | `Theme/` 只含 XAML 资源、不产出 C# 类型；原 `RUSTool.Theme` 工程已删除 |
+| ADR-006 | 图形栈只出现在一个工程里 | `RUSTool.UI` 只认识两个契约：`RobotViewport`（数据）与 `ISimulationLogSink`（日志） |
+| ADR-007 | 全项目唯一组合根 `App.CreateMainViewModel` | 换后端（真机 / 仿真 / 回放）只改这一处；截图与真实启动共用它 |
+| ADR-008 | 零值转换器：状态 → 颜色走主题语义类 | VM 只给互斥布尔量（`IsConnected` / `IsIdle` …），配色只改 `Theme/Tokens/Semantic.axaml` |
+| ADR-009 | 流程用显式状态机（8 阶段）而不是 N 个 bool | 5 个 bool 有 32 种组合、其中 27 种非法；阶段枚举让非法态在类型上不可表示 |
+| ADR-010 | 状态变化唯一入口 `TryFire()`，`CanFire()` 与它判定同源 | 「按钮灰不灰」与「点了能不能执行」永远一致 |
+| ADR-011 | 命令回执与异步事件**谁先到都算数** | reply 与 event 的先后顺序不确定，因此重复到达是一条无害的自转移 |
+| ADR-012 | 操作模式互斥由 `RobotSession.TryEnter*` 仲裁 | 手动与扫查都只能从 `Idle` 进入，回到 `Idle` 才能切换；状态不允许多处拷贝 |
+| ADR-013 | 单位与坐标：**弧度 / 米 / Z 轴向上** | 与 `RobotSimulation` 库一致；只有 HUD 显示度数（给人看的另一条投影） |
+| ADR-014 | 关节角以「邮箱」跨线程交给视口 | UI 线程写、渲染线程取走即置空；界面线程绝不跨线程碰场景对象 |
+| ADR-015 | 图形栈日志经 `SimulationLogBridge` 汇进同一份日志（来源列 `sim`） | 库的日志门面只认第一次初始化，必须在建视口**之前**挂 |
+| ADR-016 | 点动「按住走、松手停」，并处理 `PointerCaptureLost` | 指针被系统抢走时必须补发 `stop_jog_decel`，否则机械臂一直走 |
+| ADR-017 | 截图与正式启动共用组装（`--shot` 复用 `CreateMainViewModel`） | 预览的界面就是运行时那个界面，不会「预览一个不存在的界面」 |
+| ADR-018 | 不放 `global.json` 钉 SDK | 构建必须用 .NET SDK 10（Avalonia 12 源生成器需 Roslyn 4.14+），钉版本反而编译不过 |
+
+---
+
+## 9. 扩展指南
 
 ```
 新功能 → 先问一句「它认识界面吗？」，再决定放哪个项目：
@@ -191,11 +250,11 @@ Idle ──► PreScanning ──► Posing ──► Planning ──► Ready �
   · 新增数据库（SQLite）  → 另开 RUSTool.Data 项目（Core 依赖它、界面再依赖 Core）
   · 新增 3D 仿真窗        → 界面加一个 View，渲染侧改 RUSTool.Visualization
                             （Silk.NET / OpenGL 依赖不得泄漏进界面层与逻辑层；
-                              契约见 RUSTool.Visualization/README.md —— 界面只认识
+                              契约见 docs/visualization/zh-CN.md —— 界面只认识
                               RobotViewport（数据）与 ISimulationLogSink（日志））
 ```
 
-## 拆分进度
+## 10. 演进与拆分进度
 
 | 项目 | 状态 | 说明 |
 |---|---|---|

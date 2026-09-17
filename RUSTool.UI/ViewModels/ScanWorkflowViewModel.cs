@@ -77,7 +77,7 @@ public sealed partial class ScanStep : ObservableObject
 /// 扫查工作流：把任务级指令串成 4 步状态机（① 预扫查 → ② 位姿 → ③ 规划 → ④ 执行）。
 ///
 /// <para>
-/// 状态推进规则（与 <c>Docs/UI.md</c> 第四节一致）：
+/// 状态推进规则（与 <c>docs/ui/zh-CN.md</c> 第 5 节一致）：
 /// 上一步完成才允许点下一步；<c>stop</c> 任意阶段可达；<c>reset</c> 回到已使能态。
 /// 所有按钮都有门控，"执行"在规划完成前点不动 —— 这是真机上的安全底线。
 /// </para>

@@ -1,11 +1,22 @@
-# WebSocket 监控接口文档
+# RUSTool bridge 协议（WebSocket，简体中文）
 
-## 概述
+> 状态：反映当前实现。客户端侧的落地实现见 [`../core/zh-CN.md`](../core/zh-CN.md)；本文是**后端联调时的契约基准**。配套：[`../README.md`](../README.md)、[`../architecture/zh-CN.md`](../architecture/zh-CN.md)。
 
-DriverNode 启动时自动在 `ws://localhost:8765` 开启 WebSocket 服务器。
+后端（DriverNode）启动时自动在 `ws://localhost:8765` 开启 WebSocket 服务器；
+本仓库客户端 `BridgeClient` 的默认地址是 `ws://127.0.0.1:8765`（构造函数参数可改）。
 
-- **状态推送**：服务器 → 客户端（125Hz JSON）
-- **指令发送**：客户端 → 服务器（JSON 请求 → JSON 回复）
+---
+
+## 0. 三条通道
+
+| 通道 | 方向 | 格式 | 现状 |
+|---|---|---|---|
+| `/control` | 双向 | JSON（command / reply / event） | ✅ 已实现：必连，断线按 500ms → 10s 退避自动重连 |
+| `/state` | 服务器 → 客户端 | JSON，约 125Hz（8ms 一帧） | ✅ 已实现：按需开启，客户端只保留最新一帧 |
+| `/sensor` | 服务器 → 客户端 | 二进制帧（`uint32 LE 头长 + JSON 头 + payload`） | ⬜ 客户端已留位（`Channels.Sensor` / `SensorTypes`），**尚未解码** |
+
+> 常量对照：`RUSTool.Core/Communication/ProtocolConstants.cs` 的 `Channels` / `Commands` / `Events` / `SensorTypes`
+> 与本文第 3 节逐条对齐；**改协议先改那份常量**，客户端不允许出现裸字符串。
 
 ---
 
@@ -35,7 +46,7 @@ DriverNode 启动时自动在 `ws://localhost:8765` 开启 WebSocket 服务器�
 | `effort` | double[6] | 关节力矩，Nm |
 | `flange_pos` | double[6] | 法兰位姿 [x,y,z,rx,ry,rz]，m/rad |
 
-### C# 反序列化
+### 1.1 C# 反序列化
 
 ```csharp
 public record RobotState
@@ -54,7 +65,7 @@ public record RobotState
 
 ## 2. 指令发送 (Client → Server)
 
-### 请求格式
+### 2.1 请求格式
 
 ```json
 {
@@ -70,7 +81,7 @@ public record RobotState
 | `args` | double[] | 参数数组 |
 | `id` | int | 请求 ID，用于匹配响应（可选） |
 
-### 响应格式
+### 2.2 响应格式
 
 ```json
 {
@@ -173,7 +184,11 @@ public record RobotState
 
 ---
 
-## 4. C# 客户端实现示例
+## 4. C# 客户端实现示例（最小对照）
+
+> 本节的示例**只是协议的最小对照代码**（单连接、无重连策略）。仓库里真正在跑的实现是
+> `RUSTool.Core/Communication/` 下的三个类（`BridgeClient` / `ConnectionManager` / `BridgeProtocol`）——
+> 两者字段解析必须一致，行为以 [`../core/zh-CN.md`](../core/zh-CN.md) 为准。
 
 ### 4.1 WebSocket 连接
 
@@ -311,6 +326,9 @@ public partial class MainViewModel : ObservableObject
 ## 5. 注意事项
 
 1. **频率**：状态推送 125Hz（8ms 间隔），C# 端 UI 更新建议限制在 30~60fps
-2. **状态鉴别**：JSON 有 `joint_pos` 字段的是状态推送，有 `success` 字段的是指令响应
-3. **掉线处理**：建议客户端实现自动重连（见 4.2）
-4. **地址**：仿真默认 `localhost:8765`，真实机器人运行时需确认 IP
+   （本仓库客户端只保留最新一帧，VM 侧不再做二次限流）。
+2. **按通道分流**：状态帧走 `/state`、回执与事件走 `/control`，因此**不需要**靠字段猜消息类型。
+   第 4 节示例里的 `cmd` 字段判断，只是为了兼容「单连接服务器」的老写法。
+3. **掉线处理**：`/control` 由客户端自动重连（退避 500ms → 10s 封顶），
+   断线时所有未决请求被置为失败；`/state` 的重连由 `BridgeClient` 负责。
+4. **地址**：仿真默认 `localhost:8765`，真实机器人运行时需确认 IP。
