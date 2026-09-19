@@ -6,6 +6,7 @@ using Avalonia.Threading;
 using RUSTool.UI.ViewModels;
 using RUSTool.UI.Views;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 
 namespace RUSTool.UI;
@@ -32,7 +33,15 @@ internal static class Program
     public static AppBuilder BuildAvaloniaApp()
         => AppBuilder.Configure<App>()
             .UsePlatformDetect()
-            .WithInterFont()
+            .With(new Win32PlatformOptions
+            {
+                // 强制使用原生 Windows OpenGL (WGL)
+                RenderingMode = new List<Win32RenderingMode>
+                {
+                Win32RenderingMode.Wgl,
+                Win32RenderingMode.Software // 作为后备方案
+                }
+            })
             .LogToTrace();
 
     /// <summary>
