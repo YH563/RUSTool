@@ -22,14 +22,17 @@
             · OpenGL —— Silk.NET 后端（公开面不暴露任何 GL 类型）
           三者都不依赖 Avalonia，所以「把 GL 画进 Avalonia」这件事只发生在本项目里。
 
-          版本 0.2.0 同时存在于 nuget.org 与本机离线源 /home/hp/nuget-local-feed，
-          离线时把该目录加进 NuGet 源即可（见 README.md「离线安装」）。
+          版本 0.2.1 在本机离线源 /home/hp/nuget-local-feed（仓库根的 NuGet.config 已把它登记为源），
+          0.2.0 及更早版本同时在 nuget.org 上。
+          0.2.1 相对 0.2.0 只修一处：正运动学的乘法顺序 —— URDF 的 T_origin·R_axis(q) 必须写成
+          JointMotion * Origin（原来写反），凡原点带旋转的关节都会把整条子链摆偏，
+          实测整机偏差 0.88 m、姿态 90°。
           0.2.0 相对 0.1.0 新增：屏幕空间朝向 gizmo（SceneGraph.ShowOrientationGizmo，库默认开启）、
           选中对象显示自身坐标系、点云增量更新。
         -->
-        <PackageReference Include="RobotSimulation.Core" Version="0.2.0" />
-        <PackageReference Include="RobotSimulation.Robot" Version="0.2.0" />
-        <PackageReference Include="RobotSimulation.OpenGL" Version="0.2.0" />
+        <PackageReference Include="RobotSimulation.Core" Version="0.2.1" />
+        <PackageReference Include="RobotSimulation.Robot" Version="0.2.1" />
+        <PackageReference Include="RobotSimulation.OpenGL" Version="0.2.1" />
 
         <!--
           Logging/SimulationLogBridge.cs 直接把库的日志门面接到宿主日志出口上，

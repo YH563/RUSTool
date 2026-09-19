@@ -8,6 +8,7 @@ using Avalonia.Threading;
 using RobotSimulation.Core.Geometry;
 using RobotSimulation.Core.Rendering;
 using RobotSimulation.Core.Scene;
+using RobotSimulation.Core.Utils;
 using RobotSimulation.OpenGL.Device;
 using RobotSimulation.OpenGL.Rendering;
 using RUSTool.Visualization.Scene;
@@ -28,7 +29,7 @@ namespace RUSTool.Visualization.Controls;
 /// </para>
 /// <list type="number">
 /// <item><b>GL 从哪来</b>：Avalonia 给每个 <see cref="OpenGlControlBase"/> 一个上下文，本类是它的组装点。</item>
-/// <item><b>画到哪去</b>：每帧绑定控件自己的 framebuffer、按控件尺寸同步视口、渲染、请求下一帧。</item>
+/// <item><b>画到哪去</b>：每帧绑定控件自己的 framebuffer、向它实测同步视口、渲染、请求下一帧。</item>
 /// <item><b>指针怎么变成相机</b>：rviz 风格左键旋转 / 中键平移 / 右键缩放 / 单击拾取高亮。</item>
 /// </list>
 ///
@@ -100,7 +101,23 @@ public sealed class RobotViewport : OpenGlControlBase
     private bool _dragging;
     private bool _dragged;
     private Point _pressPosition;
-    private Point _lastPosition;
+
+    /// <summary>
+    /// 按下那一刻的机位。单击拾取必须打在用户看到的那一帧画面上，见 OnWindowPointerReleased。
+    /// </summary>
+    private CameraPose _pressCamera;
+
+    /// <summary>
+    /// 本帧实际画进的像素矩形（向 GL 表面量得，见 <see cref="SyncViewport"/>）。
+    /// 渲染视口、相机宽高比、拾取射线三者共用它 —— 只有一把尺，三者就不会各说各话。
+    /// </summary>
+    private (int Width, int Height) _pixelViewport;
+
+    /// <summary><see cref="_pixelViewport"/> 的来源（诊断用，视口那行日志会写明）。</summary>
+    private string _viewportSource = "尚未测量";
+
+    /// <summary>视口尺寸只在第一次量到时记一行日志，不刷屏。</summary>
+    private bool _viewportReported;
 
     /// <summary>
     /// 关节角（弧度），顺序与 URDF 的可驱动关节一致。
@@ -228,16 +245,17 @@ public sealed class RobotViewport : OpenGlControlBase
         // 库从不自己绑定 framebuffer —— 这正是它能被内嵌的原因。
         _gl.BindFramebuffer(FramebufferTarget.Framebuffer, (uint)framebuffer);
 
-        // 视口按【物理像素】跟随控件尺寸，否则 HiDPI 屏上画面发糊。
-        double scaling = (VisualRoot as TopLevel)?.RenderScaling ?? 1.0;
-        int pixelWidth = Math.Max(1, (int)(Bounds.Width * scaling));
-        int pixelHeight = Math.Max(1, (int)(Bounds.Height * scaling));
-        _graphics.Resize(pixelWidth, pixelHeight);
+        // 视口不按控件尺寸「算」，而是向 GL 表面「量」（见 SyncViewport）：
+        // 合成器给这张表面多少像素是它说了算，界面按 布局 × RenderScaling 去猜可以差几个百分点，
+        // 而画面与拾取射线必须落在同一个矩形里，否则点得越靠边偏得越多。
+        (int pixelWidth, int pixelHeight) = SyncViewport();
 
         SceneGraph scene = _robotScene.Graph;
 
         // 覆盖层（右上角 HUD）占掉的高度由界面递进来 —— 借这一步把 gizmo 收在它下面。
-        ApplyGizmoLayout(pixelHeight, scaling, scene);
+        // 缩放因子同样取量出来的「布局单位 → 物理像素」实际比例：gizmo 与画面同处一个像素网格，
+        // 界面的逻辑量（覆盖层高度、边距）才不会在分数缩放下与画面错位。
+        ApplyGizmoLayout(pixelHeight, PixelsPerLayoutUnit.Y, scene);
         scene.Camera.AspectRatio = pixelWidth / (float)pixelHeight;
 
         // 取走本帧的关节值（取走即置空）。场景图归渲染线程独占，UI 线程只通过邮箱递数据。
@@ -379,7 +397,8 @@ public sealed class RobotViewport : OpenGlControlBase
 
         _dragging = true;
         _dragged = false;
-        _pressPosition = _lastPosition = e.GetPosition(this);
+        _pressPosition = e.GetPosition(this);
+        _pressCamera = CameraPose.Capture(_robotScene.Graph.Camera); // 单击必须留住按下这一刻的机位
     }
 
     private void OnWindowPointerMoved(object? sender, PointerEventArgs e)
@@ -388,20 +407,32 @@ public sealed class RobotViewport : OpenGlControlBase
             return;
 
         Point position = e.GetPosition(this);
-        if (Distance(position, _pressPosition) > ClickDragThresholdPixels)
+
+        // 阈值内的位移（普通单击时指针的抖动）故意不动相机：拾取要用的正是用户看到的那一帧机位，
+        // 只有明确的拖拽才允许改它。
+        if (!_dragged && Distance(position, _pressPosition) > ClickDragThresholdPixels)
             _dragged = true; // 明确的拖拽发生了 → 松手时不能再当单击拾取
 
-        var delta = new Vector2((float)(position.X - _lastPosition.X), (float)(position.Y - _lastPosition.Y));
-        _lastPosition = position;
+        if (!_dragged)
+            return;
+
+        // 拖拽按【相对按下点的总位移】施加在按下时的机位上，而不是逐帧增量：
+        // 越过阈值的那一帧相机不会跳一下，取整误差也不会累积成「越拖越偏光标」。
+        var total = new Vector2(
+            (float)(position.X - _pressPosition.X),
+            (float)(position.Y - _pressPosition.Y));
+
+        Camera camera = _robotScene.Graph.Camera;
+        _pressCamera.Restore(camera);
 
         PointerPoint point = e.GetCurrentPoint(this);
         if (point.Properties.IsLeftButtonPressed)
             // 屏幕 Y 向下、相机俯仰向上：不取反的话拖拽方向是反的。
-            _robotScene.Graph.Camera.Rotate(-delta.X * RotateDegreesPerPixel, -delta.Y * RotateDegreesPerPixel);
+            camera.Rotate(-total.X * RotateDegreesPerPixel, -total.Y * RotateDegreesPerPixel);
         else if (point.Properties.IsMiddleButtonPressed)
-            _robotScene.Graph.Camera.Pan(delta * PanScale);
+            camera.Pan(total * PanScale);
         else if (point.Properties.IsRightButtonPressed)
-            _robotScene.Graph.Camera.Zoom(-delta.Y * ZoomPerDragPixel); // 向上拖（dy<0）＝拉近
+            camera.Zoom(-total.Y * ZoomPerDragPixel); // 向上拖（dy<0）＝拉近
 
         RequestNextFrameRendering();
     }
@@ -413,9 +444,14 @@ public sealed class RobotViewport : OpenGlControlBase
 
         _dragging = false;
 
-        // 单击选中、拖拽只转相机。
+        // 单击选中、拖拽只转相机。松手时先把机位放回按下那一刻：指针在阈值内仍可能抖动一两个像素、
+        // 抬起前的一小段移动也已经把相机转了一点（约 1°），而拾取只能打在用户点下去的那帧画面上，
+        // 否则射线会从部件旁边擦过去 —— 表现就是「明明点在机械臂上却没选中」。
         if (!_dragged && _robotScene is not null && IsPointerInside(e))
+        {
+            _pressCamera.Restore(_robotScene.Graph.Camera);
             PickAt(e.GetPosition(this));
+        }
     }
 
     private void OnWindowPointerWheel(object? sender, PointerWheelEventArgs e)
@@ -434,11 +470,7 @@ public sealed class RobotViewport : OpenGlControlBase
     private void PickAt(Point position)
     {
         SceneGraph scene = _robotScene!.Graph;
-        Ray ray = scene.Camera.ScreenToWorldRay(
-            new Vector2((float)position.X, (float)position.Y),
-            new Vector2((float)Bounds.Width, (float)Bounds.Height));
-
-        GameObject? picked = scene.PickAndHighlight(ray, enable: true);
+        GameObject? picked = scene.PickAndHighlight(RayAt(position), enable: true);
 
         // 单选：新的命中替换旧的，落空则清空。
         if (_selected is { } previous && !ReferenceEquals(previous, picked))
@@ -450,6 +482,163 @@ public sealed class RobotViewport : OpenGlControlBase
         string message = picked is null ? "单击拾取：未命中" : $"单击拾取：{picked.Name}";
         Dispatcher.UIThread.Post(() => Picked?.Invoke(message));
         RequestNextFrameRendering();
+    }
+
+    /// <summary>
+    /// 本控件【布局坐标】下的一点对应的拾取射线 —— 也就是 <c>e.GetPosition(this)</c> 给出的那个空间，
+    /// 指针、布局与 framebuffer 只有在这里才能对上账。
+    ///
+    /// <para>
+    /// 两次换算（布局单位 → framebuffer 像素、像素 → NDC）都只在本方法里发生，
+    /// 而矩形与比例取自同一处 <see cref="PixelViewport"/> / <see cref="PixelsPerLayoutUnit"/>，
+    /// 所以点击所依据的矩形和画面所占据的矩形不可能不一致。
+    /// </para>
+    /// </summary>
+    private Ray RayAt(Point position)
+    {
+        SceneGraph scene = _robotScene!.Graph;
+        (int width, int height) = PixelViewport;
+        Vector2 scale = PixelsPerLayoutUnit;
+
+        // 拾取可能落在「刚 resize、下一帧还没画」之间；宽高比按同一组数字刷新，
+        // 射线就始终与它要穿过的那个画面同步。
+        scene.Camera.AspectRatio = width / (float)height;
+
+        return scene.Camera.ScreenToWorldRay(
+            new Vector2((float)(position.X * scale.X), (float)(position.Y * scale.Y)),
+            new Vector2(width, height));
+    }
+
+    /// <summary>
+    /// 把视口对齐到 GL 实际给出的表面，并返回量到的像素矩形。
+    ///
+    /// <para>
+    /// 要点在「量」而不是「算」：本控件布局多大是界面的事，合成器给这张表面多少像素是它的事，
+    /// 两者在分数显示的缩放上可以差几个百分点（本机实测：1100×718 的逻辑尺寸拿到 1157×755 的表面）。
+    /// 谁按 <c>Bounds × RenderScaling</c> 去猜，画面就只铺满那张表面的一部分、指针却按整块算 ——
+    /// 表现为点得越靠边偏得越多，而拾取总是擦过部件。渲染、相机宽高比、拾取射线从此共用这一个矩形。
+    /// </para>
+    /// </summary>
+    private (int Width, int Height) SyncViewport()
+    {
+        (int width, int height) = _gl is { } gl ? QueryFramebufferSize(gl) : default;
+
+        if (width <= 0 || height <= 0)
+        {
+            // 拿不到可量的表面（首帧之前、或驱动藏起了附着）→ 按布局预测，
+            // 下一个尺寸一开始渲染就会被真实值取代。
+            (width, height) = LayoutPixelSize();
+            _viewportSource = "布局预测";
+        }
+        else
+        {
+            _viewportSource = "GL 表面实测";
+        }
+
+        if ((width, height) != _pixelViewport)
+            _pixelViewport = (width, height);
+
+        if (_gl is { } viewport)
+            viewport.Viewport(0, 0, (uint)width, (uint)height);
+
+        _graphics?.Resize(width, height);
+
+        // 尺寸只记第一行：它是「画面与射线共用同一把尺」这件事在现场的证据。
+        if (!_viewportReported)
+        {
+            _viewportReported = true;
+            (int layoutWidth, int layoutHeight) = LayoutPixelSize();
+            Logger.Info($"Viewport: {width}x{height} px（{_viewportSource}）· " +
+                        $"控件布局 {Bounds.Width:F0}x{Bounds.Height:F0} · 显示缩放 {RenderScaling:F2} " +
+                        $"= {layoutWidth}x{layoutHeight} px · 每布局单位 {PixelsPerLayoutUnit.X:F4}x{PixelsPerLayoutUnit.Y:F4} px");
+        }
+
+        return (width, height);
+    }
+
+    /// <summary>
+    /// 当前绑定的 framebuffer 颜色附着的尺寸，直接问 GL —— 那才是合成器随后采样、画面真正所在的像素网格。
+    /// 附着既不是渲染缓冲也不是纹理时（默认 framebuffer）返回 <c>(0, 0)</c>，由调用方退回预测。
+    /// </summary>
+    private static (int Width, int Height) QueryFramebufferSize(GL gl)
+    {
+        gl.GetFramebufferAttachmentParameter(FramebufferTarget.Framebuffer, FramebufferAttachment.ColorAttachment0,
+            FramebufferAttachmentParameterName.ObjectType, out int attachmentType);
+
+        if (attachmentType == (int)GLEnum.Renderbuffer)
+        {
+            gl.GetFramebufferAttachmentParameter(FramebufferTarget.Framebuffer, FramebufferAttachment.ColorAttachment0,
+                FramebufferAttachmentParameterName.ObjectName, out int renderbuffer);
+            gl.BindRenderbuffer(RenderbufferTarget.Renderbuffer, (uint)renderbuffer);
+            gl.GetRenderbufferParameter(RenderbufferTarget.Renderbuffer,
+                RenderbufferParameterName.Width, out int bufferWidth);
+            gl.GetRenderbufferParameter(RenderbufferTarget.Renderbuffer,
+                RenderbufferParameterName.Height, out int bufferHeight);
+            gl.BindRenderbuffer(RenderbufferTarget.Renderbuffer, 0);
+            return (bufferWidth, bufferHeight);
+        }
+
+        if (attachmentType == (int)GLEnum.Texture)
+        {
+            gl.GetFramebufferAttachmentParameter(FramebufferTarget.Framebuffer, FramebufferAttachment.ColorAttachment0,
+                FramebufferAttachmentParameterName.ObjectName, out int texture);
+            gl.BindTexture(TextureTarget.Texture2D, (uint)texture);
+            gl.GetTexLevelParameter(TextureTarget.Texture2D, 0, GLEnum.TextureWidth, out int textureWidth);
+            gl.GetTexLevelParameter(TextureTarget.Texture2D, 0, GLEnum.TextureHeight, out int textureHeight);
+            gl.BindTexture(TextureTarget.Texture2D, 0);
+            return (textureWidth, textureHeight);
+        }
+
+        return (0, 0);
+    }
+
+    /// <summary>已量到的像素矩形；首帧之前（或量不到时）退回按布局尺寸预测。</summary>
+    private (int Width, int Height) PixelViewport =>
+        _pixelViewport.Width > 0 ? _pixelViewport : LayoutPixelSize();
+
+    /// <summary>本控件布局尺寸换算成物理像素 —— 只是首帧之前的预测，之后一切以量到的表面为准。</summary>
+    private (int Width, int Height) LayoutPixelSize() => (
+        Math.Max(1, (int)Math.Ceiling(Bounds.Width * RenderScaling)),
+        Math.Max(1, (int)Math.Ceiling(Bounds.Height * RenderScaling)));
+
+    /// <summary>
+    /// 物理像素 / 布局单位：指针（永远在布局坐标里）要走多远才等于 framebuffer 上的一个像素。
+    /// 取自【实际在用的矩形】而不是 <see cref="RenderScaling"/>，所以合成器在分数缩放上的取整
+    /// 不可能把射线挪一两个像素 —— 那种误差随控件变大而变大，表现就是「点击滑到部件旁边」。
+    /// </summary>
+    private Vector2 PixelsPerLayoutUnit
+    {
+        get
+        {
+            (int width, int height) = PixelViewport;
+            if (Bounds.Width <= 0 || Bounds.Height <= 0)
+                return new Vector2((float)RenderScaling, (float)RenderScaling);
+
+            return new Vector2(width / (float)Bounds.Width, height / (float)Bounds.Height);
+        }
+    }
+
+    /// <summary>
+    /// 本控件所在窗口的显示缩放（布局单位 → 物理像素的预测值）。
+    /// 只用于首帧之前的预测：合成器给本控件的表面未必等于 <c>Bounds × 它</c>，拿它当真相就会偏。
+    /// </summary>
+    private double RenderScaling => (VisualRoot as TopLevel)?.RenderScaling ?? 1.0;
+
+    /// <summary>
+    /// 单击必须保住的轨道机位：按下时抓取、投射射线前放回 —— 拾取只有对着用户点下去的那一帧才有意义。
+    /// </summary>
+    private readonly record struct CameraPose(float Yaw, float Pitch, float Distance, Vector3 Target)
+    {
+        public static CameraPose Capture(Camera camera)
+            => new(camera.Yaw, camera.Pitch, camera.Distance, camera.Target);
+
+        public void Restore(Camera camera)
+        {
+            camera.Target = Target;
+            camera.Distance = Distance;
+            camera.Yaw = Yaw;
+            camera.Pitch = Pitch;
+        }
     }
 
     /// <summary>两点之间的屏幕距离（单击 / 拖拽的判据）。</summary>
