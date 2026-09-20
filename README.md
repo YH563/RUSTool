@@ -16,7 +16,7 @@
 |---|---|---|---|
 | **`RUSTool.Core`** | 类库 | 纯逻辑层：bridge 通信客户端（`BridgeClient` / `ConnectionManager` / `BridgeProtocol`）、机器人业务服务（`IRobotService` / `RobotService` / `RobotSession`）、流程状态机（`ScanStateMachine`）、日志契约（`ILogService`）。零界面、零图形依赖 | `CommunityToolkit.Mvvm`（仅 `ObservableObject`） |
 | **`RUSTool.UI`** | WinExe | **唯一的应用**（`dotnet run` 起来的就是它）：Avalonia 界面 + 设计系统 `Theme/` + 依赖图组装（唯一组合根） | `Core`、`Visualization`、Avalonia 12.1.0、CommunityToolkit.Mvvm 8.4.2、Avalonia.Headless（截图） |
-| **`RUSTool.Visualization`** | 类库 | 图形栈的**隔离容器**：`RobotViewport`（内嵌 3D 视口）、`RobotScene`（URDF + 关节驱动）、`SimulationLogBridge`（库日志接出）。Silk.NET / OpenGL / `RobotSimulation` 只在这里出现 | `Core` 无关，依赖 `RobotSimulation` 0.2.0、Silk.NET.OpenGL 2.23.0、Avalonia 12.1.0 |
+| **`RUSTool.Visualization`** | 类库 | 图形栈的**隔离容器**：`RobotViewport`（内嵌 3D 视口）、`RobotScene`（URDF + 关节驱动）、`SimulationLogBridge`（库日志接出）。Silk.NET / OpenGL / `RobotSimulation` 只在这里出现 | `Core` 无关，依赖 `RobotSimulation` 0.2.1、Silk.NET.OpenGL 2.23.0、Avalonia 12.1.0 |
 | *(test) `tests/RUSTool.Core.Tests`* | xUnit | 纯逻辑单测：`ScanStateMachine` 54 个用例，不依赖网络 / 界面 / 图形栈。**不发布** | `Core` |
 | *(data) `RUSTool.Visualization/Assets/Models`* | 数据 | 随编译复制到输出目录的 URDF + mesh（首选真机模型、兜底 URDF 内置几何） | — |
 
@@ -80,13 +80,13 @@ RUSTool.sln
 
 | 项 | 要求 | 说明 |
 |---|---|---|
-| 目标框架 | `net8.0` | 四个工程统一（跟随 `RobotSimulation` 0.2.0 的 lib 目录） |
+| 目标框架 | `net8.0` | 四个工程统一（跟随 `RobotSimulation` 0.2.1 的 lib 目录） |
 | **构建 SDK** | **.NET SDK 10** | 必须。Avalonia 12.1.0 的源生成器要求 Roslyn 4.14+；用 SDK 8 会加载不上源生成器，`InitializeComponent` 不被生成 → 整片 `CS0103` |
 | `global.json` | **刻意不放** | 钉了 SDK 版本反而编译不过 |
 | 3D | 桌面 OpenGL 3.3 core | 后端只带 `#version 330 core` 着色器；遇到 GLES 会抛 `NotSupportedException` 并被捕获 → 3D 区降级为空状态 |
 | 平台 | Linux / Windows 桌面 | 无显卡 / 无 GL 时应用照常可用（HUD、指令、日志都不依赖 GL） |
 | 后端 | 任何实现 bridge 协议的服务 | 默认 `ws://127.0.0.1:8765`（协议见 [`docs/protocol/zh-CN.md`](docs/protocol/zh-CN.md)） |
-| 离线安装 | 本机 NuGet 源 `/home/hp/nuget-local-feed` | `dotnet nuget add source /home/hp/nuget-local-feed -n local`，`RobotSimulation` 0.2.0 也在里面 |
+| NuGet 源 | **nuget.org 一个**（仓库根 `NuGet.config` 里 `<clear />` 后显式登记） | `RobotSimulation` 0.1.0 / 0.2.0 / 0.2.1 都已发布在 nuget.org 上；换机器 / 上 CI 不需要任何手工加源，也不依赖本机离线目录 |
 
 ```bash
 # 本机 dotnet 装在 ~/.dotnet 但没进 PATH（preview.sh 会自己设好）
@@ -212,7 +212,7 @@ RUSTool.UI/preview.sh popup MenuFile     # 展开菜单后截图（菜单是 Pop
 ## 9. 许可
 
 - 本仓库当前**未包含** `LICENSE` 文件 —— 对外发布前需要先补一份许可声明（由作者决定采用哪种许可）。
-- 3D 内核 `RobotSimulation`（Core / Robot / OpenGL，0.2.0）为自研库；
+- 3D 内核 `RobotSimulation`（Core / Robot / OpenGL，0.2.1）为自研库；
   `RUSTool.Visualization/Assets/Models/` 下的测试模型与 mesh 随该库仓库分发，许可以那一部分为准
   （该库采用 MIT；本目录不再单独声明）。
 - 本仓库自有源码的许可随仓库根声明；在上面那条补齐之前，请按「内部项目」对待。

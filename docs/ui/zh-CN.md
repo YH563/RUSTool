@@ -71,7 +71,7 @@ RUSTool.UI/
     │   ├── ChartPanel.axaml            数据曲线（占位）
     │   ├── ArmControlPanel.axaml       点动 / MoveJ / MoveL（「按住走、松手停」）
     │   ├── ScanWorkflowPanel.axaml     四步流程面板
-    │   ├── RobotStatusOverlay.axaml    状态 HUD
+    │   ├── RobotStatusOverlay.axaml    机械臂状态栏（停靠在 3D 视口右侧）
     │   ├── ReplayModule.axaml          回放模块
     │   └── LogView.axaml               日志面板
     └── Clinical/               临床工作区
@@ -316,7 +316,13 @@ RUSTool.UI/
 
 ### 9.1 状态 HUD
 
-半透明悬浮于 3D 场景右上角（`RobotStatusOverlay`），`IsHitTestVisible=False`。临床模式仅显示三色灯；工程师模式显示 TCP 位姿 / 关节角 / 力矩数值。
+机械臂状态读数（`RobotStatusOverlay`）**停靠在 3D 卡片里、视口右侧的独立一列**，`IsHitTestVisible=False`。
+
+之所以不用「悬浮在视口右上角」：视图是**按视口居中**画机械臂的，一块 300 宽的悬浮卡片压掉的右半边
+正好是机械臂本身（用户看到的就是"状态把那根胳膊挡住了"）。停靠之后两列各占一格，视口上没有任何覆盖层，
+读数也照样常驻可见；窗口变矮时这一列自己滚动（宿主里的 `ScrollViewer`），不会被卡片裁掉下半截。
+
+临床模式仅显示三色灯；工程师模式显示 TCP 位姿 / 关节角 / 力矩数值。
 
 ### 9.2 记录与回放模块
 
@@ -502,7 +508,7 @@ cd RUSTool.UI
 |------|------|------|
 | UI 框架 | **Avalonia 12.1.0** | 跨平台桌面；`OpenGlControlBase` 可直接嵌 GL |
 | 架构模式 | **MVVM + CommunityToolkit.Mvvm 8.4.2** | 源生成器（`ObservableProperty` / `RelayCommand`） |
-| 3D 渲染 | **`RobotSimulation` 0.2.0**（Silk.NET.OpenGL 2.23.0） | 自研图形库；隔离在 `RUSTool.Visualization` |
+| 3D 渲染 | **`RobotSimulation` 0.2.1**（Silk.NET.OpenGL 2.23.0） | 自研图形库；隔离在 `RUSTool.Visualization` |
 | 依赖注入 | 无容器，显式组合根（`App.CreateMainViewModel`） | 依赖图小而固定，引入容器反而多一层间接 |
 | 日志 | **自研 `ILogService`**（契约在 Core、实现在界面层，按天落盘） | 与图形栈日志合流（来源列 `sim`） |
 | 图表 | 占位（装饰性绘制） | 真实数据源接入时再选型 |

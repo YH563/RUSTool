@@ -52,7 +52,10 @@
                 </Border>
 
                 <Grid Grid.Row="1">
-                    <!-- 右下角朝向 gizmo 要避开下面这块 HUD：把它的实测高度递给视口（同调试工作区） -->
+                    <!-- 右下角朝向 gizmo 要避开下面这块 HUD：把它的实测高度递给视口。
+                         （调试工作区不走这条路：那边的机械臂状态栏已经改成【停靠式】，压在视口
+                          旁边的独立一列里，视口上没有覆盖层。这里留在浮层是因为只有一行读数，
+                          贴右上角比专门占一列省地方；真到它也挡住胳膊时照调试工作区那样搬出去即可。） -->
                     <debug:Scene3DView GizmoTopInset="{Binding #ContactForceOverlay.Bounds.Height}" />
 
                     <!-- 临床 HUD 只留一项：末端接触力（用 metric 大读数）。

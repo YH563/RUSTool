@@ -270,7 +270,7 @@ Idle ──► PreScanning ──► Posing ──► Planning ──► Ready �
 > `RUSTool.Core` 与测试从未引用该项目，因此删除对它们是零影响（编译器可证）。
 
 > `RUSTool.Visualization` 是**新增**工程（不是迁移）：把 3D 内核 `RobotSimulation`
-> （`Core` / `Robot` / `OpenGL`，0.2.0，nuget.org 与本机离线源都有）接进 Avalonia。
+> （`Core` / `Robot` / `OpenGL`，0.2.1，全部发布在 nuget.org 上）接进 Avalonia。
 > `RUSTool.UI` 只引用它、不引用 Silk.NET；无 GL 时（离屏截图、无显卡机器）它自动降级为设计好的空状态，
 > 因此 `preview.sh` 的产出与以前一样可用。
 > 库日志经 `SimulationLogBridge` 汇进项目日志器（来源列 `sim`）；总趋势是**图形细节下移给库** ——

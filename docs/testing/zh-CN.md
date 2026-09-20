@@ -10,7 +10,7 @@
 
 | 项 | 值 |
 |---|---|
-| 目标框架 | `net8.0`（四个工程统一，跟随 `RobotSimulation` 0.2.0 的 lib 目录） |
+| 目标框架 | `net8.0`（四个工程统一，跟随 `RobotSimulation` 0.2.1 的 lib 目录） |
 | 构建 SDK | **.NET SDK 10**（本机装在 `~/.dotnet`，未加入 PATH） |
 | 为什么 | Avalonia 12.1.0 的源生成器要求 Roslyn 4.14+：用 SDK 8 时源生成器加载不上，`InitializeComponent` 不被生成，于是整片报 `CS0103` |
 | `global.json` | 刻意**不放** —— 钉了 SDK 版本反而编译不过 |

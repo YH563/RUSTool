@@ -16,23 +16,22 @@
            这一层就露出来，用户看到的是"设计好的空状态"，而不是一块黑屏。
            右下角的朝向 gizmo 由仿真包的渲染器绘制（库默认开启），界面不再自绘坐标轴。
         ② 中层 —— 真实的 3D 视口（RUSTool.Visualization 的 RobotViewport）。
-           JointValues 直接绑 /state 的关节角（弧度），机械臂姿态与右上角 HUD 的读数来自同一帧。
-           GizmoTopInset 由工作区绑右上角 HUD 的实测高度：库把朝向 gizmo 钉在右下角、位置不可调，
-           视口按这个占位把它缩到 HUD 下面（界面上没有第二个地方需要知道这件事）。
+           JointValues 直接绑 /state 的关节角（弧度），机械臂姿态与状态栏的读数来自同一帧。
+           【视口上没有任何覆盖层】：机械臂状态栏停靠在视口右侧的独立一列（见 DebugWorkspace），
+           所以这里既没有要避让的东西，也没有第二处需要知道状态栏有多宽。
         ③ 顶层 —— 角标：GPU / 模型加载报告 / FPS / 拾取结果。
            IsHitTestVisible=False：它不能挡住 3D 视口的相机操作（左键转 / 中键平移 / 右键缩放）。
     -->
     <Border Classes="canvas" Background="{DynamicResource SurfaceSunkenBrush}">
         <Grid>
-            <!-- ① 占位 / 降级层：占位文字靠左，右上角常驻 HUD（宽 300），居中文字会被它切掉一半 -->
+            <!-- ① 占位 / 降级层：上方没有覆盖层，文字居中即整块画布的中心 -->
             <TextBlock x:Name="FallbackText"
                        Text="3D 场景渲染区域"
-                       HorizontalAlignment="Left" VerticalAlignment="Center"
-                       Margin="24,0,0,0"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"
                        Foreground="{DynamicResource TextTertiaryBrush}" />
 
             <!--
-              右下角的朝向 gizmo 不再由界面绘制：仿真包 0.2.0 的默认环境自带
+              右下角的朝向 gizmo 不再由界面绘制：仿真包 0.2.1 的默认环境自带
               （SceneGraph.ShowOrientationGizmo 默认为 true），由库的渲染器画进视口自己的右下角小视口 ——
               跟随相机、恒定像素尺寸、不会被模型遮挡、也不参与拾取（尺寸/边距见库的
               OrientationGizmoSize / OrientationGizmoMargin）。界面这边再画一份静态坐标轴只会和它叠在一起。

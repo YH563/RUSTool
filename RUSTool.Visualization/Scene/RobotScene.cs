@@ -61,6 +61,12 @@ public sealed class RobotScene : IDisposable
     {
         var scene = new RobotScene(new SceneGraph());
         scene.LoadRobot();
+
+        // 选中显示不用在这里开：SceneGraph.ShowSelectionAxes 库默认为 true —— 拾取走 Select/PickAndSelect
+        // 时，被选节点会自动挂上一枚自己的局部坐标轴（普通子节点，随节点一起动、不参与拾取），
+        // 箭头尺寸恒定屏幕大小，SelectionAxesLength（0.3 m）只是箭头几何的参考长度，
+        // 对 0.6 m 量级的整机不必调。本工程唯一要守的是「拾取必须走 PickAndSelect」，
+        // 见 RobotViewport.PickAt。
         return scene;
     }
 

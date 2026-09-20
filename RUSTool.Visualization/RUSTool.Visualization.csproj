@@ -2,7 +2,7 @@
 
     <PropertyGroup>
         <!--
-          目标框架跟仿真包对齐：RobotSimulation 0.2.0 的 lib 目录是 net8.0
+          目标框架跟仿真包对齐：RobotSimulation 0.2.1 的 lib 目录是 net8.0
           （库自己在提交 376a90f 把 net10.0 回退成了 net8.0），本解决方案随之整体回到 net8.0。
         -->
         <TargetFramework>net8.0</TargetFramework>
@@ -22,13 +22,19 @@
             · OpenGL —— Silk.NET 后端（公开面不暴露任何 GL 类型）
           三者都不依赖 Avalonia，所以「把 GL 画进 Avalonia」这件事只发生在本项目里。
 
-          版本 0.2.1 在本机离线源 /home/hp/nuget-local-feed（仓库根的 NuGet.config 已把它登记为源），
-          0.2.0 及更早版本同时在 nuget.org 上。
-          0.2.1 相对 0.2.0 只修一处：正运动学的乘法顺序 —— URDF 的 T_origin·R_axis(q) 必须写成
-          JointMotion * Origin（原来写反），凡原点带旋转的关节都会把整条子链摆偏，
-          实测整机偏差 0.88 m、姿态 90°。
+          版本 0.2.1 取自 nuget.org —— 0.1.0 / 0.2.0 / 0.2.1 都已发布在那边，仓库根的
+          NuGet.config 把源钉成 nuget.org 一个（<clear /> 后显式 add），所以本工程
+          不依赖任何本机离线目录：换机器 / 上 CI 开箱即可还原。
+
+          0.2.1 相对 0.2.0 只修一个缺陷：正运动学的乘法顺序 —— URDF 的 T_origin·R_axis(q)
+          在行向量约定下必须写成 JointMotion * Origin（原来写反了），否则整条子链被摆偏。
+          受不受影响看「关节旋转会不会带动 origin 的平移」：本模型的 j2（0.211 m）、j3（0.084）、
+          j4（0.072）、j5（0.031）都错位（随机扫姿态时末端最大 1.1 m 量级），
+          只有 j1（原点在原点）与 j6（原点平移恰与转轴平行）碰巧看不出来。
+
           0.2.0 相对 0.1.0 新增：屏幕空间朝向 gizmo（SceneGraph.ShowOrientationGizmo，库默认开启）、
-          选中对象显示自身坐标系、点云增量更新。
+          选中对象显示自身坐标系（SceneGraph.ShowSelectionAxes，库默认开启 —— 拾取走 PickAndSelect 即可见）、
+          点云增量更新。
         -->
         <PackageReference Include="RobotSimulation.Core" Version="0.2.1" />
         <PackageReference Include="RobotSimulation.Robot" Version="0.2.1" />

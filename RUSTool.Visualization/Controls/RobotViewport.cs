@@ -30,7 +30,7 @@ namespace RUSTool.Visualization.Controls;
 /// <list type="number">
 /// <item><b>GL 从哪来</b>：Avalonia 给每个 <see cref="OpenGlControlBase"/> 一个上下文，本类是它的组装点。</item>
 /// <item><b>画到哪去</b>：每帧绑定控件自己的 framebuffer、向它实测同步视口、渲染、请求下一帧。</item>
-/// <item><b>指针怎么变成相机</b>：rviz 风格左键旋转 / 中键平移 / 右键缩放 / 单击拾取高亮。</item>
+/// <item><b>指针怎么变成相机</b>：rviz 风格左键旋转 / 中键平移 / 右键缩放 / 单击拾取选中。</item>
 /// </list>
 ///
 /// <para>
@@ -39,9 +39,16 @@ namespace RUSTool.Visualization.Controls;
 /// 因此 RUSTool.UI 可以在不引用图形栈的前提下绑定它，也仍然能被离屏截图模式渲染。
 /// </para>
 /// <para>
-/// 数据之外还有一格布局入口 <see cref="GizmoTopInset"/>：界面右上角常常压着一块状态 HUD，而库把朝向
-/// gizmo 钉在**右下角**、位置不可调 —— 界面把 HUD 的实测高度递进来，视口自己把 gizmo 缩到它下面，
-/// 于是"覆盖层压住罗盘"这件事不需要界面去猜 gizmo 的算法。
+/// 数据之外还有一格布局入口 <see cref="GizmoTopInset"/>：界面的视口上**可以**叠浮动层（状态 HUD、
+/// 工具条），而库把朝向 gizmo 钉在**右下角**、位置不可调 —— 界面把浮动层的实测高度递进来，
+/// 视口自己把 gizmo 缩到它下面，于是"覆盖层压住罗盘"这件事不需要界面去猜 gizmo 的算法。
+/// 界面选择不叠任何东西（例如把状态栏停靠在视口旁边）时不必设它，走库的默认尺寸 ——
+/// 工程师工作区就是这样；临床工作区右上角那条「末端接触力」浮层仍靠它给 gizmo 让位。
+/// </para>
+/// <para>
+/// 单击之后画什么同样不由本类决定：高亮（<c>GameObject.Highlighted</c>）与挂在被选节点下的
+/// 局部坐标轴（<c>SceneGraph.ShowSelectionAxes</c>，库默认开启）都是库的显示行为，
+/// 本类只把「点在哪」变成一条射线。选中状态只有一份、归场景图所有，见 <see cref="PickAt"/>。
 /// </para>
 /// <para>
 /// 初始化失败（无显卡、无桌面 GL、驱动不认）时本控件**不抛异常、不白屏**：
@@ -83,7 +90,6 @@ public sealed class RobotViewport : OpenGlControlBase
     private IRenderContext? _graphics;
     private IRenderer? _renderer;
     private RobotScene? _robotScene;
-    private GameObject? _selected;
 
     /// <summary>上一次算 gizmo 尺寸用到的输入（视口高 / 缩放 / 覆盖层占位）：输入没变就不重算。</summary>
     private (int PixelHeight, double Scaling, double TopInset) _gizmoLayout = (-1, -1, -1);
@@ -252,7 +258,8 @@ public sealed class RobotViewport : OpenGlControlBase
 
         SceneGraph scene = _robotScene.Graph;
 
-        // 覆盖层（右上角 HUD）占掉的高度由界面递进来 —— 借这一步把 gizmo 收在它下面。
+        // 覆盖层（界面若在视口上叠了浮动层）占掉的高度由界面递进来 —— 借这一步把 gizmo 收在它下面；
+        // 界面不叠东西时这个值是 0，gizmo 就用库的默认尺寸。
         // 缩放因子同样取量出来的「布局单位 → 物理像素」实际比例：gizmo 与画面同处一个像素网格，
         // 界面的逻辑量（覆盖层高度、边距）才不会在分数缩放下与画面错位。
         ApplyGizmoLayout(pixelHeight, PixelsPerLayoutUnit.Y, scene);
@@ -347,7 +354,6 @@ public sealed class RobotViewport : OpenGlControlBase
         _robotScene = null;
         _graphics = null;
         _gl = null;
-        _selected = null;
     }
 
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
@@ -465,19 +471,22 @@ public sealed class RobotViewport : OpenGlControlBase
     }
 
     /// <summary>
-    /// 屏幕像素 → 世界射线 → 拾取并单选高亮。相机是纯 CPU 数据，这条射线投射完全不碰 GL。
+    /// 屏幕像素 → 世界射线 → 拾取并选中（高亮 + 该节点自身坐标系）。相机是纯 CPU 数据，这条射线投射完全不碰 GL。
+    ///
+    /// <para>
+    /// 单选整条走库的 <c>SceneGraph.PickAndSelect</c>：它内部调 <c>Select</c>，命中就把新对象设为
+    /// <c>Selected</c>、让上一个回到原样、并把新对象的局部坐标轴挂成它的一个普通子节点
+    /// （<c>ShowSelectionAxes</c>，库默认开启）；落空则清空选中。
+    /// </para>
+    /// <para>
+    /// 以前这里用的是 <c>PickAndHighlight</c>（只翻高亮位），于是本类不得不自己记「当前选中」替库去
+    /// 复原上一个对象的高亮 —— 一份平行状态，代价是选中只在高亮这一半上生效：局部坐标轴永远等不到
+    /// <c>Select</c> 那一步，单击选中的对象看不出自己的 X/Y/Z 朝哪。
+    /// </para>
     /// </summary>
     private void PickAt(Point position)
     {
-        SceneGraph scene = _robotScene!.Graph;
-        GameObject? picked = scene.PickAndHighlight(RayAt(position), enable: true);
-
-        // 单选：新的命中替换旧的，落空则清空。
-        if (_selected is { } previous && !ReferenceEquals(previous, picked))
-            previous.Highlighted = false;
-        if (picked is null && _selected is not null)
-            _selected.Highlighted = false;
-        _selected = picked;
+        GameObject? picked = _robotScene!.Graph.PickAndSelect(RayAt(position));
 
         string message = picked is null ? "单击拾取：未命中" : $"单击拾取：{picked.Name}";
         Dispatcher.UIThread.Post(() => Picked?.Invoke(message));

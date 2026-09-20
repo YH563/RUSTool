@@ -35,7 +35,7 @@ RUSTool.UI  ──绑定──►  RobotViewport.JointValues   （float 列表�
 | 入口 | 类型 | 说明 |
 |---|---|---|
 | `JointValues` | `IReadOnlyList<float>?`（Avalonia 属性，可绑定） | 关节角，**弧度**，顺序 = URDF 可驱动关节顺序；长度不符则该帧被忽略并只提示一次 |
-| `GizmoTopInset` | `double`（Avalonia 属性，可绑定） | 视口顶部被界面覆盖层占掉的高度（逻辑像素）：填 HUD 的 `Bounds.Height`，朝向 gizmo 会自动收在这条线下方；`0`（默认）= 用库的默认尺寸 |
+| `GizmoTopInset` | `double`（Avalonia 属性，可绑定） | 视口顶部被界面覆盖层占掉的高度（逻辑像素）：界面若在视口上叠了浮动层，填它的 `Bounds.Height`，朝向 gizmo 会自动收在这条线下方；`0`（默认）= 用库的默认尺寸。工程师工作区的状态栏是**停靠**在视口右侧的独立一列，视口上没有覆盖层，所以那里不设这个属性；临床工作区右上角的「末端接触力」浮层仍在用它 |
 | `ResetCamera()` | 方法 | 相机回默认机位（菜单「视图 → 重置视角」用） |
 | `Ready` / `Failed` | 事件（UI 线程） | GL 就绪报告（含 GPU 与模型装配报告）/ 初始化失败原因。失败时控件自己不画，请把它隐藏让占位层露出 |
 | `Stats` / `Picked` | 事件（UI 线程） | 每秒性能行（FPS / 单帧耗时 / 帧数）/ 单击拾取结果 |
@@ -43,8 +43,14 @@ RUSTool.UI  ──绑定──►  RobotViewport.JointValues   （float 列表�
 单位约定与库一致：**弧度 / 米 / Z 轴向上**。界面这一层不做换算 ——
 HUD 上给人看的度数是另一条投影（见 `RobotStatusViewModel`）。
 
-界面**不自绘**朝向坐标轴：右下角那个 gizmo 是图形库画的（`RobotSimulation` 0.2.0 的
+界面**不自绘**朝向坐标轴：右下角那个 gizmo 是图形库画的（`RobotSimulation` 0.2.1 的
 `SceneGraph.ShowOrientationGizmo`，默认开启，屏幕空间、不随相机缩放）。界面里出现第二条轴 = 重复。
+
+界面也**不自己维护「选中」**：一次单击 = 库的 `SceneGraph.PickAndSelect` —— 命中就单选
+（高亮 + 把该对象的局部坐标轴挂成它的普通子节点）、落空则清空。于是单击一个部件后除了变色，
+还能看见**它自己的** X/Y/Z 朝哪：局部坐标轴是 `SceneGraph.ShowSelectionAxes` 的默认行为
+（库默认开启，挂在节点下随它一起动，箭头尺寸恒定、不参与拾取，`SelectionAxesLength=0.3` 只是
+箭头几何的参考长度），控件这边唯一的义务是走 `PickAndSelect` 而不是只翻高亮位的 `PickAndHighlight`。
 
 相机手感（控件内常量，rviz 量级）：左键拖拽旋转 `0.2°/px`、中键平移 `0.01/px`、
 右键拖拽与滚轮缩放；**按下与松开位移超过 6 像素才算拖拽**，否则算一次点击拾取。
@@ -105,7 +111,7 @@ RUSTool.Visualization/
 
 | 包 | 版本 | 作用 |
 |---|---|---|
-| `RobotSimulation.Core` / `.Robot` / `.OpenGL` | 0.2.0 | 场景图 / URDF + 正运动学 / Silk.NET 渲染后端（0.2.0 起自带屏幕空间朝向 gizmo） |
+| `RobotSimulation.Core` / `.Robot` / `.OpenGL` | 0.2.1 | 场景图 / URDF + 正运动学 / Silk.NET 渲染后端（0.2.0 起自带屏幕空间朝向 gizmo；0.2.1 修正关节合成顺序） |
 | `Microsoft.Extensions.Logging` | 10.0.11 | `SimulationLogBridge` 实现 `ILoggerProvider` / `ILogger` 用；用 net8.0 资产，不给项目带进任何 10.0 运行时 |
 | `Avalonia` | 12.1.0 | `OpenGlControlBase`：给我们一个 GL 上下文和一个 framebuffer |
 | `Silk.NET.OpenGL` | 2.23.0 | 把 Avalonia 的过程地址包成 GL 门面 |
@@ -113,8 +119,9 @@ RUSTool.Visualization/
 **要求桌面 OpenGL**：后端只带 `#version 330 core` 着色器，拿到 GLES（部分平台的 ANGLE / EGL 默认）
 会抛 `NotSupportedException` —— 控件会捕获它并走 `Failed` 降级，不会让应用崩掉。
 
-离线安装（无外网时）：包同时放在 `/home/hp/nuget-local-feed`，
-把它加进 NuGet 源（`dotnet nuget add source /home/hp/nuget-local-feed -n local`）即可还原。
+包全部来自 **nuget.org**（`RobotSimulation` 0.1.0 / 0.2.0 / 0.2.1 都已发布），
+仓库根的 `NuGet.config` 只登记这一个源 —— 换机器 / 上 CI 不需要任何手工加源。
+真无外网时只能靠 `~/.nuget/packages` 里已有的缓存还原，本仓库不再依赖本机离线目录。
 
 ## 6. 资产
 
@@ -146,6 +153,8 @@ grep ' sim ' logs/$(date +%F).log        # 例：sim [AssetResolver] 'package://
 3. **越早挂日志桥**：`SimulationLogBridge.Attach` 必须在任何库日志产生之前调用，
    本项目在 `App.CreateMainViewModel` 里、建视口**之前**做。
 4. **失败一律降级**：缺模型 / 缺桌面 GL / GLES 上下文都不许白屏，走 `LoadReport` + `Failed`。
+5. **单击 = 库的 `PickAndSelect`**：高亮与「选中对象的局部坐标轴」由库在同一步里管好（`Select`），
+   控件不另存一份选中状态 —— 拾取只负责把点变成射线。
 
 **反例**
 
@@ -153,6 +162,7 @@ grep ' sim ' logs/$(date +%F).log        # 例：sim [AssetResolver] 'package://
 |---|---|
 | 在 `RUSTool.UI` 里 `using Silk.NET.*` / `RobotSimulation.*` | 图形栈会泄漏进界面层，隔离失效（本工程存在的全部理由） |
 | 界面自己画朝向坐标轴 | 与库自带的 gizmo 重复；gizmo 由 `SceneGraph.ShowOrientationGizmo` 统一控制 |
+| 控件自己记一份「当前选中」 | 与库的 `SceneGraph.Selected` 平行，只会让一半生效：用 `PickAndHighlight` 自己复原高亮时，选中对象的局部坐标轴永远挂不上（单击只变色，看不出它的 X/Y/Z 朝哪） |
 | 在 UI 线程里改 `RobotScene.Graph` | 与渲染线程竞争；只能经 `JointValues` 邮箱传数据 |
 | 界面把 `JointValues` 当角度（度）传进去 | 模型关节会明显乱动 —— 单位是弧度 |
 | 直接引用库的 `Logger` 写日志 | 库日志门面只认第一次初始化，应由 `SimulationLogBridge` 统一接出 |

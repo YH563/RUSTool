@@ -20,7 +20,7 @@
         <!-- ═══ 上排：3D / 影像 / 曲线 ═══ -->
         <Grid ColumnDefinitions="3*,6,2*,6,2*">
 
-            <Border Classes="card" MinWidth="320">
+            <Border Classes="card" MinWidth="520">
                 <Grid RowDefinitions="Auto,*">
                     <Border Classes="cardHeader">
                         <Grid ColumnDefinitions="*,Auto">
@@ -28,22 +28,30 @@
                             <TextBlock Grid.Column="1" Classes="caption" Text="视角 默认" />
                         </Grid>
                     </Border>
-                    <Grid Grid.Row="1">
-                        <!--
-                          GizmoTopInset：把右上角 HUD 的实测高度（含它自己的外边距）告诉 3D 视口，
-                          让右下角的朝向 gizmo 收在这块 HUD 下面 —— 库把 gizmo 钉在右下角、位置不可调，
-                          唯一的避让方式就是缩小，算法在 RobotViewport.ApplyGizmoLayout。
-                        -->
-                        <debug:Scene3DView GizmoTopInset="{Binding #StatusOverlay.Bounds.Height}" />
+                    <!--
+                      卡片内容分两列：左 = 3D 视口，右 = 机械臂状态栏。
+
+                      为什么状态栏不再浮在视口上：悬浮的写法是拿一块 300 宽的卡片压住视口右半边，
+                      而模型是【按视口居中】画的 —— 压住的正好是机械臂本身。停靠之后两列各占一格，
+                      视口上没有任何覆盖层，读数也照样常驻可见。
+
+                      卡片 MinWidth 520 = 状态栏一列的 300 + 它自己的左右内衬 24 + 视口下限 ~196：
+                      再窄下去视口就没法看了，所以下限定在卡片上，拖分隔条也压不跨这一列。
+                    -->
+                    <Grid Grid.Row="1" ColumnDefinitions="*,Auto">
+                        <debug:Scene3DView Grid.Column="0" />
 
                         <!--
-                          状态 HUD：悬浮右上角，IsHitTestVisible=False（在视图内部设置）。
-                          这里要自己收成内容大小（UserControl 默认会被 Grid 撑满整格），
-                          否则上面那个绑定量到的是整格高度，而不是 HUD 自己有多高。
+                          状态栏：列宽跟着内容走（Auto）；窗口变矮时自己滚动，不会被卡片裁掉下半截。
+                          Background=Transparent 是为了【能接住滚轮】：状态栏自己是 IsHitTestVisible=False 的
+                          纯读数，下面这层若没有底色就整块不可命中，滚轮会穿到卡片上、这一列反而滚不动。
                         -->
-                        <debug:RobotStatusOverlay x:Name="StatusOverlay"
-                                                  DataContext="{Binding Status}"
-                                                  HorizontalAlignment="Right" VerticalAlignment="Top" />
+                        <ScrollViewer Grid.Column="1"
+                                      Background="Transparent"
+                                      VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled">
+                            <debug:RobotStatusOverlay DataContext="{Binding Status}" />
+                        </ScrollViewer>
                     </Grid>
                 </Grid>
             </Border>

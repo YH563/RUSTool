@@ -2,7 +2,7 @@
 
     <PropertyGroup>
         <!--
-          目标框架与自研仿真包（RobotSimulation 0.2.0）对齐：它的 lib 是 net8.0
+          目标框架与自研仿真包（RobotSimulation 0.2.1）对齐：它的 lib 是 net8.0
           （库在提交 376a90f 把 net10.0 回退成 net8.0），因此整条链路 —— 三个工程加测试 —— 都在 net8.0 上。
         -->
         <TargetFramework>net8.0</TargetFramework>
