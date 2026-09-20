@@ -123,6 +123,18 @@ RUSTool.UI/preview.sh dark               # 只拍「工程师模式 · 深色」
 RUSTool.UI/preview.sh popup MenuFile     # 展开菜单后截图（菜单是 Popup，不展开拍不到）
 ```
 
+`preview.sh` 只是个 bash 包装，替你做了三件事：设 `DOTNET_ROOT`、把工作目录固定到仓库根、
+建好 `RUSTool.UI/preview/`。**Windows 或已把 `dotnet` 加进 PATH 的机器**不需要它，直接敲等价命令：
+
+```bash
+mkdir -p RUSTool.UI/preview              # 脚本会替你建；手敲要先建，--shot 不会创建目录
+dotnet run --project RUSTool.UI -- --shot RUSTool.UI/preview/02-engineer-dark.png --dark
+dotnet run --project RUSTool.UI -- --clinical          # 真实窗口 · 临床模式
+dotnet run --project RUSTool.UI -- --shot RUSTool.UI/preview/05-menu-MenuFile.png --open MenuFile
+```
+
+`--shot` 的路径按**当前工作目录**解析，所以在仓库根执行（绝对路径同样可以）。
+
 离屏渲染拿不到桌面 GL，所以截图里的 3D 区是**设计好的空状态** —— 属预期降级；
 要看真实 3D 请用 `preview.sh window`（stderr 会打印 `[3d] 就绪 …`，含 GPU 与模型加载报告）。
 

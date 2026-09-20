@@ -15,6 +15,7 @@
 | 为什么 | Avalonia 12.1.0 的源生成器要求 Roslyn 4.14+：用 SDK 8 时源生成器加载不上，`InitializeComponent` 不被生成，于是整片报 `CS0103` |
 | `global.json` | 刻意**不放** —— 钉了 SDK 版本反而编译不过 |
 | 换机器 | `~/.dotnet` 里的 SDK 或系统安装的 .NET 10 都可以，只要 `dotnet --version` ≥ 10 |
+| NuGet 源 | 仓库根 `NuGet.config`：`<clear />` 后**只**登记 nuget.org | 不依赖本机离线目录或私有源 —— Linux / Windows / CI 用同一套配置还原；`RobotSimulation` 0.1.0 / 0.2.0 / 0.2.1 都已发布在 nuget.org 上 |
 
 ```bash
 export DOTNET_ROOT="$HOME/.dotnet"
@@ -23,6 +24,18 @@ dotnet --version        # 期望 10.x
 ```
 
 `RUSTool.UI/preview.sh` 自己会设好上面两行环境变量，所以从脚本入口跑界面不需要手动导出。
+
+**它不是唯一入口**：脚本只做了三件事（设 `DOTNET_ROOT`、把工作目录固定到仓库根、建好 `RUSTool.UI/preview/`）。
+Windows（PowerShell / cmd）或已把 `dotnet` 加进 PATH 的机器直接用等价命令，行为完全一致：
+
+```powershell
+New-Item -ItemType Directory -Force RUSTool.UI/preview | Out-Null   # 脚本会替你建；--shot 不创建目录
+dotnet run --project RUSTool.UI -- --shot RUSTool.UI/preview/02-engineer-dark.png --dark
+dotnet run --project RUSTool.UI -- --clinical                        # 真实窗口 · 临床模式
+dotnet run --project RUSTool.UI -- --shot RUSTool.UI/preview/05-menu-MenuFile.png --open MenuFile
+```
+
+`--shot` 的路径按**当前工作目录**解析（脚本传的是绝对路径，手敲相对路径就要在仓库根执行）。
 
 ---
 
