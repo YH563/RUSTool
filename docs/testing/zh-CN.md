@@ -33,6 +33,7 @@ New-Item -ItemType Directory -Force RUSTool.UI/preview | Out-Null   # 脚本会�
 dotnet run --project RUSTool.UI -- --shot RUSTool.UI/preview/02-engineer-dark.png --dark
 dotnet run --project RUSTool.UI -- --clinical                        # 真实窗口 · 临床模式
 dotnet run --project RUSTool.UI -- --shot RUSTool.UI/preview/05-menu-MenuFile.png --open MenuFile
+dotnet run --project RUSTool.UI -- --shot RUSTool.UI/preview/06-engineer-status.png --status   # 展开状态浮层
 ```
 
 `--shot` 的路径按**当前工作目录**解析（脚本传的是绝对路径，手敲相对路径就要在仓库根执行）。
@@ -64,14 +65,18 @@ RUSTool.UI/preview.sh window --clinical     # 等价写法：参数透传
 
 # 3) 无 GL 时的降级：离屏截图不崩，3D 区显示设计好的空状态
 RUSTool.UI/preview.sh dark                  # 只深色那张
-RUSTool.UI/preview.sh all                   # 四张一次拍全（工程师 / 临床 × 浅色 / 深色）
+RUSTool.UI/preview.sh all                   # 五张一次拍全（工程师 / 临床 × 浅色 / 深色 + 状态浮层展开）
 
-# 4) 弹层（菜单是 Popup，不展开拍不到）
+# 4) 展开 3D 视口右上角的机械臂状态浮层（默认收起，静态截图里拍不到那枚按钮的结果）
+RUSTool.UI/preview.sh status                # -> preview/06-engineer-status.png
+
+# 5) 弹层（菜单是 Popup，不展开拍不到）
 RUSTool.UI/preview.sh popup MenuFile dark
 ```
 
 截图落在 `RUSTool.UI/preview/`（已在 `.gitignore` 里忽略），
-文件名固定为 `01-engineer-light` / `02-engineer-dark` / `03-clinical-light` / `04-clinical-dark`。
+文件名固定为 `01-engineer-light` / `02-engineer-dark` / `03-clinical-light` / `04-clinical-dark` /
+`06-engineer-status`（3D 视口右上角状态浮层展开的那一张）。
 
 **离屏截图与真实启动共用同一份组装**（`App.CreateMainViewModel`），
 所以预览图里的界面拓扑就是运行时那一份；但离屏渲染**拿不到桌面 GL**，
@@ -126,8 +131,8 @@ grep ' sim ' logs/$(date +%F).log
 | 任何代码改动 | `dotnet build RUSTool.sln` + `dotnet test tests/RUSTool.Core.Tests` |
 | `RUSTool.Core/Communication/` | 起真实后端（或本地 bridge）跑 `preview.sh window`，点「连接」，确认日志里出现 `→ 发送指令` / `← 指令 … 结果` 且状态灯变化 |
 | `RUSTool.Core/Services/` | 点动按住 / 松开（`start_jog` / `stop_jog_decel` 成对出现）；急停后确认回到「空闲」 |
-| `RUSTool.UI/Theme/` | `./preview.sh all` 看四张截图的配色；`./preview.sh popup MenuFile` 看弹层 |
-| `RUSTool.UI/Views/` | `./preview.sh window` 交互一遍受影响的面板；再 `./preview.sh all` 确认布局没塌 |
+| `RUSTool.UI/Theme/` | `./preview.sh all` 看五张截图的配色；`./preview.sh popup MenuFile` 看弹层 |
+| `RUSTool.UI/Views/` | `./preview.sh window` 交互一遍受影响的面板；再 `./preview.sh all` 确认布局没塌；动过 3D 视口右上角的覆盖层时再补一张 `./preview.sh status`（浮层展开态） |
 | `RUSTool.Visualization/` | `./preview.sh window` 看 stderr 的 `[3d] 就绪 …`（GPU + 模型报告）；再 `./preview.sh dark` 确认无 GL 时降级不崩 |
 | 模型资产（`Assets/Models/`） | 检查 `LoadReport` / stderr 里加载的是预期的 URDF（布局规则见该目录 README） |
 

@@ -3,8 +3,6 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="using:RUSTool.UI.ViewModels"
-        xmlns:debug="using:RUSTool.UI.Views.Debug"
-        xmlns:clinical="using:RUSTool.UI.Views.Clinical"
         mc:Ignorable="d" d:DesignWidth="1600" d:DesignHeight="900"
         x:Class="RUSTool.UI.Views.MainWindow"
         x:DataType="vm:MainViewModel"
@@ -113,11 +111,25 @@
             </Grid>
         </Border>
 
-        <!-- ═══ 内容区（按模式切换） ═══ -->
-        <Grid Grid.Row="1">
-            <debug:DebugWorkspace IsVisible="{Binding IsDebugMode}" />
-            <clinical:ClinicalWorkspace IsVisible="{Binding IsClinicalMode}" />
-        </Grid>
+        <!--
+          ═══ 内容区（按模式切换）═══
+
+          这里【只挂当前模式的那一个工作区】，切换由 MainWindow.axaml.cs 换
+          ContentControl.Content 完成 —— 而不是把两个工作区都挂在树上、用 IsVisible 藏一个。
+
+          为什么必须摘下来：两个工作区里各有一个 3D 视口（OpenGlControlBase，见 Scene3DView），
+          而 GL 资源是跟着【挂树期】生灭的 —— IsVisible=false 只是不合成，控件的 GL 上下文、
+          场景图、每帧重绘的渲染循环都还在。切换之后于是同时存在两套：
+          两套 GL 上下文、两份 URDF/STL 模型、两条一直在请求下一帧的循环，
+          画面会在两个视口的状态之间交替 —— 表现就是坐标系与末端法兰持续频闪（本机实测）。
+
+          摘下来的一方走到 OnOpenGlDeinit，GPU 资源在那里释放，同一时刻就只剩一个视口在画。
+          代价是切回来要重新初始化图形栈（每次切换都会有一行 [3d] 就绪，属正常），
+          这是"只有一个视口"必然的代价。
+        -->
+        <ContentControl Grid.Row="1" x:Name="WorkspaceHost"
+                        HorizontalContentAlignment="Stretch"
+                        VerticalContentAlignment="Stretch" />
 
     </Grid>
 </Window>

@@ -78,9 +78,9 @@ public partial class Scene3DView : UserControl
     /// 卡片内部不必知道上面压的是什么，界面也不必知道 gizmo 怎么算。
     /// </para>
     /// <para>
-    /// 两个工作区各取一种：工程师工作区**没有**覆盖层 —— 机械臂状态栏停靠在视口右侧的独立一列
-    /// （见 <c>DebugWorkspace.axaml</c>），视口本身不该被压住，所以那里不设这个属性；
-    /// 临床工作区右上角还是一条「末端接触力」小浮层，仍然靠它给 gizmo 让位。
+    /// 两个工作区各取一种：工程师工作区**不设**它 —— 那里的状态读数收成右上角一枚按需展开的小浮层
+    /// （见 <c>DebugWorkspace.axaml</c>），而 gizmo 在右下角，两者不打架，视口本身默认是完整的；
+    /// 临床工作区右上角是一条常驻的「末端接触力」小浮层，仍然靠它给 gizmo 让位。
     /// </para>
     /// </summary>
     public static readonly StyledProperty<double> GizmoTopInsetProperty =

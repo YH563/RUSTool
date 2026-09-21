@@ -50,7 +50,7 @@ RUSTool.sln
 │
 ├── RUSTool.UI/               ← WinExe · 唯一的应用项目（Avalonia MVVM）
 │   ├── App.axaml(.cs)        ← 应用入口 + 依赖图组装（composition root，全项目唯一 new 实现处）
-│   ├── Program.cs            ← 启动 + 离屏截图模式（--shot / --clinical / --dark）
+│   ├── Program.cs            ← 启动 + 离屏截图模式（--shot / --clinical / --dark / --status）
 │   ├── Services/Logging/
 │   │   ├── LogService.cs     — ILogService 的 Avalonia 实现（Dispatcher marshal + 落盘）
 │   │   └── SimulationLogSink.cs — 把图形栈的日志转手写进 LogService（实现 ISimulationLogSink）

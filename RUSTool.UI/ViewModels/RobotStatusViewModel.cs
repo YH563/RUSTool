@@ -1,5 +1,6 @@
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using RUSTool.Communication;
 using RUSTool.Services.Robot;
 using System;
@@ -7,11 +8,16 @@ using System;
 namespace RUSTool.UI.ViewModels;
 
 /// <summary>
-/// 机械臂实时状态（3D 场景右上角的 HUD）。
+/// 机械臂实时状态（3D 视口右上角、按需展开的 HUD）。
 ///
 /// <para>
-/// 数据来自 <see cref="IRobotService.StateUpdated"/>（<c>/state</c> 状态流）。
+/// 读数来自 <see cref="IRobotService.StateUpdated"/>（<c>/state</c> 状态流）。
 /// 状态帧在后台线程到达，因此统一 <c>Post</c> 到 UI 线程再赋值。
+/// </para>
+/// <para>
+/// 读数之外还管着一件事：这块浮层的展开 / 收起（<see cref="IsPanelVisible"/> +
+/// <see cref="TogglePanelCommand"/>）。默认收起 —— 3D 里机械臂按视口居中绘制，
+/// 常驻的读数块会压住它；显隐跟着读数的所有者走，界面层不需要再放一个标志位。
 /// </para>
 /// <para>
 /// 单位换算只在这一层做：后端用弧度，界面显示度 —— 界面代码不需要知道这件事。
@@ -67,6 +73,26 @@ public sealed partial class RobotStatusViewModel : ViewModelBase
 
     /// <summary>是否已连上控制通道（未连接时 HUD 各读数保持为 0）。</summary>
     [ObservableProperty] private bool _isConnected;
+
+    /// <summary>
+    /// 读数浮层是否展开（3D 视口右上角那枚小按钮切换）。<b>默认收起</b>。
+    ///
+    /// <para>
+    /// 默认收起的理由：3D 视口里机械臂是<b>按视口居中</b>绘制的，任何常驻的读数块
+    /// （浮在右上角，或占视口旁一列）都会压掉/挤掉一根胳膊。收起时视口右上角只剩
+    /// 一枚半透明小按钮，3D 的画面是完整的；要读数再按开。
+    /// </para>
+    /// </summary>
+    [ObservableProperty] private bool _isPanelVisible;
+
+    /// <summary>按钮文案：展开时提示可以收起，收起时说明按下去看什么。</summary>
+    public string PanelToggleText => IsPanelVisible ? "隐藏状态" : "机械臂状态";
+
+    partial void OnIsPanelVisibleChanged(bool value) => OnPropertyChanged(nameof(PanelToggleText));
+
+    /// <summary>右上角小按钮：展开 / 收起读数浮层。</summary>
+    [RelayCommand]
+    private void TogglePanel() => IsPanelVisible = !IsPanelVisible;
 
     public RobotStatusViewModel(IRobotService robot)
     {

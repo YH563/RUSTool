@@ -63,7 +63,7 @@ RUSTool.UI/
 │   └── ReplayViewModel.cs      记录 / 回放（占位）
 │
 └── Views/
-    ├── MainWindow.axaml        窗口外壳：工具栏 + 两个工作区切换
+    ├── MainWindow.axaml(.cs)   窗口外壳：工具栏 + 工作区宿主（按模式换 Content，见 9.5）
     ├── Debug/                  工程师工作区
     │   ├── DebugWorkspace.axaml        上排 3D / 影像 / 曲线，下排 指令 / 回放 / 日志
     │   ├── Scene3DView.axaml           三层叠放：占位层 + RobotViewport + 角标
@@ -71,7 +71,7 @@ RUSTool.UI/
     │   ├── ChartPanel.axaml            数据曲线（占位）
     │   ├── ArmControlPanel.axaml       点动 / MoveJ / MoveL（「按住走、松手停」）
     │   ├── ScanWorkflowPanel.axaml     四步流程面板
-    │   ├── RobotStatusOverlay.axaml    机械臂状态栏（停靠在 3D 视口右侧）
+    │   ├── RobotStatusOverlay.axaml    机械臂状态浮层（3D 视口右上角，按需展开）
     │   ├── ReplayModule.axaml          回放模块
     │   └── LogView.axaml               日志面板
     └── Clinical/               临床工作区
@@ -266,7 +266,7 @@ RUSTool.UI/
 ┌──────────────────────────────────────────────────────────────────┐
 │ 工具栏: [连接][断开] [上使能] [驱动:真实▼] │ 模式切换 │ [🛑急停] │ 状态点 │
 ├──────────────┬──────────────────────────┬─────────────────────────┤
-│ 3D场景+HUD   │ 超声影像                 │ 数据曲线                │
+│ 3D场景/HUD   │ 超声影像                 │ 数据曲线                │
 ├──────────────┴──────────────────────────┴─────────────────────────┤
 │ ┌ 控制面板(TabControl) ──────────────┐  ┌ 回放 ─────────┐ ┌ 日志 ┐ │
 │ │ [点动] [扫查流程] [伺服] [仿真] [驱动] │  │              │ │      │ │
@@ -316,11 +316,24 @@ RUSTool.UI/
 
 ### 9.1 状态 HUD
 
-机械臂状态读数（`RobotStatusOverlay`）**停靠在 3D 卡片里、视口右侧的独立一列**，`IsHitTestVisible=False`。
+机械臂状态读数（`RobotStatusOverlay`）是叠在 **3D 视口右上角的一角浮层，默认收起**：
 
-之所以不用「悬浮在视口右上角」：视图是**按视口居中**画机械臂的，一块 300 宽的悬浮卡片压掉的右半边
-正好是机械臂本身（用户看到的就是"状态把那根胳膊挡住了"）。停靠之后两列各占一格，视口上没有任何覆盖层，
-读数也照样常驻可见；窗口变矮时这一列自己滚动（宿主里的 `ScrollViewer`），不会被卡片裁掉下半截。
+- 视口右上角只有一枚半透明小按钮（文案与命令挂在同一份 VM 上：`PanelToggleText` / `TogglePanelCommand`），按下去才展开读数，再按一次收起。
+- 浮层整块 `IsHitTestVisible=False` —— 展开着的时候相机操作（左键转 / 中键平移 / 右键缩放）也**直接穿过去**，不必先把它收起来；无底色的 Panel 不参与命中，所以按钮之外的地方同样不挡。
+- 尺寸按「小一号 + 更紧凑」收敛：宽 224（原来是 300）、读数 11 号等宽、分组内衬 `6,4`，面积约原来的五成。
+
+两种「常驻」方案都试过，都否掉了：
+
+| 方案 | 问题 |
+|------|------|
+| 停靠在视口右侧的独立一列 | 视口按卡片宽度比例缩放，这一列直接吃掉 3D 的面积，卡片 `MinWidth` 被迫抬到 520 |
+| 常驻悬浮在视口右上角 | 视图是**按视口居中**画机械臂的，一块 300 宽的常驻卡片压掉的右半边正好是机械臂本身（用户看到的就是"状态把那根胳膊挡住了"） |
+
+于是改成**按需展开**：不按就没有，按下也只占右上角一角。视口平时是干净的整块，
+`GizmoTopInset` 也不需要设（朝向 gizmo 在右下角，与右上角这块互不影响）。
+
+浮层自带底色（`SurfaceRaisedBrush` + 边框 + 阴影）：场景底色本身是深灰（`SceneGraph.BackgroundColor`），
+用透明底的话浅色主题的文字会糊进场景里；按钮同理，垫一层 0.9 不透明度的卡片底而不是纯 ghost。
 
 临床模式仅显示三色灯；工程师模式显示 TCP 位姿 / 关节角 / 力矩数值。
 
@@ -345,6 +358,29 @@ RUSTool.UI/
 - `CommunityToolkit.Mvvm` 的 `ObservableProperty` / `RelayCommand`，启用编译绑定。
 - 高频更新用 `WriteableBitmap` 复用实例避免 GC。
 - 日志等长列表启用虚拟化。
+
+### 9.5 工作区挂载（同一时刻只有一个 3D 视口）
+
+`MainWindow` 的内容区是一个 `ContentControl`（`WorkspaceHost`），**里面只放当前模式的那一份工作区**；
+切换模式就换 `Content`，被换下来的那一份从可视树上摘除。两份实例都是字段级缓存复用的，
+所以与 GL 无关的界面状态 —— 滚动位置、日志面板、状态浮层展开与否 —— 来回切换都保留，
+重建的只有图形栈那一层。
+
+早期写法是「两份都挂在树上、用 `IsVisible` 藏一份」，表现为**坐标系与末端法兰持续频闪**：
+`IsVisible=false` 只是不参与合成，控件的 GL 上下文、场景图、每帧请求下一帧的渲染循环都还在，
+于是切换之后有两套 GL 上下文、两份 URDF/STL 模型、两条渲染循环同时活着，画面在两者之间交替。
+机制细节见 [`../visualization/zh-CN.md`](../visualization/zh-CN.md) 第 4.1 节。
+
+代价是切换时重建图形栈：日志里每次切换都会多一行 `[3d] 就绪 …`（同时有上一份的 `已释放 GL 资源`），
+这是「只有一个视口」必然的代价，不是异常。
+
+接线的三个细节：
+
+- 挂在 `DataContextChanged` 上而不是构造函数里做一次：数据上下文可能早于也可能晚于窗口显示
+  （真实运行在 `App` 里给、截图模式在 `Program` 里给），两种时序都走同一条「取到 VM → 挂当前模式的工作区」。
+- 换数据上下文时先退订旧 VM 的 `PropertyChanged`，不把窗口钉在旧 VM 上；只认 `IsDebugMode` 这一个属性位 ——
+  其余属性一秒一变，不该让窗口跟着做事。
+- 赋同一个实例要跳过：对同一个 `Content` 重复赋值，Avalonia 仍会走一遍摘除 / 挂载，等于白重建一次图形栈。
 
 ---
 
@@ -404,7 +440,7 @@ return new MainViewModel(robot, session, log);
 ```
 MainViewModel
 ├── Session     SessionViewModel         连接 / 使能 / 驱动 / 急停
-├── Status      RobotStatusViewModel     /state → HUD 读数
+├── Status      RobotStatusViewModel     /state → HUD 读数（右上角浮层，按需展开）
 ├── Control     RobotControlViewModel    点动 + MoveJ / MoveL
 ├── Scan        ScanWorkflowViewModel    四步扫查流程
 ├── Log         LogViewModel             日志面板
@@ -487,6 +523,7 @@ cd RUSTool.UI
 | 「急停」没有独立的后端通道 | 后端只回执 `stop`，所以急停是否按下是本地界面状态（`SessionViewModel.IsEmergencyStopped`） |
 | 深色弹层圆角为 0 | 有意为之：没有合成器时透明区会被渲染成黑色；确认有合成器后可改 `Theme` 的 `RadiusOverlay` / `ShadowOverlay` |
 | 日志会落盘 | `LogService` 默认写 `logs/`（相对**进程工作目录**），已在 `.gitignore` 里忽略 |
+| 切换模式会重建图形栈 | 工作区是「摘下来再挂上去」（同一时刻只有一个 3D 视口，见 9.5），所以每次切换日志里都会多一行 `[3d] 就绪 …`，切换后第一帧略有停顿 —— 这是消除频闪的代价，不是卡顿 |
 
 ### 13.2 待办（设计与实现之间的缺口）
 

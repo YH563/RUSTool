@@ -20,7 +20,7 @@
         <!-- ═══ 上排：3D / 影像 / 曲线 ═══ -->
         <Grid ColumnDefinitions="3*,6,2*,6,2*">
 
-            <Border Classes="card" MinWidth="520">
+            <Border Classes="card" MinWidth="320">
                 <Grid RowDefinitions="Auto,*">
                     <Border Classes="cardHeader">
                         <Grid ColumnDefinitions="*,Auto">
@@ -29,29 +29,56 @@
                         </Grid>
                     </Border>
                     <!--
-                      卡片内容分两列：左 = 3D 视口，右 = 机械臂状态栏。
+                      卡片内容就是一整块 3D 视口：机械臂状态读数不再占视口旁边的一列
+                      （那样是按卡片宽度的比例吃掉 3D 的面积），改成叠在视口右上角、
+                      按需展开的浮层 —— 不按就没有。
 
-                      为什么状态栏不再浮在视口上：悬浮的写法是拿一块 300 宽的卡片压住视口右半边，
-                      而模型是【按视口居中】画的 —— 压住的正好是机械臂本身。停靠之后两列各占一格，
-                      视口上没有任何覆盖层，读数也照样常驻可见。
-
-                      卡片 MinWidth 520 = 状态栏一列的 300 + 它自己的左右内衬 24 + 视口下限 ~196：
-                      再窄下去视口就没法看了，所以下限定在卡片上，拖分隔条也压不跨这一列。
+                      卡片 MinWidth 320 = 视口本身的可看下限（~196）+ 状态浮层不参与布局，
+                      所以下限定得比「停靠一列」那一版（520）低得多。
                     -->
-                    <Grid Grid.Row="1" ColumnDefinitions="*,Auto">
-                        <debug:Scene3DView Grid.Column="0" />
-
+                    <Grid Grid.Row="1">
+                        <debug:Scene3DView />
                         <!--
-                          状态栏：列宽跟着内容走（Auto）；窗口变矮时自己滚动，不会被卡片裁掉下半截。
-                          Background=Transparent 是为了【能接住滚轮】：状态栏自己是 IsHitTestVisible=False 的
-                          纯读数，下面这层若没有底色就整块不可命中，滚轮会穿到卡片上、这一列反而滚不动。
+                          右上角一列：上面是开关，下面是展开出来的读数浮层。
+
+                          StackPanel 自己没有底色 → 这一整块【不参与命中测试】，
+                          只有开关那一小块会挡住相机操作；读数浮层自己是
+                          IsHitTestVisible=False 的，左键转 / 中键平移 / 右键缩放
+                          都可以直接穿过它继续用。
+
+                          Margin 12 = 贴视口边内衬；Spacing 8 = 开关与浮层之间留一道缝，
+                          两者挨在一起会看成同一块东西。
                         -->
-                        <ScrollViewer Grid.Column="1"
-                                      Background="Transparent"
-                                      VerticalScrollBarVisibility="Auto"
-                                      HorizontalScrollBarVisibility="Disabled">
-                            <debug:RobotStatusOverlay DataContext="{Binding Status}" />
-                        </ScrollViewer>
+                        <StackPanel HorizontalAlignment="Right" VerticalAlignment="Top"
+                                    Margin="12" Spacing="8">
+
+                            <!--
+                              半透明开关：底色用 0.9 不透明的卡片色而不是全透明。
+                              原因是场景本身是深灰（SceneGraph.BackgroundColor），
+                              浅色主题下 ghost 按钮的文字直接压上去会糊在背景里；
+                              垫一层卡片底之后，浅色主题 = 白底、深色主题 = 墨底，
+                              两种主题下都读得清，又只占一枚按钮的位置。
+                            -->
+                            <Border HorizontalAlignment="Right"
+                                    Background="{DynamicResource SurfaceRaisedBrush}"
+                                    BorderBrush="{DynamicResource BorderDefaultBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="{DynamicResource RadiusMd}"
+                                    BoxShadow="{DynamicResource ShadowSm}"
+                                    Opacity="0.9">
+                                <Button Classes="ghost sm"
+                                        Content="{Binding Status.PanelToggleText}"
+                                        Command="{Binding Status.TogglePanelCommand}"
+                                        ToolTip.Tip="显示 / 隐藏机械臂状态读数" />
+                            </Border>
+
+                            <!-- 读数浮层：收起时整块不存在（IsVisible=false），不占任何地方。
+                                 外面这层 Border 只为把 DataContext 换成 Status ——
+                                 它自己没有底色，所以不会挡相机操作。 -->
+                            <Border IsVisible="{Binding Status.IsPanelVisible}">
+                                <debug:RobotStatusOverlay DataContext="{Binding Status}" />
+                            </Border>
+                        </StackPanel>
                     </Grid>
                 </Grid>
             </Border>

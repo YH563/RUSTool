@@ -34,6 +34,13 @@ namespace RUSTool.Visualization.Controls;
 /// </list>
 ///
 /// <para>
+/// 视口的生命期等于**挂树期**：控件离开可视树时 Avalonia 回调 <see cref="OnOpenGlDeinit"/>，
+/// GL 资源在那里释放，再挂回来会重新初始化一遍。所以本类里所有「上次算过就不用再算」的缓存
+/// 都在 <see cref="OnOpenGlInit"/> 里清零 —— 它们描的是上一份场景图与上一份 framebuffer。
+/// 界面把视口【摘下来换另一个】而不是把它藏起来（<c>IsVisible=false</c>），要的正是这个释放：
+/// 两个 GL 视口并存会让画面持续频闪（见 <c>MainWindow.axaml.cs</c>）。
+/// </para>
+/// <para>
 /// 数据入口只有一个 <see cref="JointValues"/>（纯 float 列表，单位弧度）——界面把 <c>/state</c>
 /// 的关节角喂进来，模型就动。这个属性上不出现任何 RobotSimulation / Silk.NET 类型，
 /// 因此 RUSTool.UI 可以在不引用图形栈的前提下绑定它，也仍然能被离屏截图模式渲染。
@@ -42,8 +49,8 @@ namespace RUSTool.Visualization.Controls;
 /// 数据之外还有一格布局入口 <see cref="GizmoTopInset"/>：界面的视口上**可以**叠浮动层（状态 HUD、
 /// 工具条），而库把朝向 gizmo 钉在**右下角**、位置不可调 —— 界面把浮动层的实测高度递进来，
 /// 视口自己把 gizmo 缩到它下面，于是"覆盖层压住罗盘"这件事不需要界面去猜 gizmo 的算法。
-/// 界面选择不叠任何东西（例如把状态栏停靠在视口旁边）时不必设它，走库的默认尺寸 ——
-/// 工程师工作区就是这样；临床工作区右上角那条「末端接触力」浮层仍靠它给 gizmo 让位。
+/// 界面不叠任何东西、或叠的东西**默认不存在**（工程师工作区右上角那块按需展开的状态浮层就是后者）
+/// 时不必设它，走库的默认尺寸；临床工作区右上角常驻的「末端接触力」浮层仍靠它给 gizmo 让位。
 /// </para>
 /// <para>
 /// 单击之后画什么同样不由本类决定：高亮（<c>GameObject.Highlighted</c>）与挂在被选节点下的
@@ -103,7 +110,14 @@ public sealed class RobotViewport : OpenGlControlBase
     private TimeSpan _lastFrameTime;
     private double _statsAccumulator;
 
-    // ── 指针状态：事件挂在窗口上（见 OnAttachedToVisualTree），这里只记过程 ──
+    // ── 指针状态：事件挂在窗口上（见 OnAttachedToVisualTree）──
+    /// <summary>
+    /// 指针处理器挂在哪个根上（挂树那一刻记下来）。摘树时用它精确摘钩、而不是再看
+    /// <see cref="VisualRoot"/>：那一刻它可能已经为空，漏摘就会把视口连同它的处理器一起留在窗口上
+    /// —— 而切换工作区（视口反复挂 / 摘）正是最容易踩到这条路径的场景。
+    /// </summary>
+    private InputElement? _inputRoot;
+
     private bool _dragging;
     private bool _dragged;
     private Point _pressPosition;
@@ -210,6 +224,20 @@ public sealed class RobotViewport : OpenGlControlBase
 
     protected override void OnOpenGlInit(GlInterface gl)
     {
+        // 每份 GL 生命期都从零开始算。控件会「摘下来再挂回去」—— 切换工作区走的就是这条路径
+        // （见 MainWindow.axaml.cs）—— 而那上面那份 framebuffer / 场景图 / gizmo 尺寸都已经不存在了。
+        // 这些「上次算过就不用再算」的缓存留着旧值，就是拿上一份视口的数据算这一份的画面：
+        // 尺寸恰好没变时 ApplyGizmoLayout 会以为已经算过而直接返回，gizmo 于是停在库的默认尺寸上、
+        // 不再为覆盖层让位。所以初始化这一侧先把它们清干净。
+        _pixelViewport = default;
+        _viewportSource = "尚未测量";
+        _viewportReported = false;
+        _gizmoLayout = (-1, -1, -1);
+        _jointMismatchReported = false;
+        _statsAccumulator = 0;
+        _lastFrameTime = default;
+        _clock.Restart();
+
         try
         {
             // Avalonia 只给过程地址；用 Silk 门面包一层，就是「怎么拿到 GL」的全部差异。
@@ -354,6 +382,11 @@ public sealed class RobotViewport : OpenGlControlBase
         _robotScene = null;
         _graphics = null;
         _gl = null;
+
+        // 只有视口真的离开可视树（切换工作区 / 关窗口）才会走到这里。记一行是为了让
+        // 「同一时刻只有一个视口」在日志里可查：切换前后应当看到「就绪 / 已释放」成对出现，
+        // 而不是两份「就绪」都还活着 —— 后者就是两个 GL 视口并存、画面频闪的现场。
+        Logger.Info("Viewport: 已释放 GL 资源（视口离开可视树，同一时刻只保留一份）");
     }
 
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
@@ -362,7 +395,8 @@ public sealed class RobotViewport : OpenGlControlBase
 
         // GL 控件的内容会被合成器当作一张独立表面，命中测试直接穿到父级 ——
         // 控件自己收不到指针事件。所以监听窗口，再用本控件的矩形过滤。
-        if (VisualRoot is InputElement root)
+        _inputRoot = VisualRoot as InputElement;
+        if (_inputRoot is { } root)
         {
             root.AddHandler(PointerPressedEvent, OnWindowPointerPressed,
                 RoutingStrategies.Bubble, handledEventsToo: true);
@@ -373,17 +407,27 @@ public sealed class RobotViewport : OpenGlControlBase
             root.AddHandler(PointerWheelChangedEvent, OnWindowPointerWheel,
                 RoutingStrategies.Bubble, handledEventsToo: true);
         }
+
+        // 重挂回来的视口要立刻显示【当前】关节角：邮箱在上一份生命期里被取走后是空的，
+        // 而下一帧状态未必马上到（未连后端时根本不会来），模型就会停在库的默认姿态上。
+        OnJointValuesChanged();
     }
 
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
-        if (VisualRoot is InputElement root)
+        if (_inputRoot is { } root)
         {
             root.RemoveHandler(PointerPressedEvent, OnWindowPointerPressed);
             root.RemoveHandler(PointerMovedEvent, OnWindowPointerMoved);
             root.RemoveHandler(PointerReleasedEvent, OnWindowPointerReleased);
             root.RemoveHandler(PointerWheelChangedEvent, OnWindowPointerWheel);
+            _inputRoot = null;
         }
+
+        // 拖拽是「视口还在树上」时的状态：摘下来的这一刻它已经没有意义，
+        // 留着会让重挂后的第一下点击被当成上一次拖拽的延续。
+        _dragging = false;
+        _dragged = false;
 
         base.OnDetachedFromVisualTree(e);
     }

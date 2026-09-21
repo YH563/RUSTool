@@ -82,6 +82,15 @@ internal static class Program
             Dispatcher.UIThread.RunJobs();
         }
 
+        // 可选：展开 3D 视口右上角的机械臂状态浮层。
+        // 它默认是【收起】的（收起时只有一枚小按钮），静态截图里拍不到，所以要显式按一下。
+        // 用法：--status
+        if (args.Contains("--status"))
+        {
+            vm.Status.IsPanelVisible = true;
+            Dispatcher.UIThread.RunJobs();
+        }
+
         var frame = window.CaptureRenderedFrame();
         if (frame is null)
         {
