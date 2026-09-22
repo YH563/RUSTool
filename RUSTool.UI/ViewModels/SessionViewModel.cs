@@ -90,7 +90,7 @@ public sealed partial class SessionViewModel : ViewModelBase
 
     // ── 指令（把界面动作翻译成 IRobotService 调用）──
 
-    /// <summary>连接（连 /control，成功后开启状态流并自动上使能）。</summary>
+    /// <summary>连接（连 /control，成功后开启状态流与感知流，并自动上使能）。</summary>
     [RelayCommand]
     private async Task Connect()
     {
@@ -99,6 +99,11 @@ public sealed partial class SessionViewModel : ViewModelBase
         {
             await _robot.ConnectAsync();
             _robot.StartStateStream();
+
+            // /sensor 与 /state 一样「按需连」：未连的通道后端不会发数据。
+            // 点云是建图 / 选点两步的输入（见 docs/ui/zh-CN.md 的流程图），所以跟连接一起开，
+            // 不等到某一帧界面才发现没数据。
+            _robot.StartSensorStream();
             await AutoEnableAsync();
         }
         catch (Exception ex)
@@ -108,11 +113,12 @@ public sealed partial class SessionViewModel : ViewModelBase
         }
     }
 
-    /// <summary>断开连接（同时关闭状态流）。</summary>
+    /// <summary>断开连接（同时关闭状态流与感知流）。</summary>
     [RelayCommand]
     private void Disconnect()
     {
         _robot.StopStateStream();
+        _robot.StopSensorStream();
         _robot.Disconnect();
         _session.IsConnected = false;
         _session.IsEnabled = false;

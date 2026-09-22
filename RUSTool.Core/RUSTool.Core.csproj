@@ -2,7 +2,7 @@
 
     <PropertyGroup>
         <!--
-          目标框架与自研仿真包（RobotSimulation 0.2.1）对齐：它的 lib 是 net8.0
+          目标框架与自研仿真包（RobotSimulation 0.3.1）对齐：它的 lib 仍是 net8.0
           （库在提交 376a90f 把 net10.0 回退成 net8.0），因此整条链路 —— 三个工程加测试 —— 都在 net8.0 上。
         -->
         <TargetFramework>net8.0</TargetFramework>
@@ -35,6 +35,13 @@
           版本与 RUSTool 项目保持一致。
         -->
         <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+
+        <!--
+          zstd 解压（`/sensor` 点云帧；.NET 没有内置 zstd）—— 只有 Communication/SensorFrameCodec.cs 用它。
+          协议 §3.3 的 payload 压缩算法是【头字段】encoding（zstd / raw），后端当前固定 zstd，raw 也合法。
+          纯托管实现，无本机依赖，因此在「无界面 / 无显卡 / 无网络」的单测环境里也能跑（见 SensorFrameCodecTests）。
+        -->
+        <PackageReference Include="ZstdSharp.Port" Version="0.8.8" />
     </ItemGroup>
 
 </Project>

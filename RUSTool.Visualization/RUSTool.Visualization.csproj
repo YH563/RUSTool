@@ -2,8 +2,9 @@
 
     <PropertyGroup>
         <!--
-          目标框架跟仿真包对齐：RobotSimulation 0.2.1 的 lib 目录是 net8.0
-          （库自己在提交 376a90f 把 net10.0 回退成了 net8.0），本解决方案随之整体回到 net8.0。
+          目标框架跟仿真包对齐：RobotSimulation 0.3.1 的 lib 目录仍是 net8.0
+          （库自己在提交 376a90f 把 net10.0 回退成了 net8.0，0.3.x 没有再动过），
+          本解决方案随之整体留在 net8.0。
         -->
         <TargetFramework>net8.0</TargetFramework>
         <Nullable>enable</Nullable>
@@ -22,9 +23,26 @@
             · OpenGL —— Silk.NET 后端（公开面不暴露任何 GL 类型）
           三者都不依赖 Avalonia，所以「把 GL 画进 Avalonia」这件事只发生在本项目里。
 
-          版本 0.2.1 取自 nuget.org —— 0.1.0 / 0.2.0 / 0.2.1 都已发布在那边，仓库根的
+          版本 0.3.1 取自 nuget.org —— 0.1.0 / 0.2.0 / 0.2.1 / 0.3.0 / 0.3.1 都已发布在那边，仓库根的
           NuGet.config 把源钉成 nuget.org 一个（<clear /> 后显式 add），所以本工程
           不依赖任何本机离线目录：换机器 / 上 CI 开箱即可还原。
+          （库的源码在 /home/hp/PersonalLibrary/RobotSimulation，tag 与包一一对应；
+          查某个 API 的确切语义以那份源码为准，比只读 XML 注释快。）
+
+          0.3.1 相对 0.3.0 只是补齐：Axes.AlwaysOnTop / GameObject.ShowLocalAxes —— 单个
+          GameObject 的坐标系可以声明为「画在几何之上」（默认仍是 false，锁定默认值的用例在库的
+          Tests/AxesDepthPolicyTests.cs），另含只影响发布的 CI 修复（符号包推送顺序与重试）。
+
+          0.3.0 有两处变化，本工程都已跟进：
+            · SceneGraph 线程契约收紧 —— 「场景图属主只声明一次」，点云数据（PointCloud2Data）
+              的改动也只允许在属主线程上做。属主就是 构造场景图的那个线程：本工程在
+              OnOpenGlInit 里建 RobotScene，Update / Render 也在同一条控件线程上，所以
+              不需要 ClaimOwnership；点云帧从 WebSocket 线程进来时走 RobotViewport 已有的
+              邮箱模式（关节值那条路的同款，见 SubmitPointCloud），绝不直接写场景图。
+            · SceneGraph.OrientationGizmoSize 被移除 —— 朝向 gizmo 的尺寸改归渲染器
+              （视口短边 × Renderer.GizmoSizeRatio 0.12，夹在 64~240 物理像素），场景那边只剩
+              OrientationGizmoMargin。GizmoTopInset 因此从「把 gizmo 缩到覆盖层以下」变成
+              「覆盖层下面放不下就不画」，见 RobotViewport.ApplyGizmoLayout。
 
           0.2.1 相对 0.2.0 只修一个缺陷：正运动学的乘法顺序 —— URDF 的 T_origin·R_axis(q)
           在行向量约定下必须写成 JointMotion * Origin（原来写反了），否则整条子链被摆偏。
@@ -36,9 +54,9 @@
           选中对象显示自身坐标系（SceneGraph.ShowSelectionAxes，库默认开启 —— 拾取走 PickAndSelect 即可见）、
           点云增量更新。
         -->
-        <PackageReference Include="RobotSimulation.Core" Version="0.2.1" />
-        <PackageReference Include="RobotSimulation.Robot" Version="0.2.1" />
-        <PackageReference Include="RobotSimulation.OpenGL" Version="0.2.1" />
+        <PackageReference Include="RobotSimulation.Core" Version="0.3.1" />
+        <PackageReference Include="RobotSimulation.Robot" Version="0.3.1" />
+        <PackageReference Include="RobotSimulation.OpenGL" Version="0.3.1" />
 
         <!--
           Logging/SimulationLogBridge.cs 直接把库的日志门面接到宿主日志出口上，

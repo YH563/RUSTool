@@ -13,10 +13,11 @@
 |---|---|---|---|
 | `/control` | 双向 | JSON（command / reply / event） | ✅ 已实现：必连，断线按 500ms → 10s 退避自动重连 |
 | `/state` | 服务器 → 客户端 | JSON，约 125Hz（8ms 一帧） | ✅ 已实现：按需开启，客户端只保留最新一帧 |
-| `/sensor` | 服务器 → 客户端 | 二进制帧（`uint32 LE 头长 + JSON 头 + payload`） | ⬜ 客户端已留位（`Channels.Sensor` / `SensorTypes`），**尚未解码** |
+| `/sensor` | 服务器 → 客户端 | 二进制帧（`uint32 LE 头长 + JSON 头 + payload`） | ✅ 点云已实现（`SensorFrameCodec`：zstd / raw + int16 反量化），覆盖式只保留最新一帧；影像 / 超声仍未解码 |
 
-> 常量对照：`RUSTool.Core/Communication/ProtocolConstants.cs` 的 `Channels` / `Commands` / `Events` / `SensorTypes`
-> 与本文第 3 节逐条对齐；**改协议先改那份常量**，客户端不允许出现裸字符串。
+> 常量对照：`RUSTool.Core/Communication/ProtocolConstants.cs` 的 `Channels` / `Commands` / `Events` /
+> `SensorTypes` / `SensorEncodings` / `SensorScopes` 与本文逐条对齐；**改协议先改那份常量**，
+> 客户端不允许出现裸字符串。
 
 ---
 
@@ -323,12 +324,64 @@ public partial class MainViewModel : ObservableObject
 
 ---
 
-## 5. 注意事项
+## 5. 感知流（/sensor）：点云二进制帧的解码契约
+
+与 JSON 通路完全分开：**一条 WS 二进制消息 = 一帧**。客户端实现见
+`RUSTool.Core/Communication/SensorFrameCodec.cs`（纯函数，无状态，可单测）。
+
+| 项 | 值 |
+|---|---|
+| 帧格式 | `uint32 LE 头长度` + `JSON 头`（UTF-8）+ `payload` |
+| 完整性自检 | `4 + 头长度 + payload 长度 == 消息长度`，不成立 → 整帧丢 |
+| payload 压缩 | 头字段 `encoding`：`zstd`（后端当前固定）/ `raw`；**未知值整帧丢，不猜** |
+| 解压后布局 | 每点 10 字节：`int16 x` \| `int16 y` \| `int16 z` \| `uint32 rgb`，全小端 |
+| 反量化 | `v = min + (q + 32768) × (max − min) / 65535`，`min/max` 取【本帧头里的】`range_min` / `range_max` |
+| 量化（客户端只用于造帧 / 单测） | `q = round((v − min) × 65535 / (max − min)) − 32768`，夹进 `int16` |
+| 颜色 | `0x00RRGGBB` 打包整数（`(byte)(c >> 16)` 取红），**不是** PCL 的 float 位模式 |
+| 坐标系 | `frame_id = base_link`：后端已算好变换，客户端**不做**任何坐标变换 |
+| 每帧语义 | 自包含的完整点集，**一律整帧替换**；协议里没有 delta / 差分字段 |
+| `scope` | `frame` = 单视角当前帧（10 Hz）；`map` = 累积地图快照（0.5 Hz，点数大得多）—— 两者走同一条整帧替换路径，`scope` 只用来标注读数与预期点数 |
+| 未实现的一律丢 | `type = image` / `compressed`、`dtype ≠ int16`、`fields ≠ [x,y,z,rgb]`、`encoding` 未知 |
+| 点数守卫 | 头里 `points > 4 000 000` → 整帧丢（否则会先分配几百 MB 的数组） |
+| 丢帧语义 | 覆盖式（bridge 只留最新一帧），`seq` 跳跃即丢帧；⚠️ `map_clear` 会把 `seq` 复位为 0，**不能**用单调递增做断言 |
+| 首帧 | 连接成功后 bridge 立刻推送缓存的最新一帧，不必等下一次发布 |
+
+解码产出的形状是 `SensorPointCloudFrame`：`float[] Xyz`（米，交错）+ `uint[] Rgb`（每点一个打包颜色）。
+
+**踩坑清单**（与引擎侧 `docs/Protocol/WsProtocol.md` §3.3 一一对应）：
+
+1. **必须循环收到 `EndOfMessage`**：兆级帧必然被 TCP / WS 分片，绝不能按「收到一次数据 = 一帧」写
+   （本仓库在 `ConnectionManager.ReceiveFrameAsync` 里拼帧）。
+2. **全小端**：统一 `BinaryPrimitives.Read*LittleEndian`，不要用 `BitConverter` 的本机端序。
+3. **`encoding` 要分支**：`zstd` 与 `raw` 都是协议允许的值，写死一个等于赌后端实现。
+4. **`range_min/max` 逐帧变化**：只能用本帧头里的值，禁止缓存复用（后端对退化包围盒补了 1 mm，不会除零）。
+5. **解码不在 UI 线程**：30 万点解压 + 反量化放在 WebSocket 线程（`BridgeClient.OnSensorMessage`），
+   渲染侧只保留最新一帧 —— 处理慢了就丢帧，而不是积压。
+6. **坏帧只记不抛**：覆盖式通道下坏帧可能每帧都来，客户端只记第 1 次与之后每 100 次（`BridgeClient` 的计数）。
+
+**本客户端的完整落地路径**：
+
+| 环节 | 位置 |
+|---|---|
+| 通道连接 / 分片拼帧 | `ConnectionManager.ConnectSensorAsync` · `SensorReceiveLoopAsync` |
+| 解压 + 反量化 + 自检 | `SensorFrameCodec.TryDecode`（失败返回 `null` + 中文原因） |
+| 覆盖式信箱 + 事件 | `BridgeClient.StartSensorStream` · `SensorFrameReceived` · `LatestSensorFrame` |
+| 业务门面 | `IRobotService.StartSensorStream` / `StopSensorStream` / `SensorFrameReceived` |
+| 进场景图 | 界面层适配 → `RobotViewport.SubmitPointCloud`（邮箱）→ `PointCloudLayer`（整帧替换） |
+
+> `type = image` / `ultrasound` 的帧目前会被整帧丢弃（并记一条日志）：通道与常量都在，
+> 解码待接入 —— 与 `SensorTypes` 里标注的状态一致。
+
+---
+
+## 6. 注意事项
 
 1. **频率**：状态推送 125Hz（8ms 间隔），C# 端 UI 更新建议限制在 30~60fps
    （本仓库客户端只保留最新一帧，VM 侧不再做二次限流）。
-2. **按通道分流**：状态帧走 `/state`、回执与事件走 `/control`，因此**不需要**靠字段猜消息类型。
+2. **按通道分流**：状态帧走 `/state`、回执与事件走 `/control`、感知帧走 `/sensor`，
+   因此**不需要**靠字段猜消息类型（三个接收循环各收各的通道）。
    第 4 节示例里的 `cmd` 字段判断，只是为了兼容「单连接服务器」的老写法。
 3. **掉线处理**：`/control` 由客户端自动重连（退避 500ms → 10s 封顶），
-   断线时所有未决请求被置为失败；`/state` 的重连由 `BridgeClient` 负责。
+   断线时所有未决请求被置为失败；`/state` 与 `/sensor` 的重连由 `BridgeClient` 负责
+   （`StopStateStream` / `StopSensorStream` 之后不再重连）。
 4. **地址**：仿真默认 `localhost:8765`，真实机器人运行时需确认 IP。

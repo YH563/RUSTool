@@ -17,7 +17,7 @@
 | 主题 | ✅ 全部走项目内设计系统 `Theme/`：按钮变体、语义文字类、状态灯、卡片布局类 |
 | MVVM | ✅ ViewModel 只暴露状态与命令、**没有一个值转换器**（配色走主题语义类） |
 | 业务 | ✅ 已接入 `RUSTool.Core`：`IRobotService` / `RobotSession` / `ILogService` |
-| 通信 | ✅ 经 `BridgeClient` 连后端 bridge（WebSocket：`/control` / `/state` / `/sensor`） |
+| 通信 | ✅ 经 `BridgeClient` 连后端 bridge（WebSocket：`/control` / `/state` / `/sensor`；点云帧在 WS 线程解码后进 3D 视口） |
 | 3D | ✅ 已接 `RUSTool.Visualization`：真实 GL 视口 + 图形库自带的朝向 gizmo；拿不到桌面 GL 时降级为主题化空状态 |
 | 影像 / 曲线 / 回放 | ⬜ 占位：静态图形与装饰性曲线，等真实数据源接入后替换 |
 
@@ -289,15 +289,15 @@ RUSTool.UI/
 
 ### 7.3 3D 场景图层
 
-| 图层 | 说明 |
-|------|------|
-| 机械臂 DH 模型 | 真实尺寸连杆与关节 |
-| 点云 | 预扫查生成的病人体表点云（验证建图质量） |
-| TCP 坐标系 | 工具中心点 XYZ 三轴 |
-| 规划路径线 | 预设扫查路径 |
-| 实时轨迹 | TCP 实际运动轨迹（透明度渐变） |
-| 力矢量箭头 | 末端接触力大小与方向 |
-| 超声探头模型 | 探头姿态与扫查面朝向 |
+| 图层 | 说明 | 现状 |
+|------|------|------|
+| 机械臂 DH 模型 | 真实尺寸连杆与关节 | ✅ 已接（URDF + 关节驱动） |
+| 点云 | 预扫查生成的病人体表点云（验证建图质量） | ✅ 已接：`/sensor` 帧整帧替换（当前帧 / 累积地图快照都走同一条路径） |
+| TCP 坐标系 | 工具中心点 XYZ 三轴 | ⬜ 未接（拾取某个部件时可看它自己的局部坐标轴） |
+| 规划路径线 | 预设扫查路径 | ⬜ 未接 |
+| 实时轨迹 | TCP 实际运动轨迹（透明度渐变） | ⬜ 未接 |
+| 力矢量箭头 | 末端接触力大小与方向 | ⬜ 未接（HUD 里有数值） |
+| 超声探头模型 | 探头姿态与扫查面朝向 | ⬜ 未接 |
 
 ---
 
@@ -459,11 +459,21 @@ MainViewModel
                         ▼
                    RobotViewport.JointValues ──► RobotScene.ApplyJointValues（渲染线程）
 
+/sensor 点云流 ──► MainViewModel.PointCloudFrameReceived ──► Scene3DView.OnPointCloudFrame
+                   （WS 线程；解码已由 Core 的 SensorFrameCodec 做完）
+                        │ 适配成 PointCloudFrame（两个工程互不认识的接缝）
+                        ▼
+                   RobotViewport.SubmitPointCloud（一格邮箱）──► PointCloudLayer.Apply（渲染线程）
+
 界面动作 ──► SessionViewModel / RobotControlViewModel / ScanWorkflowViewModel
           ──► IRobotService ──► BridgeClient ──► 后端 bridge
           ◄── CommandResult（回执）：写日志 + 更新状态灯
           ◄── EventNotification（plan_done 等长任务事件）：推进扫查流程
 ```
+
+> 点云那条路**不经过 XAML 绑定**：帧每秒十几张、每张几 MB，属性绑定会每帧触发通知与布局，
+> 所以走的是「VM 抛事件 → 视图转调视口方法」。两条路的规矩是同一条：数据只写邮箱一格，
+> 场景图由渲染线程独占（见 [`../visualization/zh-CN.md`](../visualization/zh-CN.md) 第 4.0 节）。
 
 ### 11.3 分层映射
 
@@ -529,10 +539,11 @@ cd RUSTool.UI
 
 1. **状态机接线**：`ScanWorkflowViewModel` 的步骤门控改为驱动 `ScanStateMachine`；
    并把 `RobotSession.TryEnter*` 接进手动 / 扫查模式仲裁（当前只有 `ExitToIdle()` 被调用）。
-2. **`/sensor` 点云通道**：`SensorTypes.PointCloud` 目前只是常量；需要二进制帧解码
-   （`ConnectionManager` 已按整帧交付原始字节）与点云渲染。
-3. **3D 点云渲染 + 选点**：`Scene3DView` 目前是「URDF 模型 + 关节驱动 + 拾取」，
-   点云图层与「点击表面选点」（raycast）尚未接（落点是 `RobotScene.Graph`）。
+2. **点云「选点」交互**：`/sensor` 点云已经解码并渲染进 3D 视口（`PointCloudLayer`），
+   但「点击点云表面取点」还没接：`RobotViewport` 的单击目前只做模型拾取
+   （库的 `SceneGraph.PickAndSelect`），点云选区 / 最近点求解与选中点标记待做。
+3. **影像 / 超声与曲线**：`/sensor` 的 `image` / `ultrasound` 帧会被整帧丢弃（只记日志），
+   解码与渲染都没有；数据曲线仍是装饰性正弦。
 4. **`set_start_pose` / `set_end_pose` 参数**：仍按「无参采集当前位姿」下发；
    若后端要求传点坐标 `[x,y,z]`（或点索引），需与后端确认后修正。
 5. **回放模块**：时间轴、A/B 循环、双轨联动都还是演示数据。
@@ -545,7 +556,7 @@ cd RUSTool.UI
 |------|------|------|
 | UI 框架 | **Avalonia 12.1.0** | 跨平台桌面；`OpenGlControlBase` 可直接嵌 GL |
 | 架构模式 | **MVVM + CommunityToolkit.Mvvm 8.4.2** | 源生成器（`ObservableProperty` / `RelayCommand`） |
-| 3D 渲染 | **`RobotSimulation` 0.2.1**（Silk.NET.OpenGL 2.23.0） | 自研图形库；隔离在 `RUSTool.Visualization` |
+| 3D 渲染 | **`RobotSimulation` 0.3.1**（Silk.NET.OpenGL 2.23.0） | 自研图形库；隔离在 `RUSTool.Visualization` |
 | 依赖注入 | 无容器，显式组合根（`App.CreateMainViewModel`） | 依赖图小而固定，引入容器反而多一层间接 |
 | 日志 | **自研 `ILogService`**（契约在 Core、实现在界面层，按天落盘） | 与图形栈日志合流（来源列 `sim`） |
 | 图表 | 占位（装饰性绘制） | 真实数据源接入时再选型 |

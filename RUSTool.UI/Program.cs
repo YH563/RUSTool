@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Styling;
 using Avalonia.Threading;
+using RUSTool.UI.Services;
 using RUSTool.UI.ViewModels;
 using RUSTool.UI.Views;
 using System;
@@ -88,6 +89,15 @@ internal static class Program
         if (args.Contains("--status"))
         {
             vm.Status.IsPanelVisible = true;
+            Dispatcher.UIThread.RunJobs();
+        }
+
+        // 可选：注入一帧合成点云（--demo-cloud）。没有后端可连时，这是唯一能把
+        // 「/sensor 解码 → 视口邮箱 → 点云图层 → GL」这条链路画进 PNG 的办法：
+        // 帧按协议的线格式真的拼了一遍、再用生产的解码器解回来，只跳过 WebSocket 传输。
+        if (args.Contains("--demo-cloud"))
+        {
+            vm.PublishPointCloud(DemoSensorFrame.Build(seq: 1024));
             Dispatcher.UIThread.RunJobs();
         }
 

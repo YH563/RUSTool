@@ -10,7 +10,7 @@
 
 | 命名空间 | 目录 | 职责 | 关键类型 |
 |---|---|---|---|
-| `RUSTool.Communication` | `Communication/` | 与 bridge 的传输：两条通道的连接、指令 / 回执匹配、状态流接收、断线重连 | `BridgeClient`、`ConnectionManager`、`BridgeProtocol`、`Channels` / `Commands` / `Events` / `SensorTypes` |
+| `RUSTool.Communication` | `Communication/` | 与 bridge 的传输：三条通道的连接、指令 / 回执匹配、状态流与感知流接收、二进制帧解码、断线重连 | `BridgeClient`、`ConnectionManager`、`BridgeProtocol`、`SensorFrameCodec`、`Channels` / `Commands` / `Events` / `SensorTypes` |
 | `RUSTool.Services.Robot` | `Services/Robot/` | 机器人业务：类型化指令 + 共享会话状态与模式互斥 | `IRobotService`、`RobotService`、`RobotSession`、`JogParameters` |
 | `RUSTool.Services.Robot.Workflows` | `Services/Robot/Workflows/` | 流程编排：把无状态指令串成有顺序的流程（只描述「状态怎么变」） | `ScanStateMachine`、`ScanStage`、`ScanTrigger` |
 | `RUSTool.Services.Logging` | `Services/Logging/` | 日志契约（实现留在界面层） | `ILogService`、`LogEntry`、`LogLevel` |
@@ -27,7 +27,7 @@ RUSTool.UI（界面层）
 │  ScanStateMachine（纯状态机）  BridgeClient（唯一门面）      │
 │                                    │                     │
 │                                    ▼                     │
-│                         ConnectionManager（两条 WebSocket）│
+│                         ConnectionManager（三条 WebSocket）│
 └──────────────────────────────────────────────────────────┘
                                      │
                                      ▼
@@ -36,7 +36,9 @@ RUSTool.UI（界面层）
 
 > **命名空间与工程名刻意不一致**：工程叫 `RUSTool.Core`，但类型仍在 `RUSTool.*` 下 —— 拆分工程之前写下的 `using` 一行都不用改（`RUSTool.Core.csproj` 的 `RootNamespace` 也设成了 `RUSTool`，保证今后新增文件不会落到 `RUSTool.Core.*`）。
 >
-> 本层唯一的第三方依赖是 `CommunityToolkit.Mvvm`（只用 `ObservableObject` 一个基类，即 `INotifyPropertyChanged` 的实现），它不依赖任何 UI 框架，因此不违反「Core 不认识界面」这条约束。
+> 本层只有两个第三方依赖，都不碰 UI 框架：
+> `CommunityToolkit.Mvvm`（只用 `ObservableObject` 一个基类，即 `INotifyPropertyChanged` 的实现）与
+> `ZstdSharp.Port`（`/sensor` 点云帧的 zstd 解压；纯托管、无本机依赖）。两者都不违反「Core 不认识界面」这条约束。
 
 ---
 
@@ -44,33 +46,39 @@ RUSTool.UI（界面层）
 
 协议契约以 [`../protocol/zh-CN.md`](../protocol/zh-CN.md) 为准，客户端负责：
 
-1. 建立 `/control`（必连）与 `/state`（按需）两条 WebSocket 通道；
+1. 建立 `/control`（必连）、`/state` 与 `/sensor`（按需）三条 WebSocket 通道；
 2. 指令下发 + 回执匹配（reply 按 `id`，event 按 `ack_id`）；
 3. 状态流接收（只保留最新一帧）；
-4. 断线重连。
+4. 感知二进制帧解码（点云，覆盖式只保留最新一帧）；
+5. 断线重连。
 
 ```
-┌─────────────────────────────────────────────────────┐
-│ BridgeClient（对外门面）                              │
-│   客户端库唯一的公共入口，供上层（UI/VM）调用            │
-└───────────┬──────────────────────────┬───────────────┘
-            │ 调用                      │ 消息到达
-┌───────────▼───────────┐   ┌──────────▼──────────────┐
-│ ConnectionManager     │   │ BridgeProtocol（静态）    │
-│ WebSocket 连接/收发/重连│   │ 消息模型 + JSON 编解码     │
-└───────────┬───────────┘   └─────────────────────────┘
-            │ 原始字节
-            ▼
-   WebSocket 传输（/control · /state）
+┌──────────────────────────────────────────────────────┐
+│ BridgeClient（对外门面）                                │
+│   客户端库唯一的公共入口，供上层（UI/VM）调用              │
+└───────────┬───────────────────────────┬──────────────┘
+            │ 调用                       │ 消息到达
+┌───────────▼────────────┐  ┌───────────▼───────────────┐
+│ ConnectionManager      │  │ BridgeProtocol（静态）      │
+│ WebSocket 连接 / 收发 / │  │ JSON 消息模型 + 编解码       │
+│ 重连（三条通道）         │  ├───────────────────────────┤
+└───────────┬────────────┘  │ SensorFrameCodec（静态）    │
+            │ 原始字节        │ /sensor 二进制帧解码        │
+            ▼               └───────────────────────────┘
+   WebSocket 传输（/control · /state · /sensor）
 ```
 
-三个类，职责单一，无多余抽象：
+四个类，职责单一，无多余抽象：
 
 | 类 | 可见性 | 职责 | 依赖 |
 |----|------|------|------|
-| `BridgeClient` | `public` | 对外 API：指令下发、事件订阅、状态获取；内部做请求追踪 | `ConnectionManager`, `BridgeProtocol` |
+| `BridgeClient` | `public` | 对外 API：指令下发、事件订阅、状态 / 感知获取；内部做请求追踪 | `ConnectionManager`, `BridgeProtocol`, `SensorFrameCodec` |
 | `ConnectionManager` | `internal` | 连接建立 / 收发循环 / 断线重连 / 退避 | 无（用 `ClientWebSocket`） |
 | `BridgeProtocol` | `public`（静态） | 消息模型定义 + JSON 编解码（纯函数） | 无 |
+| `SensorFrameCodec` | `public`（静态） | `/sensor` 二进制帧：自检 + 解压 + 反量化（纯函数） | `ZstdSharp` |
+
+> `BridgeProtocol` 管 JSON 那条通路，`SensorFrameCodec` 管二进制那条通路 —— 两者都是「无状态纯函数」，
+> 因此都能在无网络、无界面、无显卡的单测里覆盖（见第 12 节）。
 
 ---
 
@@ -111,15 +119,55 @@ public static class BridgeProtocol
 ```
 
 > 各连接收到的 JSON 先经 `TryParseReply` / `TryParseState` 分流；解析失败直接丢弃并记录日志。
-> `/sensor` 二进制帧（`uint32 LE 头长 + JSON 头 + payload`）预留，后续在 BridgeProtocol 增加解码方法，不影响现有结构。
+> `/state` 与 `/control` 走上面这套；`/sensor` 是二进制帧，走 §3.1 的 `SensorFrameCodec`（两套互不干扰）。
 
 常量放 `ProtocolConstants.cs`：
 
 ```csharp
 public static class Channels  { public const string Control = "/control"; public const string State = "/state"; public const string Sensor = "/sensor"; }
 public static class Commands  { public const string MoveJ = "movej"; /* 与 command_defs.hpp 对齐 */ }
-public static class Events    { public const string PlanDone = "plan_done"; /* 与 §5 事件清单对齐 */ }
+public static class Events    { public const string PlanDone = "plan_done"; /* 与事件清单对齐 */ }
+public static class SensorTypes    { public const string PointCloud = "pointcloud"; /* image / compressed 未解码 */ }
+public static class SensorEncodings { public const string Zstd = "zstd"; public const string Raw = "raw"; }
+public static class SensorScopes    { public const string Frame = "frame"; public const string Map = "map"; }
 ```
+
+### 3.1 感知帧解码（SensorFrameCodec.cs）
+
+`/sensor` 的线格式与解码契约以 [`../protocol/zh-CN.md`](../protocol/zh-CN.md) 第 5 节为准，
+这里是它在 Core 里的样子（纯函数、无状态、可单测）：
+
+```csharp
+public static class SensorFrameCodec
+{
+    public const int PointStride = 10;        // int16 x | int16 y | int16 z | uint32 rgb
+    public const int MaxPoints   = 4_000_000; // 守卫：头里点数超上限 → 整帧丢
+
+    // 一条 WS 消息 = 一帧；失败返回 null + 中文原因（不抛）
+    public static SensorPointCloudFrame? TryDecode(ReadOnlyMemory<byte> message, out string? error);
+
+    // 反量化 / 量化（与后端 SensorEncoder::quantize 严格互逆）
+    public static float Dequantize(short q, double min, double max);
+    public static short Quantize(double value, double min, double max);
+
+    // 组装一条 raw 帧：单测与截图模式的合成点云用（客户端本来只解码）
+    public static byte[] EncodeRaw(ReadOnlySpan<float> xyz, ReadOnlySpan<uint> rgb, int count, …);
+}
+
+public sealed record SensorPointCloudFrame(
+    float[] Xyz, uint[] Rgb, int Count,
+    uint Seq, double Timestamp,
+    string FrameId, string Encoding, string Scope);
+```
+
+三条设计取舍：
+
+1. **坏帧一律丢，不抛异常**：返回 `null` + 原因，由调用方决定记不记日志。
+   覆盖式通道下坏帧可能每帧都来，`BridgeClient` 因此只记第 1 次与之后每 100 次。
+2. **不做任何坐标变换**：帧头 `frame_id = base_link`，后端已经算好变换 ——
+   客户端多算一次就等于把点云搬到另一个位姿上。
+3. **整数契约用显式小端读**：`BinaryPrimitives.Read*LittleEndian`，不用 `BitConverter` 的本机端序，
+   也不用 `Marshal`/`MemoryMarshal.Cast` 这类「看本机端序」的捷径。
 
 ---
 
@@ -138,6 +186,8 @@ public sealed class BridgeClient : IDisposable
     public Task ConnectAsync();                   // 连 /control（必连），断线自动重连
     public void StartStateStream();               // 需要状态可视化时调用，连 /state
     public void StopStateStream();
+    public void StartSensorStream();              // 需要点云时调用，连 /sensor（未连则后端不发数据）
+    public void StopSensorStream();
 
     // ---- 指令（阻塞式，等 reply 返回）----
     public Task<CommandResult> SendAsync(string cmd, double[]? args = null,
@@ -149,6 +199,10 @@ public sealed class BridgeClient : IDisposable
     // ---- 状态流（只保留最新一帧）----
     public StateFrame? LatestState { get; }
     public event Action<StateFrame>? StateUpdated;
+
+    // ---- 感知流（/sensor，已在 WS 线程解好码；覆盖式只保留最新一帧）----
+    public SensorPointCloudFrame? LatestSensorFrame { get; }
+    public event Action<SensorPointCloudFrame>? SensorFrameReceived;
 
     // ---- 指令日志回调（组装层注入，例如接到全局日志服务）----
     public Action<string, bool>? Logger { get; set; }   // (message, isError)
@@ -189,13 +243,17 @@ internal sealed class ConnectionManager : IDisposable
     public bool IsControlConnected { get; }                             // /control 是否在线
     public event Action<ReadOnlyMemory<byte>>? ControlMessageReceived;   // /control 通道整帧
     public event Action<ReadOnlyMemory<byte>>? StateMessageReceived;     // /state 通道整帧
+    public event Action<ReadOnlyMemory<byte>>? SensorMessageReceived;    // /sensor 通道整帧（二进制，未解码）
     public event Action? ControlConnected;                              // 首次连上 / 重连成功
     public event Action? ControlDisconnected;                           // /control 断线
     public event Action? StateDisconnected;                             // /state 断线（重连归 BridgeClient）
+    public event Action? SensorDisconnected;                            // /sensor 断线（重连归 BridgeClient）
 
     public Task ConnectControlAsync(CancellationToken ct);               // 建连 + 启动重连循环
     public Task ConnectStateAsync(CancellationToken ct);                 // 单次尝试，不自动重连
     public Task DisconnectStateAsync();
+    public Task ConnectSensorAsync(CancellationToken ct);                // 同上，/sensor
+    public Task DisconnectSensorAsync();
     public Task SendAsync(ReadOnlyMemory<byte> data, CancellationToken ct);  // 走 /control
     public void DisconnectAll();
 }
@@ -203,13 +261,16 @@ internal sealed class ConnectionManager : IDisposable
 
 设计要点：
 
-- **每个通道一个 `ClientWebSocket` + 一个接收循环**，一个收一个发，不共用一个循环 ——
-  避免大 payload 阻塞指令。
+- **每个通道一个 `ClientWebSocket` + 一个接收循环**（`/control`、`/state`、`/sensor` 各一对），
+  一个收一个发，不共用一个循环 —— 避免大 payload（兆级点云帧）阻塞指令。
 - **整帧接收**：`ReceiveFrameAsync` 循环收片段直到 `EndOfMessage`，拼成一条完整消息再抛事件；
   高频状态帧下用 `ArrayPool<byte>.Shared` 租 64KB 缓冲，避免每帧分配。
 - **重连退避**：`/control` 断线后按 `ReconnectDelaysMs = [500, 1000, 2000, 5000, 10000]` ms
-  依次重试并封顶，连上即重置；`/state` 断线由 `BridgeClient` 的 `StartStateLoop` 再次触发连接
-  （同一时刻只允许一个重连循环，防止断线风暴）。
+  依次重试并封顶，连上即重置；`/state` 与 `/sensor` 断线由 `BridgeClient` 的
+  `StartStateLoop` / `StartSensorLoop` 再次触发连接（两条流各一把「同一时刻只允许一个重连循环」的闸，
+  退避固定 1s，防止断线风暴）。
+- **`/sensor` 收的是大帧**：整帧拼好后才抛 `SensorMessageReceived`，解码（解压 + 反量化）
+  也就在这条循环的线程上做完再交给上层 —— 于是 UI 线程永远不碰几 MB 的 payload。
 - **未连接时发送会抛** `InvalidOperationException("控制通道未连接")` —— 由 `BridgeClient`
   转成一次失败的 `CommandResult`，不让异常穿透到 VM。
 
@@ -270,7 +331,7 @@ UI/Sender         BridgeClient              ConnectionManager        bridge
 
 | 方法族 | 方法 | 对应指令 |
 |---|---|---|
-| 连接 | `ConnectAsync` / `Disconnect` / `StartStateStream` / `StopStateStream` | 起 `BridgeClient` 的连接与状态流（不发指令） |
+| 连接 | `ConnectAsync` / `Disconnect` / `StartStateStream` / `StopStateStream` / `StartSensorStream` / `StopSensorStream` | 起 `BridgeClient` 的连接与两条按需流（不发指令） |
 | 通用 | `SendAsync(cmd, args…)` | 任意指令（扩展用；新协议字段先加在 `ProtocolConstants`） |
 | 运动 | `MoveJAsync` / `MoveLAsync` | `movej` / `movel` |
 | 点动 | `StartJogAsync(JogParameters)` / `StopJogAsync` / `StopJogImmediateAsync` | `start_jog` / `stop_jog_decel` / `stop_jog_immediate` |
@@ -402,6 +463,7 @@ return new MainViewModel(robot, session, log);
 // 连接与状态流由界面动作驱动：
 await robot.ConnectAsync();        // 连 /control（失败/断线自动重连）
 robot.StartStateStream();          // 需要 HUD 读数时开启 /state
+robot.StartSensorStream();         // 需要点云时开启 /sensor（两者都可随时 Stop*）
 
 // 应用退出时
 robot.Dispose();                   // 断开所有连接，未决请求置失败
@@ -429,6 +491,7 @@ Core 内部**不启动任何后台任务**，也不读取任何配置 —— 连
 | 对象 | 方式 |
 |---|---|
 | `BridgeProtocol` | 用协议文档里的样例 JSON 做单元测试（reply / event / state 解析，字段缺省与坏 JSON） |
+| `SensorFrameCodec` | **已有 24 个用例**（见 [`../testing/zh-CN.md`](../testing/zh-CN.md)）：raw / zstd 两种编码、量化端点、缺省字段，以及坏帧（头长度不自洽、消息不足 4 字节、JSON 坏了、点数超上限、payload 长度与 points 不符、未知 encoding、zstd 垃圾数据、未实现的帧类型、dtype / fields / 包围盒不符、字段类型不符）—— 坏帧一律返回 `null` + 原因，绝不抛 |
 | `BridgeClient.SendAsync` | 注入 fake `ConnectionManager`，验证 id 自增 / reply 匹配 / 超时返回失败 |
 | 断线重连 | fake 连接模拟断线，验证退避序列与未决请求置失败 |
 | `ScanStateMachine` | **已有 54 个用例**（见 [`../testing/zh-CN.md`](../testing/zh-CN.md)），无需网络 / 界面 / GL |

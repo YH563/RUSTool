@@ -35,10 +35,24 @@ public sealed class RobotScene : IDisposable
 
     private readonly StringBuilder _log = new();
 
-    private RobotScene(SceneGraph graph) => Graph = graph;
+    private RobotScene(SceneGraph graph)
+    {
+        Graph = graph;
+
+        // 感知点云图层在装配时就挂上（默认不可见，收到第一帧才显示）。
+        // 结构一次性定下来，此后整份生命期只管往里灌数据 —— 见 PointCloudLayer 的注释。
+        PointCloud = new PointCloudLayer();
+        graph.Add(PointCloud.Node);
+    }
 
     /// <summary>场景图：已含默认网格 / 灯光 / 世界坐标轴与一个可用机位（由库的构造函数给出）。</summary>
     public SceneGraph Graph { get; }
+
+    /// <summary>
+    /// 感知点云图层（<c>/sensor</c>）。<see cref="ApplyPointCloudFrame"/> 是它的数据入口 ——
+    /// 相机取景刻意不看它：临床场景里点云可能铺得比机械臂大得多，按整机取景才看得清姿态。
+    /// </summary>
+    public PointCloudLayer PointCloud { get; }
 
     /// <summary>实际加载的机器人模型；未加载到模型时为 null（场景只剩网格与坐标轴）。</summary>
     public RobotModel? Robot { get; private set; }
@@ -82,6 +96,17 @@ public sealed class RobotScene : IDisposable
         Robot.ApplyJointValues(radians);
         return true;
     }
+
+    /// <summary>
+    /// 用一帧感知点云整帧替换点云图层。
+    ///
+    /// <para>
+    /// <b>只能在场景图属主线程上调用</b>（本工程里就是 <c>RobotViewport</c> 的渲染回调）——
+    /// WS 线程递进来的帧要先过那里的邮箱，这是 RobotSimulation 0.3.0 立下的线程契约。
+    /// </para>
+    /// </summary>
+    /// <returns>true = 已落地；false = 帧不自洽（已丢弃并计数）。</returns>
+    public bool ApplyPointCloudFrame(PointCloudFrame frame) => PointCloud.Apply(frame);
 
     /// <summary>
     /// 相机复位：库的默认机位 + 对准整机。

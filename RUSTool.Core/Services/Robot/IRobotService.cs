@@ -17,11 +17,20 @@ public interface IRobotService : IDisposable
     /// <summary>最新一帧状态（只保留最新）</summary>
     BridgeProtocol.StateFrame? LatestState { get; }
 
+    /// <summary>最新一帧点云（只保留最新；未开流 / 未收到时为 null）</summary>
+    SensorPointCloudFrame? LatestSensorFrame { get; }
+
     /// <summary>连接 / 断线通知</summary>
     event Action<bool>? ConnectionChanged;
 
     /// <summary>状态流更新（/state 通道，后台线程触发）</summary>
     event Action<BridgeProtocol.StateFrame>? StateUpdated;
+
+    /// <summary>
+    /// 感知流更新（/sensor 通道，**后台线程**触发；覆盖式 —— 处理慢了就丢帧）。
+    /// 回调里只该把帧交给渲染侧的邮箱，不要在这里等锁 / 做重活。
+    /// </summary>
+    event Action<SensorPointCloudFrame>? SensorFrameReceived;
 
     /// <summary>异步事件（长任务完成通知，如 plan_done）</summary>
     event Action<EventNotification>? EventReceived;
@@ -37,6 +46,12 @@ public interface IRobotService : IDisposable
 
     /// <summary>关闭 /state 状态流。</summary>
     void StopStateStream();
+
+    /// <summary>开启 /sensor 感知流（需要点云时；未开流时后端不发数据）。</summary>
+    void StartSensorStream();
+
+    /// <summary>关闭 /sensor 感知流。</summary>
+    void StopSensorStream();
 
     /// <summary>下发任意指令（扩展用）。</summary>
     Task<CommandResult> SendAsync(string cmd, double[]? args = null,

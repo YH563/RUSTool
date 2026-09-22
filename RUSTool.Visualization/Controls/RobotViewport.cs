@@ -41,16 +41,21 @@ namespace RUSTool.Visualization.Controls;
 /// 两个 GL 视口并存会让画面持续频闪（见 <c>MainWindow.axaml.cs</c>）。
 /// </para>
 /// <para>
-/// 数据入口只有一个 <see cref="JointValues"/>（纯 float 列表，单位弧度）——界面把 <c>/state</c>
-/// 的关节角喂进来，模型就动。这个属性上不出现任何 RobotSimulation / Silk.NET 类型，
-/// 因此 RUSTool.UI 可以在不引用图形栈的前提下绑定它，也仍然能被离屏截图模式渲染。
+/// 数据入口有两个，都是【纯数据、无图形类型】的，因此 RUSTool.UI 可以在不引用图形栈的前提下喂数据，
+/// 也仍然能被离屏截图模式渲染：
+/// <see cref="JointValues"/>（关节角属性，绑定即可驱动模型）与
+/// <see cref="SubmitPointCloud"/>（感知点云帧，任意线程可调）。
+/// 两者都只写自己的「邮箱」一格，真正的场景图写入发生在渲染回调里 ——
+/// RobotSimulation 0.3.0 起场景图归属主线程独占（本控件就是那个属主）。
 /// </para>
 /// <para>
 /// 数据之外还有一格布局入口 <see cref="GizmoTopInset"/>：界面的视口上**可以**叠浮动层（状态 HUD、
-/// 工具条），而库把朝向 gizmo 钉在**右下角**、位置不可调 —— 界面把浮动层的实测高度递进来，
-/// 视口自己把 gizmo 缩到它下面，于是"覆盖层压住罗盘"这件事不需要界面去猜 gizmo 的算法。
-/// 界面不叠任何东西、或叠的东西**默认不存在**（工程师工作区右上角那块按需展开的状态浮层就是后者）
-/// 时不必设它，走库的默认尺寸；临床工作区右上角常驻的「末端接触力」浮层仍靠它给 gizmo 让位。
+/// 工具条），而库把朝向 gizmo 钉在**右下角**、位置不可调。0.3.0 起它的**尺寸**也不归场景
+/// （<c>SceneGraph.OrientationGizmoSize</c> 已移除，改由渲染器按视口短边取比例），
+/// 所以界面递进来的浮动层高度只用来判断「让不让位」：覆盖层下面放不下库的最小方块就整块关掉，
+/// 于是"覆盖层压住罗盘"这件事仍然不需要界面去猜 gizmo 的算法。界面不叠任何东西、
+/// 或叠的东西**默认不存在**（工程师工作区右上角那块按需展开的状态浮层就是后者）时不必设它；
+/// 临床工作区右上角常驻的「末端接触力」浮层仍靠它决定 gizmo 让不让位。
 /// </para>
 /// <para>
 /// 单击之后画什么同样不由本类决定：高亮（<c>GameObject.Highlighted</c>）与挂在被选节点下的
@@ -77,11 +82,13 @@ public sealed class RobotViewport : OpenGlControlBase
     private const double StatsIntervalSeconds = 1.0;
 
     // ── 朝向 gizmo 的布局（见 ApplyGizmoLayout）──
-    /// <summary>库的默认边长（逻辑像素）—— 上方没有覆盖层时的上限。</summary>
-    private const double GizmoMaxSize = 160;
-
-    /// <summary>再挤也不小于这个边长（逻辑像素），否则方向读不出来。</summary>
-    private const double GizmoMinSize = 56;
+    /// <summary>
+    /// 库给 gizmo 的尺寸下限（物理像素）。0.3.0 起 gizmo 的**尺寸归渲染器**：
+    /// 视口短边 × <c>Renderer.GizmoSizeRatio</c>（0.12），再夹在 [64, 240] 像素之间，
+    /// 场景那边只剩 <c>OrientationGizmoMargin</c> 一个旋钮。这里要的就是那个 64，
+    /// 用来判断「覆盖层下面还放不放得下库的那块最小方块」。
+    /// </summary>
+    private const double GizmoLibraryMinSize = 64;
 
     /// <summary>
     /// 与视口右下边缘的间隙（逻辑像素）。库的默认是 16，这里取 12 —— 和卡片里其他角标（左下角
@@ -105,6 +112,21 @@ public sealed class RobotViewport : OpenGlControlBase
     private readonly object _jointsLock = new();
     private float[]? _pendingJoints;
     private bool _jointMismatchReported;
+
+    // ── 点云帧邮箱：同一条规矩（覆盖式）——WS 线程写、渲染线程取走即置空 ──
+    private readonly object _cloudLock = new();
+    private PointCloudFrame? _pendingCloud;
+
+    /// <summary>
+    /// 最后一帧点云（只留引用，不复制）。用途只有一个：视口重挂回来时（切换工作区）把【当前画面】
+    /// 立刻补上 —— 那时候上一份场景图连同它的点云图层已经释放了，而下一帧感知数据未必马上到
+    /// （未连后端时根本不会来）。与关节值那条「重挂要显示当前关节角」是同一个理由。
+    /// 代价是常驻一帧的数组（30 万点约 4.8 MB；地图快照更大），换来的是切换工作区不闪一下空白。
+    /// </summary>
+    private PointCloudFrame? _lastCloud;
+
+    /// <summary>本控件累计落地 / 被覆盖丢弃的点云帧数（只用于那行每秒诊断）。</summary>
+    private long _cloudDropped;
 
     private readonly Stopwatch _clock = Stopwatch.StartNew();
     private TimeSpan _lastFrameTime;
@@ -157,9 +179,16 @@ public sealed class RobotViewport : OpenGlControlBase
     /// 视口顶部被界面覆盖层占掉的高度（逻辑像素）—— 例如 3D 卡片右上角那块「机械臂状态」HUD。
     ///
     /// <para>
-    /// 库把朝向 gizmo 钉在视口右下角、位置不可调，而覆盖层是从上往下压的：两者抢同一块地方时，
-    /// 能让路的只有 gizmo 的尺寸。填上覆盖层的实测高度即可（绑它的 <c>Bounds.Height</c>），
-    /// gizmo 会自动收在这条线下面；<c>0</c>（默认）＝ 上方没有覆盖层，用库的默认尺寸。
+    /// 库把朝向 gizmo 钉在视口右下角、位置不可调；它的**尺寸**从 0.3.0 起归渲染器
+    /// （视口短边 × 0.12，夹在 64~240 物理像素），场景这边只剩边距 —— 所以界面再用不上
+    /// 「把 gizmo 缩小让它待在覆盖层下面」这条老路，本属性现在的含义是**让不让位**：
+    /// 覆盖层下面剩下的高度（<c>视口高 − 覆盖层 − 间隙 − 下边距</c>）不足库的最小方块时，
+    /// 视口干脆把 gizmo 关掉，而不是让它从 HUD 里露出来。
+    /// </para>
+    /// <para>
+    /// 填上覆盖层的实测高度即可（绑它的 <c>Bounds.Height</c>）；<c>0</c>（默认）＝ 上方没有
+    /// 覆盖层。绝大多数卡片高度下这条判断都不会触发（临床那块 HUD 只有一百多逻辑像素），
+    /// 它只是把极端矮的视口挡在「HUD 中间冒出三根箭头」之外。
     /// </para>
     /// </summary>
     public static readonly StyledProperty<double> GizmoTopInsetProperty =
@@ -192,6 +221,37 @@ public sealed class RobotViewport : OpenGlControlBase
 
         _robotScene.ResetView();
         RequestNextFrameRendering();
+    }
+
+    /// <summary>
+    /// 递入一帧感知点云（<b>可从任意线程调用</b> —— 解码在 WS 线程上做，这里就是这么被调的）。
+    ///
+    /// <para>
+    /// 与关节值同一条规矩：邮箱只留【最新一格】。上一帧还没被渲染线程取走就被这一帧覆盖时，
+    /// 旧的那帧直接丢并记一笔（后端本来就是覆盖式推送：慢客户端丢帧，而不是积压）。
+    /// 场景图归渲染线程独占，所以这里绝不碰 <c>PointCloud2Data</c>，
+    /// 只把纯数据放进邮箱，落地发生在 <see cref="OnOpenGlRender"/> 里。
+    /// </para>
+    /// <para>
+    /// 收到帧时会请求下一帧渲染 —— 没有新帧的时候视口照旧按需重绘，不空转。
+    /// </para>
+    /// </summary>
+    /// <param name="frame">已反量化的点云帧；数组按所有权交接（投递后不要改它）。</param>
+    public void SubmitPointCloud(PointCloudFrame frame)
+    {
+        lock (_cloudLock)
+        {
+            if (_pendingCloud is not null)
+                _cloudDropped++;   // 上一帧还没画就被顶掉了
+            _pendingCloud = frame;
+        }
+
+        // RequestNextFrameRendering 是 Avalonia 的控件 API（通常从 UI 线程调）。
+        // 本方法的调用者是 WS 线程，所以不在 UI 线程时 marshal 一次；顺手也就有了「同一批帧只请求一次重绘」的效果。
+        if (Dispatcher.UIThread.CheckAccess())
+            RequestNextFrameRendering();
+        else
+            Dispatcher.UIThread.Post(RequestNextFrameRendering);
     }
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
@@ -253,8 +313,15 @@ public sealed class RobotViewport : OpenGlControlBase
 
             GraphicsDeviceInfo device = _graphics.DeviceInfo;
 
-            // 场景装配在这里完成：默认 SceneGraph（网格 / 灯光 / 世界轴 / 可用机位）+ 机器人模型。
+            // 场景装配在这里完成：默认 SceneGraph（网格 / 灯光 / 世界坐标轴 / 可用机位）+ 机器人模型
+            // + 感知点云图层。
             _robotScene = RobotScene.CreateDefault();
+
+            // 重挂回来的视口要立刻显示【当前】点云：上一份场景图连同它的点云图层已经释放了，
+            // 而下一帧感知数据未必马上到（未连后端时根本不会来）。与 OnAttachedToVisualTree 里
+            // 「重挂要显示当前关节角」是同一个理由，只是这里补的是最后一帧点云。
+            if (_lastCloud is { } cloud)
+                _robotScene.ApplyPointCloudFrame(cloud);
 
             // 库的默认机位按「几米见方」的场景设计，这里按整机包围盒重新取景（同 ResetView）。
             _robotScene.ResetView();
@@ -286,8 +353,8 @@ public sealed class RobotViewport : OpenGlControlBase
 
         SceneGraph scene = _robotScene.Graph;
 
-        // 覆盖层（界面若在视口上叠了浮动层）占掉的高度由界面递进来 —— 借这一步把 gizmo 收在它下面；
-        // 界面不叠东西时这个值是 0，gizmo 就用库的默认尺寸。
+        // 覆盖层（界面若在视口上叠了浮动层）占掉的高度由界面递进来 —— 借这一步决定 gizmo
+        // 让不让位（0.3.0 起它的尺寸归渲染器，视口只能决定画不画），界面不叠东西时这个值是 0。
         // 缩放因子同样取量出来的「布局单位 → 物理像素」实际比例：gizmo 与画面同处一个像素网格，
         // 界面的逻辑量（覆盖层高度、边距）才不会在分数缩放下与画面错位。
         ApplyGizmoLayout(pixelHeight, PixelsPerLayoutUnit.Y, scene);
@@ -309,6 +376,20 @@ public sealed class RobotViewport : OpenGlControlBase
             Dispatcher.UIThread.Post(() => Picked?.Invoke(message));
         }
 
+        // 取走本帧的点云（取走即置空），在渲染回调里落地 —— 场景图的写操作只发生在这一条线程上。
+        PointCloudFrame? cloud;
+        lock (_cloudLock)
+        {
+            cloud = _pendingCloud;
+            _pendingCloud = null;
+        }
+
+        if (cloud is not null)
+        {
+            _lastCloud = cloud;
+            _robotScene.ApplyPointCloudFrame(cloud);
+        }
+
         TimeSpan now = _clock.Elapsed;
         double deltaSeconds = Math.Clamp((now - _lastFrameTime).TotalSeconds, 0, 0.25);
         _lastFrameTime = now;
@@ -327,25 +408,59 @@ public sealed class RobotViewport : OpenGlControlBase
         {
             _statsAccumulator = 0;
             string line = $"{stats.Fps:F1} FPS · 单帧 {stats.LastFrameMilliseconds:F2} ms · " +
-                          $"平均 {stats.AverageFrameMilliseconds:F2} ms · 累计 {stats.FrameCount} 帧";
+                          $"平均 {stats.AverageFrameMilliseconds:F2} ms · 累计 {stats.FrameCount} 帧" +
+                          PointCloudSuffix();
             Dispatcher.UIThread.Post(() => Stats?.Invoke(line));
         }
     }
 
     /// <summary>
-    /// 给朝向 gizmo 定尺寸：让它整块待在「顶部覆盖层下沿」以下。
+    /// 每秒那行里的点云片段：只在真的收到过点云时才追加（没接后端时这行与从前一字不差）。
     ///
     /// <para>
-    /// 算的是覆盖层下面还剩多大的正方形 —— <c>视口高 − 覆盖层占位 − 间隙 − 下边距</c>，
-    /// 再夹在 [<see cref="GizmoMinSize"/>, <see cref="GizmoMaxSize"/>] 之间。取值保守到把 gizmo 的
-    /// 整个正方形框进去（库的正交视野是箭头的 2.2 倍，罗盘只占正方形的 0.95，剩下的余量留给箭头端点），
-    /// 所以宁可小一点也不要贴上去。
+    /// 点数是渲染侧当前实际持有的量、<c>seq</c> 是最后一帧的序号（后端 <c>map_clear</c> 会把它复位，
+    /// 所以只当读数看）；「丢 N 帧」是邮箱被覆盖的次数 —— 它一直涨而不是 0，说明渲染跟不上推送
+    /// （后端本来就只发最新一帧，这里丢的是我们没来得及画的那几帧）。
+    /// </para>
+    /// <para>
+    /// <b>只能在渲染线程上调用</b>：它读的是场景图里的点云数据（属主线程独占），
+    /// 而那行文字是在这里拼好后才 <c>Post</c> 给 UI 线程的。
+    /// </para>
+    /// </summary>
+    private string PointCloudSuffix()
+    {
+        if (_robotScene is not { } scene || scene.PointCloud.AppliedFrames == 0)
+            return "";
+
+        long dropped;
+        lock (_cloudLock)
+            dropped = _cloudDropped;
+
+        PointCloudLayer layer = scene.PointCloud;
+        string suffix = $" · 点云 {layer.Count} 点 · seq {layer.LastSeq}";
+        if (layer.LastScope.Length > 0)
+            suffix += $" · {layer.LastScope}";
+        if (layer.RejectedFrames > 0)
+            suffix += $" · 坏帧 {layer.RejectedFrames}";
+        if (dropped > 0)
+            suffix += $" · 丢 {dropped}";
+        return suffix;
+    }
+
+    /// <summary>
+    /// 摆放朝向 gizmo：定它与右下角的间隙，并决定「顶部覆盖层之下还放不放得下」。
+    ///
+    /// <para>
+    /// 0.3.0 起尺寸不归场景（<c>SceneGraph.OrientationGizmoSize</c> 已移除），改由渲染器按视口短边
+    /// 取比例再夹上下限，所以这里不再算边长，只算**还剩多少地方** ——
+    /// <c>视口高 − 覆盖层占位 − 间隙 − 下边距</c>，够不着库的最小方块就整块关掉
+    /// （<see cref="GizmoLibraryMinSize"/> 记的就是库那条 64 px 下限）。原先是「把 gizmo 缩小到这条线
+    /// 以下」，尺寸交还给库之后，能做的只剩「放不下就不画」。
     /// </para>
     /// <para>
     /// 单位：库按【物理像素】量 gizmo（它与渲染面同一把尺），界面按【逻辑像素】量覆盖层，
-    /// 因此这里把逻辑量乘上 <c>RenderScaling</c> —— 于是 HiDPI 屏上 gizmo 的逻辑尺寸既不缩水，
-    /// 也不会因为覆盖层换算后看着更小就反过来放大到撞上 HUD。缩放为 1 时两把尺一样长，
-    /// 交给库的就是上面这些逻辑值本身（只有边距按本控件的 12，而不是库的 16）。
+    /// 因此这里把逻辑量乘上 <c>RenderScaling</c> 再和库的下限比。缩放为 1 时两把尺一样长，
+    /// 交给库的边距就是上面那个逻辑值本身（本控件的 12，而不是库的 16）。
     /// </para>
     /// </summary>
     private void ApplyGizmoLayout(int pixelHeight, double scaling, SceneGraph scene)
@@ -359,15 +474,12 @@ public sealed class RobotViewport : OpenGlControlBase
         _gizmoLayout = (pixelHeight, scaling, inset);
 
         float margin = (float)Math.Round(GizmoEdgeMargin * scaling);
-        float cap = (float)(GizmoMaxSize * scaling);
-        float floor = (float)(GizmoMinSize * scaling);
 
-        // 从上往下逐段扣：覆盖层 → 间隙 → 下边距；剩下的高度就是正方形边长。
+        // 从上往下逐段扣：覆盖层 → 间隙 → 下边距；剩下的高度就是 gizmo 能占的那块地方。
         var available = (float)(pixelHeight - (inset + GizmoTopGap) * scaling - margin);
-        float size = Math.Clamp(available, floor, cap);
 
         scene.OrientationGizmoMargin = margin;
-        scene.OrientationGizmoSize = size;
+        scene.ShowOrientationGizmo = available >= GizmoLibraryMinSize;
     }
 
     protected override void OnOpenGlDeinit(GlInterface gl)

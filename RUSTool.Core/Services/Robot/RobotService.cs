@@ -18,6 +18,7 @@ public sealed class RobotService : IRobotService
         _client = client;
         _client.ConnectionChanged += connected => ConnectionChanged?.Invoke(connected);
         _client.StateUpdated += frame => StateUpdated?.Invoke(frame);
+        _client.SensorFrameReceived += frame => SensorFrameReceived?.Invoke(frame);
         _client.EventReceived += evt => EventReceived?.Invoke(evt);
     }
 
@@ -25,8 +26,11 @@ public sealed class RobotService : IRobotService
 
     public BridgeProtocol.StateFrame? LatestState => _client.LatestState;
 
+    public SensorPointCloudFrame? LatestSensorFrame => _client.LatestSensorFrame;
+
     public event Action<bool>? ConnectionChanged;
     public event Action<BridgeProtocol.StateFrame>? StateUpdated;
+    public event Action<SensorPointCloudFrame>? SensorFrameReceived;
     public event Action<EventNotification>? EventReceived;
 
     public Task ConnectAsync() => _client.ConnectAsync();
@@ -36,6 +40,10 @@ public sealed class RobotService : IRobotService
     public void StartStateStream() => _client.StartStateStream();
 
     public void StopStateStream() => _client.StopStateStream();
+
+    public void StartSensorStream() => _client.StartSensorStream();
+
+    public void StopSensorStream() => _client.StopSensorStream();
 
     public Task<CommandResult> SendAsync(string cmd, double[]? args = null,
         int timeoutMs = 5000, CancellationToken ct = default)

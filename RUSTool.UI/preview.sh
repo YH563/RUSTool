@@ -12,7 +12,9 @@
 #   ./preview.sh clinical-dark    临床模式 · 深色截图    -> preview/04-clinical-dark.png
 #   ./preview.sh status           工程师模式 · 展开机械臂状态浮层
 #                                                      -> preview/06-engineer-status.png
-#   ./preview.sh all              以上五张一次拍全
+#   ./preview.sh cloud            工程师模式 · 合成点云（走 /sensor 解码那条真链路）
+#                                                      -> preview/07-engineer-cloud.png
+#   ./preview.sh all              以上六张一次拍全
 #
 #   ./preview.sh popup <菜单名> [dark]
 #                                 展开菜单后截图。菜单栏下拉本身是 Popup，
@@ -60,12 +62,16 @@ case "${1:-window}" in
     status)
         run --shot "$PREVIEW/06-engineer-status.png" --status
         ;;
+    cloud)
+        run --shot "$PREVIEW/07-engineer-cloud.png" --demo-cloud
+        ;;
     all)
         run --shot "$PREVIEW/01-engineer-light.png"
         run --shot "$PREVIEW/02-engineer-dark.png" --dark
         run --shot "$PREVIEW/03-clinical-light.png" --clinical
         run --shot "$PREVIEW/04-clinical-dark.png" --clinical --dark
         run --shot "$PREVIEW/06-engineer-status.png" --status
+        run --shot "$PREVIEW/07-engineer-cloud.png" --demo-cloud
         ;;
     popup)
         name="${2:-MenuFile}"
@@ -77,7 +83,7 @@ case "${1:-window}" in
         ;;
     *)
         echo "未知参数：$1" >&2
-        echo "可用：window [参数…] | clinical | light | dark | clinical-light | clinical-dark | status | all | popup <菜单名> [dark]" >&2
+        echo "可用：window [参数…] | clinical | light | dark | clinical-light | clinical-dark | status | cloud | all | popup <菜单名> [dark]" >&2
         exit 2
         ;;
 esac

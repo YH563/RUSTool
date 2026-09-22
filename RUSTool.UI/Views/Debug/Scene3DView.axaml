@@ -31,10 +31,11 @@
                        Foreground="{DynamicResource TextTertiaryBrush}" />
 
             <!--
-              右下角的朝向 gizmo 不再由界面绘制：仿真包 0.2.1 的默认环境自带
+              右下角的朝向 gizmo 不再由界面绘制：仿真包自带的默认环境就有
               （SceneGraph.ShowOrientationGizmo 默认为 true），由库的渲染器画进视口自己的右下角小视口 ——
-              跟随相机、恒定像素尺寸、不会被模型遮挡、也不参与拾取（尺寸/边距见库的
-              OrientationGizmoSize / OrientationGizmoMargin）。界面这边再画一份静态坐标轴只会和它叠在一起。
+              跟随相机、恒定像素尺寸、不会被模型遮挡、也不参与拾取。它的尺寸归渲染器（0.3.0 起：
+              视口短边 × 0.12，夹在 64~240 px），场景那边只剩边距 OrientationGizmoMargin 与
+              「画不画」这个开关。界面这边再画一份静态坐标轴只会和它叠在一起。
             -->
 
             <!-- ② 3D 视口：关节角来自状态帧（弧度）；初始化失败时它自己隐藏，不去打扰上面那层 -->

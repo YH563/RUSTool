@@ -9,9 +9,9 @@ using System.Threading.Tasks;
 namespace RUSTool.Communication;
 
 /// <summary>
-/// 连接管理：/control + /state 两个通道，各一个 ClientWebSocket + 一个接收循环。
+/// 连接管理：/control + /state + /sensor 三条通道，各一个 ClientWebSocket + 一个接收循环。
 /// /control 断线后自动重连（500ms → 1s → 2s → 5s → 10s 封顶，连上即重置）；
-/// /state 断线后由 BridgeClient 的 StartStateStream 再次触发连接。
+/// /state 与 /sensor 断线后由 BridgeClient 的 Start*Stream 再次触发连接。
 /// </summary>
 internal sealed class ConnectionManager : IDisposable
 {
@@ -22,6 +22,7 @@ internal sealed class ConnectionManager : IDisposable
 
     private ClientWebSocket? _controlWs;
     private ClientWebSocket? _stateWs;
+    private ClientWebSocket? _sensorWs;
     private CancellationTokenSource? _controlCts;
     private Task? _controlLoopTask;
     private bool _controlRequested;
@@ -33,12 +34,16 @@ internal sealed class ConnectionManager : IDisposable
     public event Action<ReadOnlyMemory<byte>>? ControlMessageReceived;
     /// <summary>/state 通道收到整帧文本/二进制（原样字节）</summary>
     public event Action<ReadOnlyMemory<byte>>? StateMessageReceived;
+    /// <summary>/sensor 通道收到整帧二进制（原样字节，未解码）</summary>
+    public event Action<ReadOnlyMemory<byte>>? SensorMessageReceived;
     /// <summary>/control 连上通知（含重连成功后）</summary>
     public event Action? ControlConnected;
     /// <summary>/control 断线通知（重连由本类内部负责）</summary>
     public event Action? ControlDisconnected;
     /// <summary>/state 断线通知（重连由 BridgeClient 负责）</summary>
     public event Action? StateDisconnected;
+    /// <summary>/sensor 断线通知（重连由 BridgeClient 负责）</summary>
+    public event Action? SensorDisconnected;
 
     public ConnectionManager(string host, ushort port)
     {
@@ -82,6 +87,21 @@ internal sealed class ConnectionManager : IDisposable
         _ = Task.Run(() => StateReceiveLoopAsync(ws, ct), CancellationToken.None);
     }
 
+    /// <summary>建立 /sensor 连接（单次尝试，不做自动重连）。</summary>
+    public async Task ConnectSensorAsync(CancellationToken ct)
+    {
+        // 若已有旧连接则先断开，避免叠加
+        await DisconnectSensorAsync();
+        var ws = await ConnectAsync(Channels.Sensor, ct);
+        if (ct.IsCancellationRequested)
+        {
+            await CloseAsync(ws);
+            throw new OperationCanceledException(ct);
+        }
+        _sensorWs = ws;
+        _ = Task.Run(() => SensorReceiveLoopAsync(ws, ct), CancellationToken.None);
+    }
+
     /// <summary>沿 /control 通道发送整帧文本。</summary>
     public async Task SendAsync(ReadOnlyMemory<byte> data, CancellationToken ct = default)
     {
@@ -101,6 +121,16 @@ internal sealed class ConnectionManager : IDisposable
         await CloseAsync(ws);
     }
 
+    /// <summary>断开 /sensor 通道。</summary>
+    public async Task DisconnectSensorAsync()
+    {
+        var ws = _sensorWs;
+        if (ws is null)
+            return;
+        _sensorWs = null;
+        await CloseAsync(ws);
+    }
+
     /// <summary>断开所有通道，停止重连循环。</summary>
     public void DisconnectAll()
     {
@@ -115,6 +145,8 @@ internal sealed class ConnectionManager : IDisposable
         _controlWs = null;
         _stateWs?.Dispose();
         _stateWs = null;
+        _sensorWs?.Dispose();
+        _sensorWs = null;
     }
 
     // ────────────── 内部 ──────────────
@@ -230,6 +262,37 @@ internal sealed class ConnectionManager : IDisposable
         finally
         {
             StateDisconnected?.Invoke();
+            ws.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// /sensor 接收循环：与 /state 同构，但帧是二进制的、且可能几 MB ——
+    /// <see cref="ReceiveFrameAsync"/> 已经把分片拼回一条完整消息（绝不能按「收到一次数据 = 一帧」处理）。
+    /// </summary>
+    private async Task SensorReceiveLoopAsync(ClientWebSocket ws, CancellationToken ct)
+    {
+        try
+        {
+            while (ws.State == WebSocketState.Open && !ct.IsCancellationRequested)
+            {
+                var frame = await ReceiveFrameAsync(ws, ct);
+                if (frame is null)
+                    break;
+                SensorMessageReceived?.Invoke(frame.Value);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // 连接被取消，正常退出
+        }
+        catch (Exception)
+        {
+            // 断开，交给 BridgeClient 重连
+        }
+        finally
+        {
+            SensorDisconnected?.Invoke();
             ws.Dispose();
         }
     }

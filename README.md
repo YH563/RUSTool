@@ -14,10 +14,10 @@
 
 | 工程 | 类型 | 职责 | 依赖 |
 |---|---|---|---|
-| **`RUSTool.Core`** | 类库 | 纯逻辑层：bridge 通信客户端（`BridgeClient` / `ConnectionManager` / `BridgeProtocol`）、机器人业务服务（`IRobotService` / `RobotService` / `RobotSession`）、流程状态机（`ScanStateMachine`）、日志契约（`ILogService`）。零界面、零图形依赖 | `CommunityToolkit.Mvvm`（仅 `ObservableObject`） |
+| **`RUSTool.Core`** | 类库 | 纯逻辑层：bridge 通信客户端（`BridgeClient` / `ConnectionManager` / `BridgeProtocol` / `SensorFrameCodec`）、机器人业务服务（`IRobotService` / `RobotService` / `RobotSession`）、流程状态机（`ScanStateMachine`）、日志契约（`ILogService`）。零界面、零图形依赖 | `CommunityToolkit.Mvvm`（仅 `ObservableObject`）、`ZstdSharp.Port`（`/sensor` 点云帧解压） |
 | **`RUSTool.UI`** | WinExe | **唯一的应用**（`dotnet run` 起来的就是它）：Avalonia 界面 + 设计系统 `Theme/` + 依赖图组装（唯一组合根） | `Core`、`Visualization`、Avalonia 12.1.0、CommunityToolkit.Mvvm 8.4.2、Avalonia.Headless（截图） |
-| **`RUSTool.Visualization`** | 类库 | 图形栈的**隔离容器**：`RobotViewport`（内嵌 3D 视口）、`RobotScene`（URDF + 关节驱动）、`SimulationLogBridge`（库日志接出）。Silk.NET / OpenGL / `RobotSimulation` 只在这里出现 | `Core` 无关，依赖 `RobotSimulation` 0.2.1、Silk.NET.OpenGL 2.23.0、Avalonia 12.1.0 |
-| *(test) `tests/RUSTool.Core.Tests`* | xUnit | 纯逻辑单测：`ScanStateMachine` 54 个用例，不依赖网络 / 界面 / 图形栈。**不发布** | `Core` |
+| **`RUSTool.Visualization`** | 类库 | 图形栈的**隔离容器**：`RobotViewport`（内嵌 3D 视口）、`RobotScene` + `PointCloudLayer`（URDF + 关节驱动 + 感知点云）、`SimulationLogBridge`（库日志接出）。Silk.NET / OpenGL / `RobotSimulation` 只在这里出现 | `Core` 无关，依赖 `RobotSimulation` 0.3.1、Silk.NET.OpenGL 2.23.0、Avalonia 12.1.0 |
+| *(test) `tests/RUSTool.Core.Tests`* | xUnit | 纯逻辑单测：`ScanStateMachine` 54 + `SensorFrameCodec` 24 = **78 个用例**，不依赖网络 / 界面 / 图形栈。**不发布** | `Core` |
 | *(data) `RUSTool.Visualization/Assets/Models`* | 数据 | 随编译复制到输出目录的 URDF + mesh（首选真机模型、兜底 URDF 内置几何） | — |
 
 依赖方向是**单向**的，由编译器强制：`RUSTool.UI` → `RUSTool.Core`、`RUSTool.UI` → `RUSTool.Visualization`。
@@ -26,29 +26,31 @@
 RUSTool.sln
 ├── RUSTool.Core/              类库 · 纯逻辑层（不得出现 Avalonia / XAML / Silk.NET / OpenGL）
 │   ├── Communication/         通信客户端：BridgeClient（门面）· ConnectionManager（连接/重连）
-│   │                          · BridgeProtocol（消息模型 + JSON 编解码）· ProtocolConstants（指令/事件常量）
+│   │                          · BridgeProtocol（消息模型 + JSON 编解码）· SensorFrameCodec（/sensor 点云帧解码）
+│   │                          · ProtocolConstants（通道/指令/事件/感知常量）
 │   ├── Services/Robot/        业务层：IRobotService（契约）· RobotService（实现）· RobotSession（共享状态 + 模式仲裁）
 │   │   └── Workflows/         ScanStateMachine.cs —— 扫查流程状态机（零依赖，可脱离网络 / 界面单测）
 │   └── Services/Logging/      ILogService（契约；实现留在界面层）
 │
 ├── RUSTool.UI/                WinExe · 唯一的应用项目
-│   ├── Program.cs             进程入口：正常启动 / `--shot` 离屏截图
+│   ├── Program.cs             进程入口：正常启动 / `--shot` 离屏截图（`--demo-cloud` 合成点云）
 │   ├── App.axaml.cs           应用入口 + 依赖图组装（composition root，全项目唯一 new 实现处）
 │   ├── Theme/                 设计系统：令牌 + 控件样式（只含 XAML 资源，不产出 C# 类型）
 │   ├── Styles/AppLayout.axaml 应用级布局类（card / cardHeader / sunken / tag …）
 │   ├── ViewModels/            6 个子 VM：Session / Status / Control / Scan / Log / Replay
 │   ├── Views/                 MainWindow + Debug/（工程师）+ Clinical/（临床）
-│   ├── Services/Logging/      LogService（Avalonia 实现）· SimulationLogSink（3D 日志出口实现）
+│   ├── Services/              Logging/（LogService · SimulationLogSink）· DemoSensorFrame（截图用的合成帧）
 │   └── preview.sh             一条命令跑界面 / 拍截图
 │
 ├── RUSTool.Visualization/     类库 · 图形栈的隔离容器
-│   ├── Controls/RobotViewport.cs  内嵌 3D 视口（OpenGlControlBase：GL 生命周期 / 每帧 / 相机 / 拾取）
-│   ├── Scene/RobotScene.cs        场景装配（默认场景 + URDF + 关节驱动；纯 CPU，可脱离 GL 检查）
+│   ├── Controls/RobotViewport.cs  内嵌 3D 视口（OpenGlControlBase：GL 生命周期 / 每帧 / 相机 / 拾取 / 两条数据邮箱）
+│   ├── Scene/RobotScene.cs        场景装配（默认场景 + URDF + 关节驱动 + 点云图层；纯 CPU，可脱离 GL 检查）
+│   ├── Scene/PointCloudLayer.cs   感知点云图层（整帧替换）
 │   ├── Logging/                   ISimulationLogSink + SimulationLogBridge（库日志 → 项目日志器）
 │   └── Assets/Models/             URDF + STL（随编译复制到输出目录）
 │
 ├── docs/                      分模块文档（中文）：architecture / core / protocol / ui / visualization / testing
-└── tests/RUSTool.Core.Tests/  单元测试（xUnit；ScanStateMachineTests.cs，54 个用例）
+└── tests/RUSTool.Core.Tests/  单元测试（xUnit；ScanStateMachineTests 54 + SensorFrameCodecTests 24 个用例）
 ```
 
 > 打包：本解决方案**不发布 NuGet 包**（`IsPackable=false`），也没有 `Directory.Build.props` ——
@@ -66,8 +68,12 @@ RUSTool.sln
   零依赖、54 个用例锁定（含「非法动作必须被拒绝」「按钮灰不灰与能否执行一致」）。
 - **真实 3D 可视化**：URDF 模型 + 关节角实时驱动 + 相机轨道操作 + 单击拾取 + 库自带朝向 gizmo；
   `JointValues` 用一个「邮箱」跨线程交给渲染线程，界面线程绝不碰场景对象。
+- **感知点云**：`/sensor` 二进制帧在 WebSocket 线程解压 + 反量化（`SensorFrameCodec`），
+  经视口的第二个邮箱整帧替换进场景图；覆盖式只留最新一帧，慢渲染丢帧而不是积压。
+  没接后端时可用 `preview.sh window --demo-cloud` 看一眼这条链路。
 - **图形栈彻底隔离**：Silk.NET / OpenGL / `RobotSimulation` 只出现在 `RUSTool.Visualization`，
-  界面只认识两个契约（`RobotViewport` 控件、`ISimulationLogSink` 日志出口）；拿不到桌面 GL 时**降级不崩**。
+  界面只认识三个契约（`RobotViewport` 控件、`PointCloudFrame` 点云帧的形状、`ISimulationLogSink` 日志出口）；
+  拿不到桌面 GL 时**降级不崩**。
 - **设计系统与应用分工**：配色全走 `Theme/` 的语义类，全项目**没有一个值转换器** ——
   状态灯是「一组互斥布尔量叠在同一个 `Ellipse` 上」，换肤只改 `Theme/Tokens/Semantic.axaml`。
 - **一份日志**：后端指令回执、业务动作、3D 图形栈（来源列 `sim`）与界面诊断汇进同一个面板，
@@ -80,13 +86,13 @@ RUSTool.sln
 
 | 项 | 要求 | 说明 |
 |---|---|---|
-| 目标框架 | `net8.0` | 四个工程统一（跟随 `RobotSimulation` 0.2.1 的 lib 目录） |
+| 目标框架 | `net8.0` | 四个工程统一（跟随 `RobotSimulation` 0.3.1 的 lib 目录） |
 | **构建 SDK** | **.NET SDK 10** | 必须。Avalonia 12.1.0 的源生成器要求 Roslyn 4.14+；用 SDK 8 会加载不上源生成器，`InitializeComponent` 不被生成 → 整片 `CS0103` |
 | `global.json` | **刻意不放** | 钉了 SDK 版本反而编译不过 |
 | 3D | 桌面 OpenGL 3.3 core | 后端只带 `#version 330 core` 着色器；遇到 GLES 会抛 `NotSupportedException` 并被捕获 → 3D 区降级为空状态 |
 | 平台 | Linux / Windows 桌面 | 无显卡 / 无 GL 时应用照常可用（HUD、指令、日志都不依赖 GL） |
 | 后端 | 任何实现 bridge 协议的服务 | 默认 `ws://127.0.0.1:8765`（协议见 [`docs/protocol/zh-CN.md`](docs/protocol/zh-CN.md)） |
-| NuGet 源 | **nuget.org 一个**（仓库根 `NuGet.config` 里 `<clear />` 后显式登记） | `RobotSimulation` 0.1.0 / 0.2.0 / 0.2.1 都已发布在 nuget.org 上；换机器 / 上 CI 不需要任何手工加源，也不依赖本机离线目录 |
+| NuGet 源 | **nuget.org 一个**（仓库根 `NuGet.config` 里 `<clear />` 后显式登记） | `RobotSimulation` 0.1.0 / 0.2.0 / 0.2.1 / 0.3.0 / 0.3.1 都已发布在 nuget.org 上；换机器 / 上 CI 不需要任何手工加源，也不依赖本机离线目录 |
 
 ```bash
 # 本机 dotnet 装在 ~/.dotnet 但没进 PATH（preview.sh 会自己设好）
@@ -101,7 +107,7 @@ dotnet --version        # 期望 10.x
 
 ```bash
 dotnet build RUSTool.sln                 # 构建整个解决方案
-dotnet test  tests/RUSTool.Core.Tests    # 54 个纯逻辑用例，不依赖网络 / 界面 / GL
+dotnet test  tests/RUSTool.Core.Tests    # 78 个纯逻辑用例（54 状态机 + 24 点云帧解码），不依赖网络 / 界面 / GL
 ```
 
 ### 4.2 起真实窗口
@@ -110,6 +116,7 @@ dotnet test  tests/RUSTool.Core.Tests    # 54 个纯逻辑用例，不依赖网�
 RUSTool.UI/preview.sh window             # 工程师模式（可交互）
 RUSTool.UI/preview.sh clinical           # 临床模式
 RUSTool.UI/preview.sh window --clinical  # 参数透传（与上一行等价）
+RUSTool.UI/preview.sh window --demo-cloud # 没有后端也能看：投一帧合成点云到 3D 视口
 ```
 
 界面上的读数、日志、状态**全部来自真实后端**：没连上 bridge 时工具栏显示「未连接 / 空闲」、
@@ -118,8 +125,9 @@ HUD 读数为 0、日志为空 —— 这是正确行为，不是坏了。起来
 ### 4.3 拍界面截图（不需要后端）
 
 ```bash
-RUSTool.UI/preview.sh all                # 四种组合各拍一张 PNG 到 RUSTool.UI/preview/
+RUSTool.UI/preview.sh all                # 六张一次拍全 -> RUSTool.UI/preview/
 RUSTool.UI/preview.sh dark               # 只拍「工程师模式 · 深色」
+RUSTool.UI/preview.sh cloud              # 合成点云那张（3D 区在离屏下没有 GL，看日志）
 RUSTool.UI/preview.sh popup MenuFile     # 展开菜单后截图（菜单是 Popup，不展开拍不到）
 ```
 
@@ -143,7 +151,7 @@ dotnet run --project RUSTool.UI -- --shot RUSTool.UI/preview/05-menu-MenuFile.pn
 ```
 后端 bridge  ──ws://127.0.0.1:8765──►  /control（指令 / 回执 / 事件，必连，自动重连）
                                         /state   （状态帧，约 125Hz，只保留最新一帧）
-                                        /sensor  （二进制感知帧，已留位、尚未解码）
+                                        /sensor  （二进制感知帧，点云已解码 → 3D 视口）
 ```
 
 客户端已按协议实现（`RUSTool.Core/Communication/`），后端联调时对照
@@ -159,10 +167,10 @@ dotnet run --project RUSTool.UI -- --shot RUSTool.UI/preview/05-menu-MenuFile.pn
 | 文档 | 内容 |
 |---|---|
 | [`docs/architecture/zh-CN.md`](docs/architecture/zh-CN.md) | 工程边界、依赖方向、分层职责、关键设计决策（ADR）、扩展指南、演进进度 |
-| [`docs/core/zh-CN.md`](docs/core/zh-CN.md) | `RUSTool.Core` 公共面：通信客户端、消息模型、业务服务、共享会话、流程状态机、日志契约、反例 |
-| [`docs/protocol/zh-CN.md`](docs/protocol/zh-CN.md) | bridge 协议：三条通道、状态帧、请求 / 回执、完整指令表、注意事项 |
+| [`docs/core/zh-CN.md`](docs/core/zh-CN.md) | `RUSTool.Core` 公共面：通信客户端、消息模型、`/sensor` 感知帧解码、业务服务、共享会话、流程状态机、日志契约、反例 |
+| [`docs/protocol/zh-CN.md`](docs/protocol/zh-CN.md) | bridge 协议：三条通道、状态帧、请求 / 回执、完整指令表、`/sensor` 点云帧解码契约、注意事项 |
 | [`docs/ui/zh-CN.md`](docs/ui/zh-CN.md) | `RUSTool.UI`：两类使用者的心智模型、指令分层、两个工作区、主题、组装根与数据流、已知边界 |
-| [`docs/visualization/zh-CN.md`](docs/visualization/zh-CN.md) | `RUSTool.Visualization`：数据契约（`RobotViewport`）、日志出口、依赖、资产、反例 |
+| [`docs/visualization/zh-CN.md`](docs/visualization/zh-CN.md) | `RUSTool.Visualization`：数据契约（`RobotViewport`）、感知点云图层与线程交接、日志出口、依赖、资产、反例 |
 | [`docs/testing/zh-CN.md`](docs/testing/zh-CN.md) | 构建 SDK 要求、单元测试覆盖、界面 / 3D 验证、手工自检清单、常见问题 |
 | [`RUSTool.UI/Theme/README.md`](RUSTool.UI/Theme/README.md) | 设计系统用法：令牌四层结构、语义类、控件样式、弹层圆角 |
 | [`RUSTool.Visualization/Assets/Models/README.md`](RUSTool.Visualization/Assets/Models/README.md) | 3D 模型资产的布局规则与加载顺序 |
@@ -183,6 +191,7 @@ dotnet run --project RUSTool.UI -- --shot RUSTool.UI/preview/05-menu-MenuFile.pn
 | **点动是「按住走、松手停」** | 指针按下发 `start_jog`、松开发 `stop_jog_decel`；被系统抢走（`PointerCaptureLost`）也要补发停止 |
 | **截图与启动同源** | `--shot` 复用 `CreateMainViewModel`，预览的界面就是运行时界面 |
 | **失败一律降级** | 缺模型 / 缺桌面 GL / GLES 上下文都不许白屏与崩溃，只报告原因 |
+| **场景图只有渲染线程能写** | 关节值与点云帧都只写视口的「一格邮箱」；渲染回调取走即置空（点云是覆盖式：没画完就被顶掉的那帧计入丢帧数） |
 
 ---
 
@@ -193,11 +202,14 @@ dotnet run --project RUSTool.UI -- --shot RUSTool.UI/preview/05-menu-MenuFile.pn
 - [x] 业务接线：`BridgeClient` / `IRobotService` / `RobotSession` / `ILogService` 全部在 `App.CreateMainViewModel` 组装 ✔
 - [x] 两套工作区 + 共享工具栏（驱动切换 / 急停）+ 阶段门控的四步扫查流程 ✔
 - [x] 真实 3D 视口：URDF 模型 + 关节驱动 + 相机 + 拾取 + 库自带朝向 gizmo，无 GL 时降级 ✔
+- [x] `/sensor` 点云通道：二进制帧解码（zstd / raw + int16 反量化，坏帧一律丢）+ 覆盖式邮箱 + 3D 视口整帧替换 ✔
+      测试 **24 个用例**；没接后端时 `preview.sh window --demo-cloud` 可演一遍 ✔
 - [x] 单元测试：`ScanStateMachine` **54 个用例**（含穷举式的「按钮灰不灰 = 能否执行」）✔
 - [ ] **状态机接线**：`ScanWorkflowViewModel` 改为驱动 `ScanStateMachine`；`RobotSession.TryEnter*` 接入手动 / 扫查模式仲裁
-- [ ] **`/sensor` 点云通道**：二进制帧解码（`ProtocolConstants.SensorTypes` 已留位）+ 点云渲染 + 点击表面选点
+- [ ] **点云选点**：3D 视口里点击点云表面取点（raycast / 最近点）→ `set_start_pose` / `set_end_pose` 带坐标
 - [ ] **测试补齐**：`BridgeProtocol`（样例 JSON / 字段缺省 / 坏 JSON）、`BridgeClient`（id 匹配 / 超时 / 断线置失败）
 - [ ] **回放模块**：时间轴、A/B 循环、超声影像与曲线的双轨联动（当前是演示数据）
+- [ ] `/sensor` 的 `image` / `ultrasound` 帧解码（当前整帧丢弃并记日志）
 - [ ] 影像 / 数据曲线的真实数据源接入
 - [ ] （可选）后端 bridge 的本地联调脚本 / 集成测试
 
@@ -207,6 +219,7 @@ dotnet run --project RUSTool.UI -- --shot RUSTool.UI/preview/05-menu-MenuFile.pn
 |---|---|
 | 界面读数为 0、日志为空 | 没连上 bridge 的**离线态**，属正确行为；`./preview.sh window` 起来后点「连接」即可 |
 | 3D 区是空的（显示主题化空状态） | 拿不到桌面 OpenGL（离屏截图 / 无显卡机器 / GLES 上下文）时控件自己隐藏并走 `Failed`，不影响其余功能 |
+| 3D 里没有点云 | 点云走 `/sensor`，点「连接」即开该通道；**没接后端**时用 `preview.sh window --demo-cloud` 显式投一帧合成点云 |
 | 截图里看不到下拉菜单 | 菜单栏下拉是 Popup，离屏会被托管到 OverlayLayer；用 `./preview.sh popup <菜单名>` 在真实窗口里拍 |
 | 「末端接触力」是近似值 | 状态帧里没有独立的接触力通道，目前用各关节力矩模和代替；后端一旦提供 `contact_force` 字段，只改 `RobotStatusViewModel.OnStateUpdated` 一处 |
 | 影像 / 曲线 / 回放是占位 | 曲线是两条装饰性正弦（红 Fx、绿 Fy），不是真实力信号；回放时间轴也是演示数据 |
@@ -224,7 +237,7 @@ dotnet run --project RUSTool.UI -- --shot RUSTool.UI/preview/05-menu-MenuFile.pn
 ## 9. 许可
 
 - 本仓库当前**未包含** `LICENSE` 文件 —— 对外发布前需要先补一份许可声明（由作者决定采用哪种许可）。
-- 3D 内核 `RobotSimulation`（Core / Robot / OpenGL，0.2.1）为自研库；
+- 3D 内核 `RobotSimulation`（Core / Robot / OpenGL，0.3.1）为自研库；
   `RUSTool.Visualization/Assets/Models/` 下的测试模型与 mesh 随该库仓库分发，许可以那一部分为准
   （该库采用 MIT；本目录不再单独声明）。
 - 本仓库自有源码的许可随仓库根声明；在上面那条补齐之前，请按「内部项目」对待。

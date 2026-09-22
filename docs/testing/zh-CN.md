@@ -10,12 +10,12 @@
 
 | 项 | 值 |
 |---|---|
-| 目标框架 | `net8.0`（四个工程统一，跟随 `RobotSimulation` 0.2.1 的 lib 目录） |
+| 目标框架 | `net8.0`（四个工程统一，跟随 `RobotSimulation` 0.3.1 的 lib 目录） |
 | 构建 SDK | **.NET SDK 10**（本机装在 `~/.dotnet`，未加入 PATH） |
 | 为什么 | Avalonia 12.1.0 的源生成器要求 Roslyn 4.14+：用 SDK 8 时源生成器加载不上，`InitializeComponent` 不被生成，于是整片报 `CS0103` |
 | `global.json` | 刻意**不放** —— 钉了 SDK 版本反而编译不过 |
 | 换机器 | `~/.dotnet` 里的 SDK 或系统安装的 .NET 10 都可以，只要 `dotnet --version` ≥ 10 |
-| NuGet 源 | 仓库根 `NuGet.config`：`<clear />` 后**只**登记 nuget.org | 不依赖本机离线目录或私有源 —— Linux / Windows / CI 用同一套配置还原；`RobotSimulation` 0.1.0 / 0.2.0 / 0.2.1 都已发布在 nuget.org 上 |
+| NuGet 源 | 仓库根 `NuGet.config`：`<clear />` 后**只**登记 nuget.org | 不依赖本机离线目录或私有源 —— Linux / Windows / CI 用同一套配置还原；`RobotSimulation` 0.1.0 / 0.2.0 / 0.2.1 / 0.3.0 / 0.3.1 都已发布在 nuget.org 上 |
 
 ```bash
 export DOTNET_ROOT="$HOME/.dotnet"
@@ -65,22 +65,30 @@ RUSTool.UI/preview.sh window --clinical     # 等价写法：参数透传
 
 # 3) 无 GL 时的降级：离屏截图不崩，3D 区显示设计好的空状态
 RUSTool.UI/preview.sh dark                  # 只深色那张
-RUSTool.UI/preview.sh all                   # 五张一次拍全（工程师 / 临床 × 浅色 / 深色 + 状态浮层展开）
+RUSTool.UI/preview.sh all                   # 六张一次拍全（工程师 / 临床 × 浅色 / 深色 + 状态浮层 + 合成点云）
 
 # 4) 展开 3D 视口右上角的机械臂状态浮层（默认收起，静态截图里拍不到那枚按钮的结果）
 RUSTool.UI/preview.sh status                # -> preview/06-engineer-status.png
 
-# 5) 弹层（菜单是 Popup，不展开拍不到）
+# 5) 合成点云：造一帧 /sensor 帧（编码 + 解码都走生产代码），投进视口的邮箱
+RUSTool.UI/preview.sh cloud                 # -> preview/07-engineer-cloud.png
+RUSTool.UI/preview.sh window --demo-cloud    # 真实窗口 + GL：真的能看见点云
+
+# 6) 弹层（菜单是 Popup，不展开拍不到）
 RUSTool.UI/preview.sh popup MenuFile dark
 ```
 
 截图落在 `RUSTool.UI/preview/`（已在 `.gitignore` 里忽略），
 文件名固定为 `01-engineer-light` / `02-engineer-dark` / `03-clinical-light` / `04-clinical-dark` /
-`06-engineer-status`（3D 视口右上角状态浮层展开的那一张）。
+`06-engineer-status`（3D 视口右上角状态浮层展开的那一张）/ `07-engineer-cloud`（合成点云那一张）。
 
 **离屏截图与真实启动共用同一份组装**（`App.CreateMainViewModel`），
 所以预览图里的界面拓扑就是运行时那一份；但离屏渲染**拿不到桌面 GL**，
 3D 区必然是空状态 —— 这不是故障，要用真实 GL 看图请用 `preview.sh window`。
+
+> `preview.sh cloud` 在离屏下同样看不到点云画面（3D 区没有 GL），**它的价值在那几行日志**：
+> `[3d] 点云流已接通：首帧 60000 点（seq 1024 · frame · raw）` —— 证明「拼帧 → 解码 → 适配 →
+> 投递」这条链路真的跑通了；要看画面用 `preview.sh window --demo-cloud`。
 
 ### 图形栈日志确实回到了项目日志器
 
@@ -99,6 +107,14 @@ grep ' sim ' logs/$(date +%F).log
 
 当前只有一件事被测：**扫查流程状态机**（`tests/RUSTool.Core.Tests/ScanStateMachineTests.cs`，
 11 个测试方法，`[Theory]` 展开后共 **54 个用例**，全部不依赖网络 / 界面 / 图形栈）。
+
+另有 **`SensorFrameCodec`（24 个用例）**：`tests/RUSTool.Core.Tests/SensorFrameCodecTests.cs`，
+锁住 `/sensor` 点云帧的解码契约（协议 §5）—— raw / zstd 两种编码、量化端点与退化包围盒、
+头里只有最小字段时的缺省值，以及坏帧必须返回 `null` + 原因而不是抛异常（头长度不自洽、消息不足
+4 字节、JSON 坏了、点数超上限、payload 长度不符、未知 encoding / 帧类型 / dtype / fields、
+包围盒不是三个数、**头里字段类型不对**——`[Theory]` 五组）。
+用例里的帧**由测试自己按协议拼**（量化、头 JSON、字节序各写一份），不用被测代码造输入 ——
+否则「编码器与解码器一起错」会被判成通过。
 
 | 用例（方法名就是「什么情况_结果应该是什么」） | 锁住的不变量 |
 |---|---|
@@ -129,11 +145,11 @@ grep ' sim ' logs/$(date +%F).log
 | 改动类型 | 至少要做的验证 |
 |---|---|
 | 任何代码改动 | `dotnet build RUSTool.sln` + `dotnet test tests/RUSTool.Core.Tests` |
-| `RUSTool.Core/Communication/` | 起真实后端（或本地 bridge）跑 `preview.sh window`，点「连接」，确认日志里出现 `→ 发送指令` / `← 指令 … 结果` 且状态灯变化 |
+| `RUSTool.Core/Communication/` | 起真实后端（或本地 bridge）跑 `preview.sh window`，点「连接」，确认日志里出现 `→ 发送指令` / `← 指令 … 结果` 且状态灯变化；动过 `/sensor` 解码时同时确认日志里有 `[3d] 点云流已接通：首帧 … 点`，或直接 `preview.sh window --demo-cloud` |
 | `RUSTool.Core/Services/` | 点动按住 / 松开（`start_jog` / `stop_jog_decel` 成对出现）；急停后确认回到「空闲」 |
-| `RUSTool.UI/Theme/` | `./preview.sh all` 看五张截图的配色；`./preview.sh popup MenuFile` 看弹层 |
+| `RUSTool.UI/Theme/` | `./preview.sh all` 看六张截图的配色；`./preview.sh popup MenuFile` 看弹层 |
 | `RUSTool.UI/Views/` | `./preview.sh window` 交互一遍受影响的面板；再 `./preview.sh all` 确认布局没塌；动过 3D 视口右上角的覆盖层时再补一张 `./preview.sh status`（浮层展开态） |
-| `RUSTool.Visualization/` | `./preview.sh window` 看 stderr 的 `[3d] 就绪 …`（GPU + 模型报告）；再 `./preview.sh dark` 确认无 GL 时降级不崩 |
+| `RUSTool.Visualization/` | `./preview.sh window` 看 stderr 的 `[3d] 就绪 …`（GPU + 模型报告）；点云相关改动用 `./preview.sh window --demo-cloud` 看画面与状态行里的「点云 N 点」；再 `./preview.sh dark` 确认无 GL 时降级不崩 |
 | 模型资产（`Assets/Models/`） | 检查 `LoadReport` / stderr 里加载的是预期的 URDF（布局规则见该目录 README） |
 
 ---
@@ -150,4 +166,4 @@ grep ' sim ' logs/$(date +%F).log
 | 界面读数全是 0、日志空白 | 没连后端。`preview.sh window` → 点「连接」；这是正确行为 |
 | `logs/` 里找不到文件 | 日志相对**进程工作目录**写；用 `preview.sh` 时工作目录是仓库根 |
 | 状态行的值一直是「空闲 / 已暂停」 | 模式仲裁（`RobotSession.TryEnter*`）尚未接线，见 [`../ui/zh-CN.md`](../ui/zh-CN.md) 第 13.2 节 |
-| 点云 / 影像 / 曲线没有数据 | `/sensor` 通道尚未解码、影像与曲线仍是占位，见 [`../ui/zh-CN.md`](../ui/zh-CN.md) 第 13 节 |
+| 点云 / 影像 / 曲线没有数据 | 点云要连后端并开 `/sensor`（点「连接」即开）；**没接后端**时可用 `preview.sh window --demo-cloud` 看合成帧。影像与曲线仍是占位，见 [`../ui/zh-CN.md`](../ui/zh-CN.md) 第 13 节 |

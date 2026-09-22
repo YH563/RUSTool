@@ -29,7 +29,7 @@
 
 1. [`architecture/zh-CN.md`](architecture/zh-CN.md) — 先看工程边界、依赖方向、分层职责与关键设计决策（ADR）。
 2. [`core/zh-CN.md`](core/zh-CN.md) — 纯逻辑层的公共面：通信客户端、业务服务、流程状态机、日志契约。
-3. [`protocol/zh-CN.md`](protocol/zh-CN.md) — 三条通道、状态帧、请求 / 回执、完整指令表（后端联调的契约基准）。
+3. [`protocol/zh-CN.md`](protocol/zh-CN.md) — 三条通道、状态帧、请求 / 回执、完整指令表、`/sensor` 点云帧的解码契约（后端联调的契约基准）。
 4. [`ui/zh-CN.md`](ui/zh-CN.md) — 界面层：两类使用者的心智模型、指令分层、主题、组装根与数据流、已知边界。
 5. [`visualization/zh-CN.md`](visualization/zh-CN.md) — 图形栈隔离容器：数据契约（`RobotViewport`）与日志出口。
 6. [`testing/zh-CN.md`](testing/zh-CN.md) — 构建 SDK 要求、单元测试、界面截图与手工验证清单。

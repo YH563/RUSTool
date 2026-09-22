@@ -1,9 +1,11 @@
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using Avalonia.Threading;
 using RUSTool.Communication;
 using RUSTool.Services.Logging;
 using RUSTool.Services.Robot;
+using RUSTool.UI.Services;
 using RUSTool.UI.Services.Logging;
 using RUSTool.UI.ViewModels;
 using RUSTool.UI.Views;
@@ -26,7 +28,18 @@ public partial class App : Application
             // 截图模式由 Program 自己建窗口（而且不接后端），这里不能重复建。
             if (!args.Contains("--shot"))
             {
-                desktop.MainWindow = new MainWindow { DataContext = CreateMainViewModel(args) };
+                MainViewModel viewModel = CreateMainViewModel(args);
+                desktop.MainWindow = new MainWindow { DataContext = viewModel };
+
+                // --demo-cloud：没有后端可连时，用一帧合成点云把 /sensor 那条链路当场演一遍。
+                // 必须等视口挂树、GL 就绪之后再投（投早了没人接 —— 那时候还没有订阅者），
+                // 所以放在定时器里而不是构造完就投。
+                if (args.Contains("--demo-cloud"))
+                {
+                    DispatcherTimer.RunOnce(
+                        () => viewModel.PublishPointCloud(DemoSensorFrame.Build(seq: 1024)),
+                        TimeSpan.FromSeconds(2));
+                }
             }
         }
 

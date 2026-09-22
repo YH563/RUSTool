@@ -123,7 +123,7 @@ View  ← 绑定 →  ViewModel                    ┐
 
 | 层 | 所属项目 | 职责 | 示例 |
 |---|---|---|---|
-| **Communication** | `RUSTool.Core` | 与 bridge 通信：指令下发/回执匹配、状态流接收、断线重连 | `BridgeClient`、`ConnectionManager`、`BridgeProtocol` |
+| **Communication** | `RUSTool.Core` | 与 bridge 通信：三条通道的连接、指令下发/回执匹配、状态流与感知流接收、二进制帧解码、断线重连 | `BridgeClient`、`ConnectionManager`、`BridgeProtocol`、`SensorFrameCodec` |
 | **Services.Robot** | `RUSTool.Core` | 机器人业务：类型化指令、共享会话状态与模式互斥仲裁 | `IRobotService`、`RobotService`、`RobotSession` |
 | **Services.Robot.Workflows** | `RUSTool.Core` | 流程编排：把无状态指令串成有顺序的流程；状态机只描述「状态怎么变」，不负责发命令 | `ScanStateMachine` |
 | **Services.Logging（契约）** | `RUSTool.Core` | 日志抽象 | `ILogService` |
@@ -167,7 +167,9 @@ View  ← 绑定 →  ViewModel                    ┐
    就都出现在日志面板里，来源列是 `sim`。界面层看不到 M.E.L 的任何类型。
 
 于是 `Scene3DView.axaml` 就是三层叠放：底层占位（无 GL 时的空状态）、中层 `RobotViewport`、顶层角标（GPU / FPS / 拾取结果）。
-右下角的朝向 gizmo 由图形库自己画（`RobotSimulation` 0.2.0 起默认开启），界面**不再自绘**坐标轴。
+右下角的朝向 gizmo 由图形库自己画（`RobotSimulation` 0.2.0 起默认开启；0.3.0 起连它的**尺寸**
+也归渲染器 —— 视口短边 × 0.12，夹在 64~240 px，场景那边只剩边距与「画不画」两个开关），
+界面**不再自绘**坐标轴。
 
 ## 7. 流程编排与状态机
 
@@ -239,7 +241,10 @@ Idle ──► PreScanning ──► Posing ──► Planning ──► Ready �
 新功能 → 先问一句「它认识界面吗？」，再决定放哪个项目：
 
   · 新增指令 / 事件       → RUSTool.Core/Communication/ProtocolConstants.cs 补常量
-  · /sensor 二进制帧      → RUSTool.Core/Communication/BridgeProtocol.cs 增加解码方法
+  · /sensor 二进制帧      → RUSTool.Core/Communication/SensorFrameCodec.cs（已在用的解码入口；
+                            新帧类型（image / ultrasound）加在这里，别动 BridgeProtocol 的 JSON 那套）
+  · 点云进场景图          → RUSTool.Visualization/Scene/PointCloudLayer.cs（整帧替换）
+                            + RobotViewport 的邮箱（SubmitPointCloud）；界面层只做适配
   · 新增业务服务（标定）  → RUSTool.Core/Services/ 下（复用 BridgeClient，或经 IRobotService）
   · 新增业务流程（标定）  → RUSTool.Core/Services/Robot/Workflows/ 下建两个文件：
                             · XxxStateMachine.cs — 阶段枚举 + 转移表（纯逻辑，配单测）
@@ -270,7 +275,7 @@ Idle ──► PreScanning ──► Posing ──► Planning ──► Ready �
 > `RUSTool.Core` 与测试从未引用该项目，因此删除对它们是零影响（编译器可证）。
 
 > `RUSTool.Visualization` 是**新增**工程（不是迁移）：把 3D 内核 `RobotSimulation`
-> （`Core` / `Robot` / `OpenGL`，0.2.1，全部发布在 nuget.org 上）接进 Avalonia。
+> （`Core` / `Robot` / `OpenGL`，0.3.1，全部发布在 nuget.org 上）接进 Avalonia。
 > `RUSTool.UI` 只引用它、不引用 Silk.NET；无 GL 时（离屏截图、无显卡机器）它自动降级为设计好的空状态，
 > 因此 `preview.sh` 的产出与以前一样可用。
 > 库日志经 `SimulationLogBridge` 汇进项目日志器（来源列 `sim`）；总趋势是**图形细节下移给库** ——

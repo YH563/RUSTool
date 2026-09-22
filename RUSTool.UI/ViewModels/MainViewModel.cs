@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using RUSTool.Communication;
 using RUSTool.Services.Logging;
 using RUSTool.Services.Robot;
 using System;
@@ -24,6 +25,10 @@ public sealed partial class MainViewModel : ViewModelBase
         _robot = robot;
         LogService = log;
 
+        // /sensor 的点云帧只在这里过一道手：服务层抛帧 → 视图层订阅（3D 视口的数据入口）。
+        // 本层不认识 RUSTool.Visualization，也不认识 GL —— 转成视口能懂的形状是视图层的事。
+        _robot.SensorFrameReceived += frame => PointCloudFrameReceived?.Invoke(frame);
+
         // 构造顺序：日志最先，其余 VM 都要往里写。
         Log = new LogViewModel(log);
         Session = new SessionViewModel(robot, session, log);
@@ -32,6 +37,29 @@ public sealed partial class MainViewModel : ViewModelBase
         Scan = new ScanWorkflowViewModel(robot, log);
         Replay = new ReplayViewModel(log);
     }
+
+    /// <summary>
+    /// 感知点云帧（<c>/sensor</c> 通道）—— 由 3D 视图订阅，把帧交给视口。
+    ///
+    /// <para>
+    /// <b>后台线程触发</b>（WebSocket 线程），且是覆盖式的：订阅者只该把帧丢进视口的邮箱，
+    /// 不要在这里碰界面元素。没接后端时这个事件永远不触发，界面照旧。
+    /// </para>
+    /// </summary>
+    public event Action<SensorPointCloudFrame>? PointCloudFrameReceived;
+
+    /// <summary>
+    /// 注入一帧点云到自己抛出的那条事件上（与真实流【同一个出口】）。
+    ///
+    /// <para>
+    /// 只给截图模式用（<c>Program.cs</c> 的 <c>--demo-cloud</c>）：本机没有后端可连时，
+    /// 这是唯一能把「点云解码 → 投递 → 场景图层 → GL」这条链路画进 PNG 的办法。
+    /// 真实运行时不调用它。
+    /// </para>
+    /// </summary>
+    /// <param name="frame">要注入的帧（通常是 <c>DemoSensorFrame.Build()</c> 的产物）。</param>
+    public void PublishPointCloud(SensorPointCloudFrame frame) => PointCloudFrameReceived?.Invoke(frame);
+
 
     /// <summary>
     /// 日志服务本体（<see cref="Log"/> 面板展示的就是它的集合）。
