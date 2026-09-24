@@ -109,6 +109,31 @@ Avalonia 里**后加载的样式覆盖先加载的**。所以如果 `App.axaml` 
 
 换配色 = 改 ① 和 ②，控件样式一行都不用动。
 
+## 默认文字色：靠继承，不写进样式
+
+**这是本主题最容易踩的第二个坑。**
+
+`Controls/Base.axaml` 里**故意不给** `TextBlock` 设 `Foreground`：默认文字色由 `Window` 上的
+`Foreground`（`TextPrimaryBrush`）**继承**下来，`TextBlock` 的默认样式只管字号 / 换行 / 对齐。
+
+原因是 Avalonia 的优先级顺序：**应用级 `Style` 的 setter 高于继承值（Inheritance）**。
+一旦给所有 `TextBlock` 写死 `Foreground`，按钮里那些由 `ContentPresenter` 现场生成的
+`TextBlock` 就再也拿不到按钮自己的 `Foreground`：
+
+| 症状 | 机制 |
+|---|---|
+| 红底急停按钮上是深色字（不是白字） | `Button` 主题设了 `Foreground=TextOnAccentBrush`，被全局 `TextBlock` 样式盖掉 |
+| 分段按钮（真实 / 仿真）选中的那个看不出主色 | 同上：选中色写在按钮上（`Class="segOn"`），被全局样式截走 |
+| `Classes="danger|accent"` 的文字类看着没生效 | 同上（这类是 `TextBlock` 自己的样式，不冲突，但容易连带怀疑） |
+
+所以：**要改某块文字的颜色，就在它自己（或最近的祖先 `Window` / `Panel`）上设 `Foreground`**，
+不要在全局样式里兜底。自检方法很直接 ——
+`Theme/Controls/Base.axaml` 里 `Style Selector="TextBlock"` 的 `Setter` 列表里
+**不该出现任何 `*Brush`**。
+
+改完颜色的回归验证：`./preview.sh all` 后逐张看**彩色按钮上的字是不是白的**
+（急停 `danger`、主操作 `accent`、分段按钮选中态），深浅两套主题都要看。
+
 ## 弹层圆角：为什么默认是 0
 
 **这是本主题最容易踩的坑，值得单独说明。**

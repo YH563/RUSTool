@@ -17,7 +17,7 @@
 | **`RUSTool.Core`** | 类库 | 纯逻辑层：bridge 通信客户端（`BridgeClient` / `ConnectionManager` / `BridgeProtocol` / `SensorFrameCodec`）、机器人业务服务（`IRobotService` / `RobotService` / `RobotSession`）、流程状态机（`ScanStateMachine`）、日志契约（`ILogService`）。零界面、零图形依赖 | `CommunityToolkit.Mvvm`（仅 `ObservableObject`）、`ZstdSharp.Port`（`/sensor` 点云帧解压） |
 | **`RUSTool.UI`** | WinExe | **唯一的应用**（`dotnet run` 起来的就是它）：Avalonia 界面 + 设计系统 `Theme/` + 依赖图组装（唯一组合根） | `Core`、`Visualization`、Avalonia 12.1.0、CommunityToolkit.Mvvm 8.4.2、Avalonia.Headless（截图） |
 | **`RUSTool.Visualization`** | 类库 | 图形栈的**隔离容器**：`RobotViewport`（内嵌 3D 视口）、`RobotScene` + `PointCloudLayer`（URDF + 关节驱动 + 感知点云）、`SimulationLogBridge`（库日志接出）。Silk.NET / OpenGL / `RobotSimulation` 只在这里出现 | `Core` 无关，依赖 `RobotSimulation` 0.3.1、Silk.NET.OpenGL 2.23.0、Avalonia 12.1.0 |
-| *(test) `tests/RUSTool.Core.Tests`* | xUnit | 纯逻辑单测：`ScanStateMachine` 54 + `SensorFrameCodec` 24 = **78 个用例**，不依赖网络 / 界面 / 图形栈。**不发布** | `Core` |
+| *(test) `tests/RUSTool.Core.Tests`* | xUnit | 纯逻辑单测：`ScanStateMachine` 54 + `SensorFrameCodec` 24 + 驱动类型 15 = **93 个用例**，不依赖网络 / 界面 / 图形栈。**不发布** | `Core` |
 | *(data) `RUSTool.Visualization/Assets/Models`* | 数据 | 随编译复制到输出目录的 URDF + mesh（首选真机模型、兜底 URDF 内置几何） | — |
 
 依赖方向是**单向**的，由编译器强制：`RUSTool.UI` → `RUSTool.Core`、`RUSTool.UI` → `RUSTool.Visualization`。
@@ -50,7 +50,7 @@ RUSTool.sln
 │   └── Assets/Models/             URDF + STL（随编译复制到输出目录）
 │
 ├── docs/                      分模块文档（中文）：architecture / core / protocol / ui / visualization / testing
-└── tests/RUSTool.Core.Tests/  单元测试（xUnit；ScanStateMachineTests 54 + SensorFrameCodecTests 24 个用例）
+└── tests/RUSTool.Core.Tests/  单元测试（xUnit；ScanStateMachineTests 54 + SensorFrameCodecTests 24 + DriverTypeTests 15 个用例）
 ```
 
 > 打包：本解决方案**不发布 NuGet 包**（`IsPackable=false`），也没有 `Directory.Build.props` ——
@@ -107,7 +107,7 @@ dotnet --version        # 期望 10.x
 
 ```bash
 dotnet build RUSTool.sln                 # 构建整个解决方案
-dotnet test  tests/RUSTool.Core.Tests    # 78 个纯逻辑用例（54 状态机 + 24 点云帧解码），不依赖网络 / 界面 / GL
+dotnet test  tests/RUSTool.Core.Tests    # 93 个纯逻辑用例（54 状态机 + 24 点云帧解码 + 15 驱动类型），不依赖网络 / 界面 / GL
 ```
 
 ### 4.2 起真实窗口
@@ -205,6 +205,7 @@ dotnet run --project RUSTool.UI -- --shot RUSTool.UI/preview/05-menu-MenuFile.pn
 - [x] `/sensor` 点云通道：二进制帧解码（zstd / raw + int16 反量化，坏帧一律丢）+ 覆盖式邮箱 + 3D 视口整帧替换 ✔
       测试 **24 个用例**；没接后端时 `preview.sh window --demo-cloud` 可演一遍 ✔
 - [x] 单元测试：`ScanStateMachine` **54 个用例**（含穷举式的「按钮灰不灰 = 能否执行」）✔
+- [x] 驱动类型回读：工具栏「真实 / 仿真」由 `get_driver_type` 回读点亮，未连接 / 掉线两个一起变灰（`DriverTypeTests` **15 个用例**）✔
 - [ ] **状态机接线**：`ScanWorkflowViewModel` 改为驱动 `ScanStateMachine`；`RobotSession.TryEnter*` 接入手动 / 扫查模式仲裁
 - [ ] **点云选点**：3D 视口里点击点云表面取点（raycast / 最近点）→ `set_start_pose` / `set_end_pose` 带坐标
 - [ ] **测试补齐**：`BridgeProtocol`（样例 JSON / 字段缺省 / 坏 JSON）、`BridgeClient`（id 匹配 / 超时 / 断线置失败）

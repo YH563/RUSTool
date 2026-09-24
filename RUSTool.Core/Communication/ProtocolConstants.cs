@@ -52,7 +52,12 @@ public static class Commands
     public const string GetState = "get_state";
     public const string IsMotionDone = "is_motion_done";
     public const string RunFile = "run_file";
+
+    /// <summary>切换驱动。args = [type]（type 0 = 仿真 / 1 = 真实）。</summary>
     public const string SwitchDriver = "switch_driver";
+
+    /// <summary>查询当前驱动类型。无参，Result[0] = 0（仿真）/ 1（真实），与 <see cref="SwitchDriver"/> 的 type 同编码。</summary>
+    public const string GetDriverType = "get_driver_type";
 
     // ── 仿真控制指令（仅 Sim 驱动） ──
     public const string SetTimeSpeed = "set_time_speed";

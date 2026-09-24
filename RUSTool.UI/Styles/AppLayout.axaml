@@ -101,6 +101,16 @@
         <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
         <Setter Property="Foreground" Value="{DynamicResource TextAccentBrush}" />
     </Style>
+    <!-- 分段组的禁用态（未连接时"真实 / 仿真"两个一起变灰）。
+         ⚠ 必须写在应用级样式里，而且必须排在 .segOn 后面：
+           按钮主题里的 ^:disabled 是【控件主题】的 setter，优先级低于应用级样式，
+           单靠它压不住 .segOn 的主色底 —— 禁用后看着仍像"已选中"，那就等于没变灰。 -->
+    <Style Selector="Button.segLeft:disabled, Button.segRight:disabled">
+        <Setter Property="Background" Value="{DynamicResource SurfaceDisabledBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextDisabledBrush}" />
+        <Setter Property="Cursor" Value="Arrow" />
+    </Style>
 
     <!-- ── 网格分隔条：透明热区，避免"一条灰杠"把界面切碎 ── -->
     <Style Selector="GridSplitter">

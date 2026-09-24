@@ -79,8 +79,11 @@ public sealed class RobotService : IRobotService
     public Task<CommandResult> GetStateAsync()
         => _client.SendAsync(Commands.GetState);
 
-    public Task<CommandResult> SwitchDriverAsync(double driver)
-        => _client.SendAsync(Commands.SwitchDriver, [driver]);
+    public Task<CommandResult> SwitchDriverAsync(RobotDriver driver)
+        => _client.SendAsync(Commands.SwitchDriver, [RobotDriverCodec.ToProtocol(driver)]);
+
+    public Task<CommandResult> QueryDriverTypeAsync()
+        => _client.SendAsync(Commands.GetDriverType);
 
     // ── 扫查流程 ──
 

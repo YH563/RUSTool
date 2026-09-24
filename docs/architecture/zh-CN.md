@@ -267,7 +267,7 @@ Idle ──► PreScanning ──► Posing ──► Planning ──► Ready �
 | `RUSTool.UI/Theme` | ✅ 已并入 UI | 设计系统：令牌 + 控件样式，只含 XAML 资源，不产出 C# 类型；原独立 `RUSTool.Theme` 工程已删除 |
 | `RUSTool.UI` | ✅ 已是唯一应用 | 完整应用：界面 + 设计系统（`Theme/`）+ 业务接线（引用 Core）；原 `RUSTool/` 项目已删除 |
 | `RUSTool.Visualization` | ✅ 已拆出 | 图形栈隔离容器：`RobotViewport`（`OpenGlControlBase` 宿主：GL 生命周期 / 每帧 / 相机拾取）+ `RobotScene`（URDF 模型 + 关节驱动）+ `SimulationLogBridge`（库日志接进项目日志器）+ 随编译复制到输出目录的模型资产 |
-| `tests/RUSTool.Core.Tests` | ✅ 已建 | 扫查状态机 54 个用例；无需网络 / GL，`dotnet test` 即可跑 |
+| `tests/RUSTool.Core.Tests` | ✅ 已建 | 纯逻辑单测 93 个用例（状态机 54 + 点云帧解码 24 + 驱动类型 15）；无需网络 / GL，`dotnet test` 即可跑 |
 
 > 原 `RUSTool/` 项目已删除。它的界面能力（语义类配色、主题化）由 `RUSTool.UI` 取代；
 > 业务能力（composition root、连接 / 使能 / 驱动切换、`LogService`、点动「按住走松手停」、

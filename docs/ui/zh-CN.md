@@ -144,7 +144,7 @@ RUSTool.UI/
 | start_jog（点动） | ✓ 简化方向键（仅阶段①） | ✓ 完整 6 轴 |
 | movej / movel | — | ✓ |
 | servoj / servo_cart / servo_start / end | — | ✓ |
-| switch_driver / get_state / run_file | — | ✓ |
+| switch_driver / get_driver_type / get_state / run_file | — | ✓ |
 | 仿真（set_time_speed / step_once / …） | — | ✓ |
 | 录制 / 回放 | — | ✓ |
 
@@ -264,7 +264,7 @@ RUSTool.UI/
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│ 工具栏: [连接][断开] [上使能] [驱动:真实▼] │ 模式切换 │ [🛑急停] │ 状态点 │
+│ 工具栏: [连接][断开] [上使能] [真实|仿真] │ 模式切换 │ [🛑急停] │ 状态点 │
 ├──────────────┬──────────────────────────┬─────────────────────────┤
 │ 3D场景/HUD   │ 超声影像                 │ 数据曲线                │
 ├──────────────┴──────────────────────────┴─────────────────────────┤
@@ -277,13 +277,18 @@ RUSTool.UI/
 
 ### 7.2 控制面板标签页
 
+> 工具栏的「真实 / 仿真」是**分段按钮**（`MainWindow.axaml` 的 `segLeft` / `segRight` +
+> `AppLayout.axaml` 的 `Button.segOn`）：**未连接时两个一起变灰**（`IsEnabled` 绑 `Session.IsConnected`），
+> 连上后由后端回读的驱动类型决定哪个亮 —— 点击只是发 `switch_driver`，
+> 真正生效以 `get_driver_type` 的回读值为准（见第 11.3 节）。
+
 | Tab | 内容 |
 |-----|------|
 | 点动 | 6 轴 jog + 参考系切换 + 速度/加速度 + MoveJ/MoveL 输入 + 停止 |
 | 扫查流程 | 同一个状态机（紧凑行 + 状态灯）+ query 按钮 + 原始回执日志 |
 | 伺服 | servo_start/end、servoj、servo_cart |
 | 仿真 | 倍速、单步、仿真时间/帧率 |
-| 驱动 | robot_enable、switch_driver、is_connected、get_state、run_file |
+| 驱动 | robot_enable、switch_driver、get_driver_type、is_connected、get_state、run_file |
 
 > **点动独占一个 tab 并占满面板宽度**：点动是最高频持续操作，需要最大空间，内部用 2 列 × 3 轴紧凑布局，避免横向溢出。
 
@@ -414,6 +419,17 @@ RUSTool.UI/
 ```
 
 四个状态灯位（空闲 / 手动 / 扫查中 / 已暂停）就是靠一组互斥布尔量叠在同一个 `Ellipse` 上实现的。
+
+**默认文字色靠「继承」，不写进全局样式。** 这条规矩踩过一次坑，值得写下来：
+`Theme/Controls/Base.axaml` 原来给所有 `TextBlock` 设了 `Foreground=TextPrimaryBrush`，
+但 Avalonia 里**应用级 `Style` 的 setter 优先级高于继承值** —— 按钮里的文字是
+`ContentPresenter` 现场生成的 `TextBlock`，永远拿不到按钮自己的 `Foreground`，
+于是红底急停按钮画出深色字、分段按钮选中态的主色字被吃掉。
+现在默认色由 `Window` 的 `Foreground` 继承下来，`TextBlock` 样式只管字号 / 换行 / 对齐；
+控件要改自己内容的字色就设自己的 `Foreground`（按钮变体与 `Class="segOn"` 都是这么做的）。
+改这块之后必须 `./preview.sh all` 逐张确认彩色按钮上是白字 —— 细节见
+[`../../RUSTool.UI/Theme/README.md`](../../RUSTool.UI/Theme/README.md)。
+
 用法细节（按钮变体、文字类、状态灯类、弹层圆角为什么默认是 0）见
 [`../../RUSTool.UI/Theme/README.md`](../../RUSTool.UI/Theme/README.md)。
 
@@ -484,6 +500,10 @@ MainViewModel
 几个刻意的设计：
 
 - **连接类动作只有一个入口**（`SessionViewModel`）：其余 VM 只读 `RobotSession`、不发连接指令。
+- **驱动类型只信后端**：`switch_driver` 的回执不代表切换完成，所以连接成功 / 断线重连 / 切换之后
+  都要回读 `get_driver_type`；未连接或回读失败时 `IsDriverKnown=false`，工具栏两个驱动按钮
+  一起变灰（`DriverText` 显示「未知」）—— 界面显示的永远是后端当前状态，不是本地记忆。
+  这条也是 `RobotSession.DriverText` 会发变更通知的原因（否则按钮灰不灰不刷新）。
 - **扫查流程的完成标志有两个来源**：短指令（`set_start_pose` …）看回执；长任务（建图 / 规划 / 扫查）
   看后端异步事件（`pre_scan_done` / `plan_done` / `motion_done`）—— 前端不靠计时去猜。
 - **日志只有一份**：`LogService` 维护 `ObservableCollection<LogEntry>`（限长 500 + 按天落盘），

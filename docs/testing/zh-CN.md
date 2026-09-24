@@ -105,16 +105,38 @@ grep ' sim ' logs/$(date +%F).log
 
 ## 4. 单元测试覆盖了什么
 
-当前只有一件事被测：**扫查流程状态机**（`tests/RUSTool.Core.Tests/ScanStateMachineTests.cs`，
-11 个测试方法，`[Theory]` 展开后共 **54 个用例**，全部不依赖网络 / 界面 / 图形栈）。
+目前 `dotnet test tests/RUSTool.Core.Tests` 一共 **93 个用例**（54 + 24 + 15），覆盖三块纯逻辑，
+都不依赖网络 / 界面 / 图形栈：
 
-另有 **`SensorFrameCodec`（24 个用例）**：`tests/RUSTool.Core.Tests/SensorFrameCodecTests.cs`，
+- **扫查流程状态机** —— `ScanStateMachineTests.cs`，11 个测试方法，`[Theory]` 展开后 **54 个用例**；
+- **`SensorFrameCodec`** —— `SensorFrameCodecTests.cs`，**24 个用例**（见下一段）；
+- **驱动类型 `RobotDriverCodec` / `RobotSession`** —— `DriverTypeTests.cs`，**15 个用例**（再下一段）。
+
+其一，**`SensorFrameCodec`（24 个用例）**：`tests/RUSTool.Core.Tests/SensorFrameCodecTests.cs`，
 锁住 `/sensor` 点云帧的解码契约（协议 §5）—— raw / zstd 两种编码、量化端点与退化包围盒、
 头里只有最小字段时的缺省值，以及坏帧必须返回 `null` + 原因而不是抛异常（头长度不自洽、消息不足
 4 字节、JSON 坏了、点数超上限、payload 长度不符、未知 encoding / 帧类型 / dtype / fields、
 包围盒不是三个数、**头里字段类型不对**——`[Theory]` 五组）。
 用例里的帧**由测试自己按协议拼**（量化、头 JSON、字节序各写一份），不用被测代码造输入 ——
 否则「编码器与解码器一起错」会被判成通过。
+
+其二，**驱动类型（`DriverTypeTests.cs`，15 个用例）**：锁三件事 ——
+① 编码只有一份（`0` = 仿真 / `1` = 真实，枚举值即后端编码，指令名逐字一致）；
+② 回读值不可信时的兜底（越界 / `NaN` / `Infinity` 一律按仿真，绝不猜成「真实驱动」）；
+③ 「未知」是一等状态（刚构造与掉线时 `DriverText` 都是「未知」，且 `Driver` / `IsDriverKnown`
+一变就发出 `DriverText` 的 `PropertyChanged` —— 界面拿旧值继续显示就是这个 bug 本身）。
+
+| 用例 | 锁住的不变量 |
+|---|---|
+| `协议编码_仿真0真实1_与后端一致` | 枚举值即后端编码（改它等于改协议） |
+| `回读编码_只有1算真实_其余一律按仿真` | `[Theory]` 7 组：`0 / 1 / 2 / -1 / 0.5 / NaN / Infinity` |
+| `编码往返_两种驱动都原样还原` | 遍历枚举，编解码往返一致 |
+| `指令名_与后端逐字一致` | `switch_driver` / `get_driver_type` 字符串 |
+| `刚构造_驱动类型未知_显示未知` | 默认 `IsDriverKnown=false` → `DriverText` =「未知」 |
+| `回读成功_显示后端实际驱动` | 回读后显示「真实 / 仿真」 |
+| `掉线_驱动类型回到未知_不再显示旧值` | 掉线不保留旧值（核心诉求：界面不过期） |
+| `驱动变化_发出DriverText变更通知` | 按钮灰不灰靠这条通知刷新 |
+| `已知性变化_发出DriverText变更通知` | 同上（连接 / 掉线都走这个开关） |
 
 | 用例（方法名就是「什么情况_结果应该是什么」） | 锁住的不变量 |
 |---|---|
@@ -147,7 +169,8 @@ grep ' sim ' logs/$(date +%F).log
 | 任何代码改动 | `dotnet build RUSTool.sln` + `dotnet test tests/RUSTool.Core.Tests` |
 | `RUSTool.Core/Communication/` | 起真实后端（或本地 bridge）跑 `preview.sh window`，点「连接」，确认日志里出现 `→ 发送指令` / `← 指令 … 结果` 且状态灯变化；动过 `/sensor` 解码时同时确认日志里有 `[3d] 点云流已接通：首帧 … 点`，或直接 `preview.sh window --demo-cloud` |
 | `RUSTool.Core/Services/` | 点动按住 / 松开（`start_jog` / `stop_jog_decel` 成对出现）；急停后确认回到「空闲」 |
-| `RUSTool.UI/Theme/` | `./preview.sh all` 看六张截图的配色；`./preview.sh popup MenuFile` 看弹层 |
+| 驱动 / 连接（`RobotSession`、`SessionViewModel`） | 连上后确认工具栏「真实 / 仿真」由 `get_driver_type` 回读点亮（不是点击即亮）；断开后两个一起变灰、`DriverText` 变「未知」；切换驱动后按钮跟随后端回读值 |
+| `RUSTool.UI/Theme/` | `./preview.sh all` 看六张截图的配色（**必看彩色按钮上的字是不是白的**：急停 `danger`、主操作 `accent`、分段按钮选中态，浅色深色都要看）；`./preview.sh popup MenuFile` 看弹层 |
 | `RUSTool.UI/Views/` | `./preview.sh window` 交互一遍受影响的面板；再 `./preview.sh all` 确认布局没塌；动过 3D 视口右上角的覆盖层时再补一张 `./preview.sh status`（浮层展开态） |
 | `RUSTool.Visualization/` | `./preview.sh window` 看 stderr 的 `[3d] 就绪 …`（GPU + 模型报告）；点云相关改动用 `./preview.sh window --demo-cloud` 看画面与状态行里的「点云 N 点」；再 `./preview.sh dark` 确认无 GL 时降级不崩 |
 | 模型资产（`Assets/Models/`） | 检查 `LoadReport` / stderr 里加载的是预期的 URDF（布局规则见该目录 README） |

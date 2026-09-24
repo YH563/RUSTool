@@ -336,7 +336,7 @@ UI/Sender         BridgeClient              ConnectionManager        bridge
 | 运动 | `MoveJAsync` / `MoveLAsync` | `movej` / `movel` |
 | 点动 | `StartJogAsync(JogParameters)` / `StopJogAsync` / `StopJogImmediateAsync` | `start_jog` / `stop_jog_decel` / `stop_jog_immediate` |
 | 模式 | `SetMode(double)` | `set_mode`（0 = 手动 / 1 = 扫查） |
-| 驱动 | `RobotEnableAsync` / `QueryIsConnectedAsync` / `GetStateAsync` / `SwitchDriverAsync` | `robot_enable` / `is_connected` / `get_state` / `switch_driver` |
+| 驱动 | `RobotEnableAsync` / `QueryIsConnectedAsync` / `GetStateAsync` / `SwitchDriverAsync(RobotDriver)` / `QueryDriverTypeAsync` | `robot_enable` / `is_connected` / `get_state` / `switch_driver` / `get_driver_type` |
 | 扫查流程 | `PreScanStartAsync` / `PreScanEndAsync` / `SetStartPoseAsync` / `SetEndPoseAsync` / `PlanAsync` / `ExecuteAsync` | `pre_scan_start` / `pre_scan_end` / `set_start_pose` / `set_end_pose` / `plan` / `execute` |
 | 流程控制 | `StopAsync` / `PauseAsync` / `ResumeAsync` / `ResetAsync` / `QueryPreScanDoneAsync` / `QueryMotionDoneAsync` | `stop` / `pause` / `resume` / `reset` / `query_prescan_done` / `query_motion_done` |
 | 仿真（仅 Sim 驱动） | `SetTimeSpeedAsync` / `GetTimeSpeedAsync` / `GetSimTimeAsync` / `GetFrameRateAsync` / `StepOnceAsync` | `set_time_speed` / `get_time_speed` / `get_sim_time` / `get_frame_rate` / `step_once` |
@@ -370,14 +370,21 @@ public sealed record JogParameters(
 | 成员 | 类型 | 说明 |
 |---|---|---|
 | `IsConnected` / `IsEnabled` / `IsPaused` | `bool`（可绑定） | 由连接与指令结果驱动 |
-| `Driver` | `int` | `0 = 真实`，`1 = 仿真`（默认仿真） |
+| `Driver` | `RobotDriver` | `Simulation`(0) / `Real`(1)，**取值即后端编码**（默认仿真） |
+| `IsDriverKnown` | `bool` | 驱动类型是否已从后端回读：未连接 / 掉线 / 回读失败一律 `false` |
 | `Mode` | `RobotMode` | `Idle` / `Manual` / `Scan`，**外部只能通过 `TryEnter*` / `ExitToIdle` 改变** |
 | `ModeChanged` | 事件 | 供各 VM 刷新 `CanExecute` |
-| `DriverText` / `ConnectText` / `EnableText` / `ModeText` | `string` | 工具栏直接绑定的中文文本（派生量，无转换器） |
+| `DriverText` / `ConnectText` / `EnableText` / `ModeText` | `string` | 工具栏直接绑定的中文文本（派生量，无转换器）；`DriverText` 在 `IsDriverKnown=false` 时是「未知」 |
+
+> **「未知」是一等状态。** 驱动类型是**后端的状态**：没连上就无从查起，
+> 所以 `IsDriverKnown=false` 时 `DriverText` 显示「未知」，工具栏的两个驱动按钮一起变灰 ——
+> 不知道是哪个驱动时，任何「已选中」都是在撒谎。
+> 连接成功 / 断线重连成功 / 切换驱动之后由 `SessionViewModel` 回读 `get_driver_type`，
+> 只有回读成功才把 `Driver` 与 `IsDriverKnown` 一起写进去；掉线立刻置回未知。
 
 写者约定（**唯一 owner**，避免竞态）：
 
-- `IsConnected` / `IsEnabled` / `Driver` —— `SessionViewModel`（连接类动作的唯一入口）；
+- `IsConnected` / `IsEnabled` / `Driver` / `IsDriverKnown` —— `SessionViewModel`（连接类动作的唯一入口）；
 - `Mode` —— 本类的 `TryEnterManual()` / `TryEnterScan()` / `ExitToIdle()`；
 - `IsPaused` —— 暂停 / 恢复命令；
 - 其余 VM **只读**。
@@ -495,4 +502,5 @@ Core 内部**不启动任何后台任务**，也不读取任何配置 —— 连
 | `BridgeClient.SendAsync` | 注入 fake `ConnectionManager`，验证 id 自增 / reply 匹配 / 超时返回失败 |
 | 断线重连 | fake 连接模拟断线，验证退避序列与未决请求置失败 |
 | `ScanStateMachine` | **已有 54 个用例**（见 [`../testing/zh-CN.md`](../testing/zh-CN.md)），无需网络 / 界面 / GL |
+| `RobotDriverCodec` | **已有 15 个用例**（见 [`../testing/zh-CN.md`](../testing/zh-CN.md)）：0/1 编码与后端逐字一致、越界与 `NaN` / `Infinity` 一律退回仿真、往返一致、指令名逐字一致，以及 `RobotSession` 的「未知」语义（刚构造 / 掉线都显示未知）与 `DriverText` 变更通知 |
 | 集成 | 连本地 bridge，实发 `get_state` / `stop`，比对协议文档 |

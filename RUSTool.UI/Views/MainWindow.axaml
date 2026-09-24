@@ -85,16 +85,22 @@
 
                     <Rectangle Classes="dividerVertical" Height="20" />
 
-                    <!-- 驱动切换（真实 / 仿真）：分段按钮组 -->
+                    <!-- 驱动切换（真实 / 仿真）：分段按钮组。
+                         未连接时两个按钮【一起变灰】（IsEnabled 绑连接状态）—— 驱动类型是后端的状态，
+                         没连上就无从知道，任何一个"已选中"都是在撒谎；连上后由 SessionViewModel
+                         回读 get_driver_type 决定哪个亮（后端可能被外部切过，不听本地点击的账）。
+                         CommandParameter 用后端的编码：0 = 仿真、1 = 真实。 -->
                     <StackPanel Orientation="Horizontal">
                         <Button Classes="segLeft" Content="真实"
+                                IsEnabled="{Binding Session.IsConnected}"
                                 Classes.segOn="{Binding Session.IsRealDriver}"
                                 Command="{Binding Session.SwitchDriverCommand}"
-                                CommandParameter="0" />
+                                CommandParameter="1" />
                         <Button Classes="segRight" Content="仿真"
+                                IsEnabled="{Binding Session.IsConnected}"
                                 Classes.segOn="{Binding Session.UseSimulator}"
                                 Command="{Binding Session.SwitchDriverCommand}"
-                                CommandParameter="1" />
+                                CommandParameter="0" />
                     </StackPanel>
 
                     <Rectangle Classes="dividerVertical" Height="20" />

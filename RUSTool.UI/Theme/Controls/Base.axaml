@@ -29,9 +29,22 @@
 
     <!-- ── 文字默认 ──
          字号取 Body(12)：这是数据密集型界面最合适的主力字号，
-         旧代码里 12 出现了 45 次，本身就是事实标准，这里把它固化为默认值。 -->
+         旧代码里 12 出现了 45 次，本身就是事实标准，这里把它固化为默认值。
+
+         ⚠ 这里【只定字号，不塞颜色】—— 颜色是 Window 上的 Foreground 继承下来的。
+
+         为什么不能顺手写一条 Foreground=TextPrimary？
+           样式值(Style)的优先级【高于】继承值(Inheritance)。在这里给所有 TextBlock
+           强塞一个颜色，等于让"Avalonia 默认文字色"变成一条应用级规则，它会在
+           控件自己的 Foreground 之下再叠一层，并且赢下来的是它：
+             红底急停按钮 → 深色字（本该白字）
+             主色按钮     → 深色字（本该白字）
+             分段按钮选中 → 看不出主色高亮
+           按钮里的文字是由 ContentPresenter 现场生成的 TextBlock 画的，
+           它只能"继承"按钮的 Foreground —— 而继承永远输给样式。
+           所以默认色必须靠继承（Window 已设 TextPrimaryBrush），
+           不能靠样式，否则任何"控件级文字色"都会失灵。 -->
     <Style Selector="TextBlock">
-        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
         <Setter Property="FontSize" Value="{DynamicResource FontSizeBody}" />
         <Setter Property="TextWrapping" Value="NoWrap" />
         <Setter Property="VerticalAlignment" Value="Center" />

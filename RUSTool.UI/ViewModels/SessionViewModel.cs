@@ -1,3 +1,4 @@
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using RUSTool.Services.Logging;
@@ -46,8 +47,8 @@ public sealed partial class SessionViewModel : ViewModelBase
         _session = session;
         _log = log;
 
-        // 断线自动重连也会走到这里，界面因此能自动回到"已连接"。
-        _robot.ConnectionChanged += connected => _session.IsConnected = connected;
+        // 断线自动重连也会走到这里，界面因此能自动回到"已连接"；连上后顺带回读后端驱动类型。
+        _robot.ConnectionChanged += OnConnectionChanged;
         _session.PropertyChanged += OnSessionChanged;
     }
 
@@ -78,15 +79,21 @@ public sealed partial class SessionViewModel : ViewModelBase
     /// <summary>已暂停（pause 之后、resume 之前）。</summary>
     public bool IsHalted => _session.IsPaused;
 
-    /// <summary>驱动类型：true = 仿真，false = 真实。</summary>
-    public bool UseSimulator => _session.Driver == 1;
+    /// <summary>
+    /// 驱动类型是否已从后端回读。未连接 / 掉线 / 回读失败都是 false ——
+    /// 此时"真实 / 仿真"两个按钮一起变灰（都不选中），因为驱动类型本来就是后端的状态，
+    /// 没连上就无从知道，任何"已选中"都是在撒谎。
+    /// </summary>
+    public bool IsDriverKnown => _session.IsDriverKnown;
 
+    /// <summary>驱动类型：true = 后端当前是仿真。未知时与 <see cref="IsRealDriver"/> 同时为 false。</summary>
+    public bool UseSimulator => IsDriverKnown && _session.Driver == RobotDriver.Simulation;
 
     /// <summary>
     /// "真实"那半个分段按钮的选中态。
     /// 两个按钮各自绑一个互斥布尔量（<c>Classes.segOn</c>），因此不需要"取反"转换器。
     /// </summary>
-    public bool IsRealDriver => _session.Driver == 0;
+    public bool IsRealDriver => IsDriverKnown && _session.Driver == RobotDriver.Real;
 
     // ── 指令（把界面动作翻译成 IRobotService 调用）──
 
@@ -122,6 +129,7 @@ public sealed partial class SessionViewModel : ViewModelBase
         _robot.Disconnect();
         _session.IsConnected = false;
         _session.IsEnabled = false;
+        _session.IsDriverKnown = false; // 断开后驱动类型就无从得知了（驱动按钮立即变灰）
         _session.ExitToIdle();
         IsEmergencyStopped = false;
     }
@@ -143,12 +151,22 @@ public sealed partial class SessionViewModel : ViewModelBase
         }
     }
 
-    /// <summary>切换真实 / 仿真驱动（switch_driver）。参数 "1" = 仿真，其余 = 真实。</summary>
+    /// <summary>
+    /// 切换真实 / 仿真驱动（switch_driver）。参数用后端的编码：<c>"1"</c> = 真实，<c>"0"</c> = 仿真。
+    ///
+    /// <para>
+    /// 点按钮只是"请求切换"，回执成功也不等于界面上就该亮它 —— 所以无论回执如何，
+    /// 发完都再回读一次 <c>get_driver_type</c>：亮的永远是后端的实际状态。
+    /// </para>
+    /// </summary>
     [RelayCommand]
     private async Task SwitchDriver(object? parameter)
     {
-        var driver = parameter?.ToString() == "1" ? 1 : 0;
-        _session.Driver = driver;
+        // 未连接时按钮已是灰的，这里再挡一层（键盘快捷键 / 程序化调用也会走到这里）。
+        if (!IsConnected)
+            return;
+
+        var driver = parameter?.ToString() == "1" ? RobotDriver.Real : RobotDriver.Simulation;
 
         var r = await _robot.SwitchDriverAsync(driver);
         if (!r.Success)
@@ -156,6 +174,8 @@ public sealed partial class SessionViewModel : ViewModelBase
             ErrorMessage = $"切换驱动失败: {r.Message}";
             _log.Log($"切换驱动失败: {r.Message}", LogLevel.Error, "switch_driver");
         }
+
+        await RefreshDriverTypeAsync();
     }
 
     /// <summary>急停：停止所有运动并回到空闲（安全态）。</summary>
@@ -212,6 +232,58 @@ public sealed partial class SessionViewModel : ViewModelBase
         }
     }
 
+    // ── 驱动类型回读 ──
+
+    /// <summary>
+    /// 连接状态变化。回调发生在 WebSocket 线程上（含断线重连），所以先 <c>Post</c> 回 UI 线程再碰界面状态。
+    ///
+    /// <para>
+    /// 连上后（含自动重连成功）向【后端】回读驱动类型，而不是沿用本地点过的那一个：
+    /// 后端可能被外部切过驱动，重连之后也不一定还是原驱动。
+    /// </para>
+    /// </summary>
+    private void OnConnectionChanged(bool connected) => Dispatcher.UIThread.Post(() =>
+    {
+        _session.IsConnected = connected;
+
+        if (!connected)
+        {
+            _session.IsDriverKnown = false; // 掉线即未知：驱动按钮变灰，不用旧值继续"显示真相"
+            return;
+        }
+
+        _ = RefreshDriverTypeAsync();
+    });
+
+    /// <summary>
+    /// 回读后端当前驱动类型（<c>get_driver_type</c>）并刷新界面。
+    /// 连接完成 / 断线重连成功 / 切换驱动之后都会走这里；读不到就退回"未知"（按钮变灰），
+    /// 绝不用旧值冒充当前状态。
+    /// </summary>
+    private async Task RefreshDriverTypeAsync()
+    {
+        try
+        {
+            var r = await _robot.QueryDriverTypeAsync();
+            if (!r.Success || r.Result.Length == 0)
+            {
+                _session.IsDriverKnown = false;
+                ErrorMessage = $"查询驱动类型失败: {r.Message}";
+                _log.Log($"查询驱动类型失败: {r.Message}", LogLevel.Error, "get_driver_type");
+                return;
+            }
+
+            _session.Driver = RobotDriverCodec.FromProtocol(r.Result[0]);
+            _session.IsDriverKnown = true;
+        }
+        catch (Exception ex)
+        {
+            _session.IsDriverKnown = false;
+            ErrorMessage = $"查询驱动类型失败: {ex.Message}";
+            _log.Log($"查询驱动类型失败: {ex.Message}", LogLevel.Error, "get_driver_type");
+        }
+    }
+
     // ── 状态同步 ──
 
     /// <summary>共享状态有任何变化就刷新全部派生属性（状态灯 / 文本 / 按钮态）。</summary>
@@ -225,6 +297,7 @@ public sealed partial class SessionViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsEnabled));
         OnPropertyChanged(nameof(ConnectText));
         OnPropertyChanged(nameof(ModeText));
+        OnPropertyChanged(nameof(IsDriverKnown));
         OnPropertyChanged(nameof(UseSimulator));
         OnPropertyChanged(nameof(IsRealDriver));
         OnPropertyChanged(nameof(IsIdle));

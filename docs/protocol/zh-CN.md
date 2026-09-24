@@ -139,8 +139,20 @@ public record RobotState
 | `is_connected` | `[]` | `[1/0]` | 查询连接状态 |
 | `robot_enable` | `[state]` | — | 上使能(1)/下使能(0) |
 | `get_state` | `[flag]` | `[ts, q1..q6]` | 获取当前状态 |
+| `switch_driver` | `[type]` | — | 切换驱动：`0` = 仿真（sim）/ `1` = 真实（real） |
+| `get_driver_type` | `[]` | `[0/1]` | 查询当前驱动类型（编码同 `switch_driver`）；**无参** |
 | `is_motion_done` | `[]` | `[1/0]` | 查询运动完成 |
 | `is_in_drag_teach` | `[]` | `[1/0]` | 是否拖动示教 |
+
+**驱动类型只有后端说了算。** `switch_driver` 的回执只表示「后端收到了请求」，
+不代表当前驱动已经切过去了；界面上的高亮一律以 `get_driver_type` 的回读值为准 ——
+**连接成功 / 断线重连成功 / 切换驱动之后都要回读一次**（后端可能被外部改过驱动，重连之后
+也不一定是原来那个）。回读失败或还没连上时，界面把驱动按钮整体变灰并显示「未知」，
+绝不拿旧值继续显示。
+
+驱动编码只有一份，前后端共用：`0` = 仿真（sim）、`1` = 真实（real）。
+C# 侧的转换只在 `RobotDriverCodec` 一处（见 [`../core/zh-CN.md`](../core/zh-CN.md) 第 8 节），
+界面拿到的一律是 `RobotDriver` 枚举，不做二次映射。
 
 ### 3.4 运动控制
 

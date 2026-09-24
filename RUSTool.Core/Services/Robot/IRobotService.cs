@@ -89,8 +89,11 @@ public interface IRobotService : IDisposable
     /// <summary>获取当前状态。</summary>
     Task<CommandResult> GetStateAsync();
 
-    /// <summary>切换驱动（真实/仿真）。</summary>
-    Task<CommandResult> SwitchDriverAsync(double driver);
+    /// <summary>切换驱动。编码与后端一致：0 = 仿真（sim）/ 1 = 真实（real）。</summary>
+    Task<CommandResult> SwitchDriverAsync(RobotDriver driver);
+
+    /// <summary>查询当前驱动类型（无参），Result[0] = 0（仿真）/ 1（真实）。</summary>
+    Task<CommandResult> QueryDriverTypeAsync();
 
     // ── 扫查流程 ──
 
