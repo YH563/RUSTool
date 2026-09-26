@@ -4,6 +4,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="using:RUSTool.UI.ViewModels"
              xmlns:debug="using:RUSTool.UI.Views.Debug"
+             xmlns:charts="using:RUSTool.Charts.Controls"
              mc:Ignorable="d" d:DesignWidth="1600" d:DesignHeight="850"
              x:Class="RUSTool.UI.Views.Debug.DebugWorkspace"
              x:DataType="vm:MainViewModel">
@@ -99,9 +100,31 @@
             <Border Grid.Column="4" Classes="card" MinWidth="220">
                 <Grid RowDefinitions="Auto,*">
                     <Border Classes="cardHeader">
-                        <TextBlock Classes="panelTitle" Text="数据曲线" />
+                        <!-- 窗口长度标在卡片头上（和 3D 卡的「视角 默认」同一个位置）：
+                             放进面板里会白白吃掉一行的位置，而面板里的每一行都很贵。 -->
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Classes="panelTitle" Text="数据曲线" />
+                            <TextBlock Grid.Column="1" Classes="caption"
+                                       Text="{Binding Charts.WindowCaption}" />
+                        </Grid>
                     </Border>
-                    <debug:ChartPanel Grid.Row="1" />
+                    <!--
+                      卡片体就是图表库的控件本身 —— 本层不再套一层「卡片体薄壳」文件：
+                      六条曲线的配色 / 坐标轴 / 主题跟随 / 点集合的就地滚动全在 RUSTool.Charts 里，
+                      本文件不认识 LiveCharts / SkiaSharp（与 3D 那侧把 Silk.NET / OpenGL 关在
+                      RUSTool.Visualization 里是同一种做法）。
+
+                      两个绑定就是全部接口：
+                        Rows        —— 要画哪些行（行模型由 ViewModel 从通道目录建，见 TorqueChartViewModel）
+                        IsConnected —— 只影响「没有数据」时那句话的措辞（没连上 / 连上了但还没来帧）
+
+                      行头是「色标 + 通道名 + 读数」；行高由面板按卡片体的高度等分（六行铺满，不再留白），
+                      没数据时的措辞随 IsConnected 变。数据本来也不在这里：
+                      点由 RobotStateRow.Values 提供，超窗口删头与清空重填是数据层的事。
+                    -->
+                    <charts:RobotStatePanel Grid.Row="1"
+                                            Rows="{Binding Charts.Rows}"
+                                            IsConnected="{Binding Charts.IsConnected}" />
                 </Grid>
             </Border>
         </Grid>

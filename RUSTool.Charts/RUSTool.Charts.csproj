@@ -1,0 +1,53 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <!-- 目标框架与 RUSTool.UI / RUSTool.Visualization 保持一致：net8.0。 -->
+        <TargetFramework>net8.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <LangVersion>latest</LangVersion>
+        <!-- 库工程，只服务于本解决方案，不作为 NuGet 包发布。 -->
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <!--
+          2D 图表栈：LiveCharts 2（Avalonia 后端）+ SkiaSharp。
+
+          版本【不是】随手挑的最新正式版：2.0.4 / 2.0.5 在 Avalonia 12.1.0 下会抛
+          MissingFieldException（Avalonia.Input.Gestures.PinchEvent）—— 它们链的是 Avalonia 11 的
+          强签名字段，运行时找不到。2.1.0-dev-798 是当前唯一能在 Avalonia 12 下正常渲染的版本，
+          因此钉死它，等正式版修好再往前挪。
+          （这条版本约束原先写在 RUSTool.UI.csproj 上；图表栈整体搬进本工程后，约束跟着搬过来 ——
+          升级前先读这一段，别再踩一次。）
+        -->
+        <PackageReference Include="LiveChartsCore.SkiaSharpView.Avalonia" Version="2.1.0-dev-798" />
+
+        <!--
+          控件本身是 Avalonia 控件：UserControl + StyledProperty + 主题资源查询（TryGetResource）。
+
+          ⚠ 这条引用会随 ProjectReference 传给 RUSTool.UI —— 那是对的：UI 也有自己的 Avalonia
+          引用（同版本），本工程不替它声明版本，只保证自己这侧能编译。
+        -->
+        <PackageReference Include="Avalonia" Version="12.1.0" />
+
+        <!--
+          源码里直接用 SKColor / SolidColorPaint（曲线笔画、轴上的刻度字颜色）。
+          这里【故意不写 PackageReference】：SkiaSharp 的版本必须跟着 Avalonia 走，不能跟着 LiveCharts 走 ——
+
+          LiveCharts 2.1.0-dev-798 的 nuspec 里钉的是 SkiaSharp 2.88.9，而 Avalonia 12 的
+          Avalonia.Skia 要求 SkiaSharp >= 3.119.3-preview.1.1。两条一起进来就是
+          「NU1605 检测到包版本降级」（本解决方案把警告当错误），直接 restore 失败。
+          RUSTool.UI 里这套组合之所以能跑，靠的正是「不显式声明 SkiaSharp」：
+          传递依赖取最高版，最终解析到 SkiaSharp 3.119.4（见 RUSTool.UI/obj/project.assets.json），
+          而 LiveCharts 实际用到的那部分 Skia API 在 3.x 上没有断开 —— 曲线面板在本仓库里是渲染得出来的。
+          所以此处照抄同样的做法：让版本由 Avalonia 决定。
+
+          即：本项目编译期能用 SKColor / SolidColorPaint，是因为它们从
+          LiveChartsCore.SkiaSharpView / Avalonia.Skia 传递过来，而不是自己钉了一个版本。
+        -->
+
+        <!-- 行模型（RobotStateRow）是绑定源：ObservableObject + ObservableProperty。 -->
+        <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    </ItemGroup>
+
+</Project>

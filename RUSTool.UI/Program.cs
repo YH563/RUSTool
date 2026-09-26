@@ -3,12 +3,12 @@ using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Styling;
 using Avalonia.Threading;
+using RUSTool.Charts.Controls;
 using RUSTool.UI.Services;
 using RUSTool.UI.ViewModels;
 using RUSTool.UI.Views;
 using System;
 using System.Collections.Generic;
-using System.Linq;
 
 namespace RUSTool.UI;
 
@@ -99,6 +99,32 @@ internal static class Program
         {
             vm.PublishPointCloud(DemoSensorFrame.Build(seq: 1024));
             Dispatcher.UIThread.RunJobs();
+        }
+
+        // 可选：注入一整段合成状态帧（--demo-torque），把六路关节力矩曲线画出来。
+        // 与 --demo-cloud 同一套路：帧按协议的线格式真的拼了一遍、再用生产的解码器解回来，
+        // 只跳过 WebSocket 传输。这里要多给一样东西 —— 【一段历史】：
+        // 曲线看的是一段滚动窗口，所以连推 WindowFrames 帧（正好填满一屏），
+        // 而不是像点云那样给一帧就够。
+        if (args.Contains("--demo-torque"))
+        {
+            for (var i = 0; i < TorqueChartViewModel.WindowFrames; i++)
+                vm.PublishStateFrame(DemoStateFrame.Build(i));
+
+            // 曲线区在没有数据时是隐藏的：推完帧才第一次布局，六张图也才在这时被建出来。
+            Dispatcher.UIThread.RunJobs();
+
+            // 图表的更新有自己的节流器（把一帧内的多次变更合批再画），而截图进程是推完马上就要拍 ——
+            // 这里显式让它立刻重画一次，否则 PNG 里拍到的是一圈空坐标轴。
+            var charts = RobotStatePanel.RedrawAll(window);
+
+            // 曲线重画最终是排进渲染计时器的（headless 下没有真实窗口在跑那个计时器），
+            // 所以推进消息队列之后再强制走一轮渲染，确保画完。
+            Dispatcher.UIThread.RunJobs();
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+            Dispatcher.UIThread.RunJobs();
+
+            Console.Error.WriteLine($"[ui] 曲线：已按第 {TorqueChartViewModel.WindowFrames} 帧重画 {charts} 张图");
         }
 
         var frame = window.CaptureRenderedFrame();

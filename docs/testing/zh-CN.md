@@ -1,8 +1,8 @@
 # 构建、测试与验证（简体中文）
 
-> 状态：反映当前实现。配套：[`../README.md`](../README.md)、[`../architecture/zh-CN.md`](../architecture/zh-CN.md)、[`../core/zh-CN.md`](../core/zh-CN.md)、[`../ui/zh-CN.md`](../ui/zh-CN.md)、[`../visualization/zh-CN.md`](../visualization/zh-CN.md)。
+> 状态：反映当前实现。配套：[`../README.md`](../README.md)、[`../architecture/zh-CN.md`](../architecture/zh-CN.md)、[`../core/zh-CN.md`](../core/zh-CN.md)、[`../ui/zh-CN.md`](../ui/zh-CN.md)、[`../visualization/zh-CN.md`](../visualization/zh-CN.md)、[`../charts/zh-CN.md`](../charts/zh-CN.md)。
 
-本文回答三件事：**用什么 SDK 构建**、**怎么跑测试**、**怎么验证界面与 3D 真的在工作**。
+本文回答三件事：**用什么 SDK 构建**、**怎么跑测试**、**怎么验证界面 / 3D / 曲线真的在工作**。
 
 ---
 
@@ -10,12 +10,12 @@
 
 | 项 | 值 |
 |---|---|
-| 目标框架 | `net8.0`（四个工程统一，跟随 `RobotSimulation` 0.3.1 的 lib 目录） |
+| 目标框架 | `net8.0`（五个工程统一，跟随 `RobotSimulation` 0.3.1 的 lib 目录） |
 | 构建 SDK | **.NET SDK 10**（本机装在 `~/.dotnet`，未加入 PATH） |
 | 为什么 | Avalonia 12.1.0 的源生成器要求 Roslyn 4.14+：用 SDK 8 时源生成器加载不上，`InitializeComponent` 不被生成，于是整片报 `CS0103` |
 | `global.json` | 刻意**不放** —— 钉了 SDK 版本反而编译不过 |
 | 换机器 | `~/.dotnet` 里的 SDK 或系统安装的 .NET 10 都可以，只要 `dotnet --version` ≥ 10 |
-| NuGet 源 | 仓库根 `NuGet.config`：`<clear />` 后**只**登记 nuget.org | 不依赖本机离线目录或私有源 —— Linux / Windows / CI 用同一套配置还原；`RobotSimulation` 0.1.0 / 0.2.0 / 0.2.1 / 0.3.0 / 0.3.1 都已发布在 nuget.org 上 |
+| NuGet 源 | 仓库根 `NuGet.config`：`<clear />` 后**只**登记 nuget.org，不依赖本机离线目录或私有源 —— Linux / Windows / CI 用同一套配置还原；`RobotSimulation` 0.1.0 / 0.2.0 / 0.2.1 / 0.3.0 / 0.3.1 都已发布在 nuget.org 上 |
 
 ```bash
 export DOTNET_ROOT="$HOME/.dotnet"
@@ -34,6 +34,7 @@ dotnet run --project RUSTool.UI -- --shot RUSTool.UI/preview/02-engineer-dark.pn
 dotnet run --project RUSTool.UI -- --clinical                        # 真实窗口 · 临床模式
 dotnet run --project RUSTool.UI -- --shot RUSTool.UI/preview/05-menu-MenuFile.png --open MenuFile
 dotnet run --project RUSTool.UI -- --shot RUSTool.UI/preview/06-engineer-status.png --status   # 展开状态浮层
+dotnet run --project RUSTool.UI -- --shot RUSTool.UI/preview/08-engineer-torque.png --demo-torque   # 合成状态帧 → 六路曲线
 ```
 
 `--shot` 的路径按**当前工作目录**解析（脚本传的是绝对路径，手敲相对路径就要在仓库根执行）。
@@ -43,7 +44,7 @@ dotnet run --project RUSTool.UI -- --shot RUSTool.UI/preview/06-engineer-status.
 ## 2. 构建与单元测试
 
 ```bash
-# 整解决方案（Core / UI / Visualization / Tests）
+# 整解决方案（Core / UI / Visualization / Charts / Tests）
 dotnet build RUSTool.sln
 
 # 单元测试：只跑纯逻辑层，不需要网络 / 界面 / 显卡
@@ -53,7 +54,7 @@ dotnet test tests/RUSTool.Core.Tests
 CI 里请**串行**执行 `build` / `test` / `run`：它们共用同一份输出目录，
 并发跑会互相占用 bin 下的文件（症状是「文件被占用」的构建错误）。
 
-## 3. 界面与 3D 的验证（不需要后端）
+## 3. 界面 / 3D / 曲线的验证（不需要后端）
 
 ```bash
 # 1) 真实窗口 + GL：起界面，stderr 会出现 [3d] 就绪 …（含 GPU 与模型加载报告）
@@ -65,7 +66,7 @@ RUSTool.UI/preview.sh window --clinical     # 等价写法：参数透传
 
 # 3) 无 GL 时的降级：离屏截图不崩，3D 区显示设计好的空状态
 RUSTool.UI/preview.sh dark                  # 只深色那张
-RUSTool.UI/preview.sh all                   # 六张一次拍全（工程师 / 临床 × 浅色 / 深色 + 状态浮层 + 合成点云）
+RUSTool.UI/preview.sh all                   # 七张一次拍全（工程师 / 临床 × 浅色 / 深色 + 状态浮层 + 合成点云 + 合成力矩曲线）
 
 # 4) 展开 3D 视口右上角的机械臂状态浮层（默认收起，静态截图里拍不到那枚按钮的结果）
 RUSTool.UI/preview.sh status                # -> preview/06-engineer-status.png
@@ -74,13 +75,19 @@ RUSTool.UI/preview.sh status                # -> preview/06-engineer-status.png
 RUSTool.UI/preview.sh cloud                 # -> preview/07-engineer-cloud.png
 RUSTool.UI/preview.sh window --demo-cloud    # 真实窗口 + GL：真的能看见点云
 
-# 6) 弹层（菜单是 Popup，不展开拍不到）
+# 6) 合成状态帧：推满一屏（300 帧 ≈ 15 s）六路关节力矩曲线 —— 帧按协议的线格式拼一遍、
+#    再用生产的解码器解回来，只跳过 WebSocket 传输
+RUSTool.UI/preview.sh torque                # -> preview/08-engineer-torque.png
+RUSTool.UI/preview.sh window --demo-torque   # 真实窗口：曲线跟着合成帧长出来
+
+# 7) 弹层（菜单是 Popup，不展开拍不到）
 RUSTool.UI/preview.sh popup MenuFile dark
 ```
 
 截图落在 `RUSTool.UI/preview/`（已在 `.gitignore` 里忽略），
 文件名固定为 `01-engineer-light` / `02-engineer-dark` / `03-clinical-light` / `04-clinical-dark` /
-`06-engineer-status`（3D 视口右上角状态浮层展开的那一张）/ `07-engineer-cloud`（合成点云那一张）。
+`06-engineer-status`（3D 视口右上角状态浮层展开的那一张）/ `07-engineer-cloud`（合成点云那一张）/
+`08-engineer-torque`（六路关节力矩曲线那一张）。
 
 **离屏截图与真实启动共用同一份组装**（`App.CreateMainViewModel`），
 所以预览图里的界面拓扑就是运行时那一份；但离屏渲染**拿不到桌面 GL**，
@@ -89,6 +96,11 @@ RUSTool.UI/preview.sh popup MenuFile dark
 > `preview.sh cloud` 在离屏下同样看不到点云画面（3D 区没有 GL），**它的价值在那几行日志**：
 > `[3d] 点云流已接通：首帧 60000 点（seq 1024 · frame · raw）` —— 证明「拼帧 → 解码 → 适配 →
 > 投递」这条链路真的跑通了；要看画面用 `preview.sh window --demo-cloud`。
+
+> `preview.sh torque` 与上面几张都不一样：**曲线在离屏下是真的画出来的** ——
+> 2D 走 Skia 软件光栅，不需要桌面 GL。所以 `08-engineer-torque.png` 里能直接看到六条曲线，
+> 它能同时当三件事的回归基线：状态帧解码 → HUD + 曲线的链路、卡片版式、以及曲线配色
+> （对比 `light` / `dark` 两张可确认「线色不跟主题走、其余跟」）。
 
 ### 图形栈日志确实回到了项目日志器
 
@@ -170,9 +182,10 @@ grep ' sim ' logs/$(date +%F).log
 | `RUSTool.Core/Communication/` | 起真实后端（或本地 bridge）跑 `preview.sh window`，点「连接」，确认日志里出现 `→ 发送指令` / `← 指令 … 结果` 且状态灯变化；动过 `/sensor` 解码时同时确认日志里有 `[3d] 点云流已接通：首帧 … 点`，或直接 `preview.sh window --demo-cloud` |
 | `RUSTool.Core/Services/` | 点动按住 / 松开（`start_jog` / `stop_jog_decel` 成对出现）；急停后确认回到「空闲」 |
 | 驱动 / 连接（`RobotSession`、`SessionViewModel`） | 连上后确认工具栏「真实 / 仿真」由 `get_driver_type` 回读点亮（不是点击即亮）；断开后两个一起变灰、`DriverText` 变「未知」；切换驱动后按钮跟随后端回读值 |
-| `RUSTool.UI/Theme/` | `./preview.sh all` 看六张截图的配色（**必看彩色按钮上的字是不是白的**：急停 `danger`、主操作 `accent`、分段按钮选中态，浅色深色都要看）；`./preview.sh popup MenuFile` 看弹层 |
+| `RUSTool.UI/Theme/` | `./preview.sh all` 看七张截图的配色（**必看彩色按钮上的字是不是白的**：急停 `danger`、主操作 `accent`、分段按钮选中态，浅色深色都要看）；`./preview.sh popup MenuFile` 看弹层 |
 | `RUSTool.UI/Views/` | `./preview.sh window` 交互一遍受影响的面板；再 `./preview.sh all` 确认布局没塌；动过 3D 视口右上角的覆盖层时再补一张 `./preview.sh status`（浮层展开态） |
 | `RUSTool.Visualization/` | `./preview.sh window` 看 stderr 的 `[3d] 就绪 …`（GPU + 模型报告）；点云相关改动用 `./preview.sh window --demo-cloud` 看画面与状态行里的「点云 N 点」；再 `./preview.sh dark` 确认无 GL 时降级不崩 |
+| `RUSTool.Charts/` | `./preview.sh torque` 看六条曲线（离线也能看见：2D 不需要 GL）；再 `./preview.sh all` 对比 `light` / `dark` 两张，确认线色不变、卡片与文字跟着换肤；改过窗口长度时确认卡片头右侧的「N s · M 帧」与图上点数一致。曲线数值的正确性目前**没有单测**（图表是绘制层），靠这张图与 HUD 读数互相印证 |
 | 模型资产（`Assets/Models/`） | 检查 `LoadReport` / stderr 里加载的是预期的 URDF（布局规则见该目录 README） |
 
 ---
@@ -189,4 +202,6 @@ grep ' sim ' logs/$(date +%F).log
 | 界面读数全是 0、日志空白 | 没连后端。`preview.sh window` → 点「连接」；这是正确行为 |
 | `logs/` 里找不到文件 | 日志相对**进程工作目录**写；用 `preview.sh` 时工作目录是仓库根 |
 | 状态行的值一直是「空闲 / 已暂停」 | 模式仲裁（`RobotSession.TryEnter*`）尚未接线，见 [`../ui/zh-CN.md`](../ui/zh-CN.md) 第 13.2 节 |
-| 点云 / 影像 / 曲线没有数据 | 点云要连后端并开 `/sensor`（点「连接」即开）；**没接后端**时可用 `preview.sh window --demo-cloud` 看合成帧。影像与曲线仍是占位，见 [`../ui/zh-CN.md`](../ui/zh-CN.md) 第 13 节 |
+| 点云 / 影像没有数据 | 点云要连后端并开 `/sensor`（点「连接」即开）；**没接后端**时可用 `preview.sh window --demo-cloud` 看合成帧。影像是静态占位，见 [`../ui/zh-CN.md`](../ui/zh-CN.md) 第 13 节 |
+| 曲线区空白 | 没连后端时是**设计好的空状态**（文案会区分「未连接控制通道 · 曲线待数据」与「等待状态帧…」）；离线想看曲线用 `preview.sh torque`，连上后端后状态流一推帧六条曲线就出来 |
+| 截图里曲线是空坐标轴 | 图表的更新有节流器（合批重画），截图进程会在推完帧后显式调 `RobotStatePanel.RedrawAll(window)`；若仍为空，多半是少了这一步或没推进渲染计时器（见 [`../charts/zh-CN.md`](../charts/zh-CN.md) 的截图钩子一节） |

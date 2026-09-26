@@ -33,6 +33,7 @@ public sealed partial class MainViewModel : ViewModelBase
         Log = new LogViewModel(log);
         Session = new SessionViewModel(robot, session, log);
         Status = new RobotStatusViewModel(robot);
+        Charts = new TorqueChartViewModel(robot);
         Control = new RobotControlViewModel(robot, log);
         Scan = new ScanWorkflowViewModel(robot, log);
         Replay = new ReplayViewModel(log);
@@ -60,6 +61,27 @@ public sealed partial class MainViewModel : ViewModelBase
     /// <param name="frame">要注入的帧（通常是 <c>DemoSensorFrame.Build()</c> 的产物）。</param>
     public void PublishPointCloud(SensorPointCloudFrame frame) => PointCloudFrameReceived?.Invoke(frame);
 
+    /// <summary>
+    /// 注入一帧状态帧（<c>/state</c>）到【订阅了状态流的两个消费者】上（HUD 与六路曲线），
+    /// 效果与真机收到一帧完全相同。
+    ///
+    /// <para>
+    /// 只给截图模式用（<c>Program.cs</c> 的 <c>--demo-torque</c>）：没有后端可连时，
+    /// 这是唯一能把「状态帧解码 → HUD 读数 + 力矩曲线」这条链路画进 PNG 的办法。
+    /// 一帧同时喂给两处 —— 与真机上一帧被两处接收的方式一致。
+    /// </para>
+    /// <para>
+    /// <b>必须在 UI 线程调用</b>：曲线那侧直接改绑定源集合。<c>Dispatcher.UIThread.Post</c>
+    /// 是异步的，截图模式等的是同步效果，所以这里不走 <c>Post</c>。
+    /// </para>
+    /// </summary>
+    /// <param name="state">要注入的帧（通常是 <c>DemoStateFrame.Build()</c> 的产物）。</param>
+    public void PublishStateFrame(BridgeProtocol.StateFrame state)
+    {
+        Status.PushFrame(state);
+        Charts.PushFrame(state);
+    }
+
 
     /// <summary>
     /// 日志服务本体（<see cref="Log"/> 面板展示的就是它的集合）。
@@ -75,6 +97,9 @@ public sealed partial class MainViewModel : ViewModelBase
 
     /// <summary>机械臂实时状态 HUD。</summary>
     public RobotStatusViewModel Status { get; }
+
+    /// <summary>实时曲线（六路关节力矩，窗口滚动）。</summary>
+    public TorqueChartViewModel Charts { get; }
 
     /// <summary>手动 / 点动控制。</summary>
     public RobotControlViewModel Control { get; }

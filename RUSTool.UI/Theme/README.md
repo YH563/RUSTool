@@ -124,7 +124,7 @@ Avalonia 里**后加载的样式覆盖先加载的**。所以如果 `App.axaml` 
 |---|---|
 | 红底急停按钮上是深色字（不是白字） | `Button` 主题设了 `Foreground=TextOnAccentBrush`，被全局 `TextBlock` 样式盖掉 |
 | 分段按钮（真实 / 仿真）选中的那个看不出主色 | 同上：选中色写在按钮上（`Class="segOn"`），被全局样式截走 |
-| `Classes="danger|accent"` 的文字类看着没生效 | 同上（这类是 `TextBlock` 自己的样式，不冲突，但容易连带怀疑） |
+| `Classes="danger\|accent"` 的文字类看着没生效 | 同上（这类是 `TextBlock` 自己的样式，不冲突，但容易连带怀疑） |
 
 所以：**要改某块文字的颜色，就在它自己（或最近的祖先 `Window` / `Panel`）上设 `Foreground`**，
 不要在全局样式里兜底。自检方法很直接 ——
@@ -179,7 +179,7 @@ cd RUSTool.UI
 ./preview.sh dark              # 离屏渲染深色  -> preview/02-engineer-dark.png
 ./preview.sh clinical-light    # 临床模式 · 浅色 -> preview/03-clinical-light.png
 ./preview.sh clinical-dark     # 临床模式 · 深色 -> preview/04-clinical-dark.png
-./preview.sh all               # 四张一次拍全
+./preview.sh all               # 七张一次拍全（含状态浮层 / 合成点云 / 合成力矩曲线）
 ./preview.sh popup MenuFile    # 展开弹层后截图（菜单默认拍不到）
 ```
 

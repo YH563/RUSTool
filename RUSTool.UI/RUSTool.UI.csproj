@@ -43,6 +43,12 @@
           Silk.NET / OpenGL / RobotSimulation 全部关在那个工程里，不进入本项目。
         -->
         <ProjectReference Include="..\RUSTool.Visualization\RUSTool.Visualization.csproj" />
+        <!--
+          2D 图表栈的隔离容器（曲线面板）。界面只认识它的两个契约：
+          RobotStatePanel（控件，数据入口是行集合 + 纯 double 列表）与 RobotStateRow / RobotArmChannels
+          （行模型 + 通道目录）。LiveCharts / SkiaSharp / 曲线配色全部关在那个工程里，不进入本项目。
+        -->
+        <ProjectReference Include="..\RUSTool.Charts\RUSTool.Charts.csproj" />
     </ItemGroup>
 
     <ItemGroup>

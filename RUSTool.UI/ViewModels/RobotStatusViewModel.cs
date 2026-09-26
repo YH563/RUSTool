@@ -102,45 +102,56 @@ public sealed partial class RobotStatusViewModel : ViewModelBase
     }
 
     private void OnStateUpdated(BridgeProtocol.StateFrame state)
+        => Dispatcher.UIThread.Post(() => PushFrame(state));
+
+    /// <summary>
+    /// 用一帧状态帧刷新全部读数。<b>必须在 UI 线程调用</b>（改的是绑定属性）。
+    ///
+    /// <para>
+    /// 单独开一道门，而不是把整段换算留在事件回调里：截图模式的合成帧
+    /// （<c>--demo-torque</c>）也要从<b>同一段代码</b>进 HUD ——
+    /// 与 <c>--demo-cloud</c> 往 <c>MainViewModel.PublishPointCloud</c> 里灌帧同一个道理，
+    /// 免得出现「截图走一套换算、真机走另一套」。
+    /// </para>
+    /// </summary>
+    /// <param name="state">状态帧（后端单位：弧度 / 米；换算只在这一层做）。</param>
+    public void PushFrame(BridgeProtocol.StateFrame state)
     {
-        Dispatcher.UIThread.Post(() =>
-        {
-            // 关节角：后端弧度 → 界面度。
-            Joint1 = Deg(state.JointPos, 0);
-            Joint2 = Deg(state.JointPos, 1);
-            Joint3 = Deg(state.JointPos, 2);
-            Joint4 = Deg(state.JointPos, 3);
-            Joint5 = Deg(state.JointPos, 4);
-            Joint6 = Deg(state.JointPos, 5);
+        // 关节角：后端弧度 → 界面度。
+        Joint1 = Deg(state.JointPos, 0);
+        Joint2 = Deg(state.JointPos, 1);
+        Joint3 = Deg(state.JointPos, 2);
+        Joint4 = Deg(state.JointPos, 3);
+        Joint5 = Deg(state.JointPos, 4);
+        Joint6 = Deg(state.JointPos, 5);
 
-            // 3D 视口的同一份关节角（弧度，不换算）—— 姿态与上面几行来自同一帧，不会各说各话。
-            JointsRadians = ToFloats(state.JointPos, 6);
+        // 3D 视口的同一份关节角（弧度，不换算）—— 姿态与上面几行来自同一帧，不会各说各话。
+        JointsRadians = ToFloats(state.JointPos, 6);
 
-            // 法兰位姿：位置本身就是米，姿态是弧度 → 度。
-            FlangeX = At(state.FlangePos, 0);
-            FlangeY = At(state.FlangePos, 1);
-            FlangeZ = At(state.FlangePos, 2);
-            FlangeRx = Deg(state.FlangePos, 3);
-            FlangeRy = Deg(state.FlangePos, 4);
-            FlangeRz = Deg(state.FlangePos, 5);
+        // 法兰位姿：位置本身就是米，姿态是弧度 → 度。
+        FlangeX = At(state.FlangePos, 0);
+        FlangeY = At(state.FlangePos, 1);
+        FlangeZ = At(state.FlangePos, 2);
+        FlangeRx = Deg(state.FlangePos, 3);
+        FlangeRy = Deg(state.FlangePos, 4);
+        FlangeRz = Deg(state.FlangePos, 5);
 
-            Torque1 = At(state.Effort, 0);
-            Torque2 = At(state.Effort, 1);
-            Torque3 = At(state.Effort, 2);
-            Torque4 = At(state.Effort, 3);
-            Torque5 = At(state.Effort, 4);
-            Torque6 = At(state.Effort, 5);
+        Torque1 = At(state.Effort, 0);
+        Torque2 = At(state.Effort, 1);
+        Torque3 = At(state.Effort, 2);
+        Torque4 = At(state.Effort, 3);
+        Torque5 = At(state.Effort, 4);
+        Torque6 = At(state.Effort, 5);
 
-            FrameRate = state.FrameRate;
+        FrameRate = state.FrameRate;
 
-            // 状态帧里【没有独立的接触力通道】，这里用各关节力矩的模和作近似：
-            // 探头压在体表上时各关节力矩同时升高，趋势与接触力一致。
-            // 后端一旦提供 contact_force 字段，只改这一行即可。
-            var sum = 0.0;
-            foreach (var effort in state.Effort)
-                sum += Math.Abs(effort);
-            ContactForce = sum;
-        });
+        // 状态帧里【没有独立的接触力通道】，这里用各关节力矩的模和作近似：
+        // 探头压在体表上时各关节力矩同时升高，趋势与接触力一致。
+        // 后端一旦提供 contact_force 字段，只改这一行即可。
+        var sum = 0.0;
+        foreach (var effort in state.Effort)
+            sum += Math.Abs(effort);
+        ContactForce = sum;
     }
 
     /// <summary>取数组第 i 个元素，越界返回 0（状态帧初期字段可能不全）。</summary>

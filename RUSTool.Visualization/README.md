@@ -1,8 +1,9 @@
-# RUSTool.Visualization — 图形栈的隔离容器
+# RUSTool.Visualization — 3D 图形栈的隔离容器
 
 本工程只有一个职责：**让 3D 图形栈（Silk.NET + OpenGL + RobotSimulation）只在这里出现**。
 `RUSTool.UI` 引用它，但只认识三个契约：`Controls/RobotViewport.cs`（控件，数据入口）、
 `Scene/PointCloudFrame.cs`（点云帧的形状）与 `Logging/ISimulationLogSink.cs`（日志出口）。
+（另一条隔离带是 2D 图表栈：[`../RUSTool.Charts/README.md`](../RUSTool.Charts/README.md)。）
 
 ## 文档在哪
 

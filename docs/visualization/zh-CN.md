@@ -1,6 +1,6 @@
 # RUSTool.Visualization（简体中文）
 
-> 状态：反映当前实现。配套：[`../README.md`](../README.md)（仓库入口）、[`../architecture/zh-CN.md`](../architecture/zh-CN.md)、[`../ui/zh-CN.md`](../ui/zh-CN.md)、[`../testing/zh-CN.md`](../testing/zh-CN.md)。
+> 状态：反映当前实现。配套：[`../README.md`](../README.md)（仓库入口）、[`../architecture/zh-CN.md`](../architecture/zh-CN.md)、[`../ui/zh-CN.md`](../ui/zh-CN.md)、[`../charts/zh-CN.md`](../charts/zh-CN.md)（另一条隔离带 · 2D 图表）、[`../testing/zh-CN.md`](../testing/zh-CN.md)。
 
 这个工程只有一个职责：**让 3D 图形栈（Silk.NET + OpenGL + RobotSimulation）只在这里出现**。
 `RUSTool.UI` 引用它，但只认识三个契约：`Controls/RobotViewport.cs`（控件）、

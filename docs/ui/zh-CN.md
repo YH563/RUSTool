@@ -1,6 +1,6 @@
 # RUSTool.UI 界面设计与实现（简体中文）
 
-> 状态：设计已落地，实现随代码演进。配套：[`../README.md`](../README.md)（仓库入口）、[`../architecture/zh-CN.md`](../architecture/zh-CN.md)（工程边界与 ADR）、[`../core/zh-CN.md`](../core/zh-CN.md)（业务层）、[`../visualization/zh-CN.md`](../visualization/zh-CN.md)（3D 契约）、[`../testing/zh-CN.md`](../testing/zh-CN.md)（怎么跑起来）。
+> 状态：设计已落地，实现随代码演进。配套：[`../README.md`](../README.md)（仓库入口）、[`../architecture/zh-CN.md`](../architecture/zh-CN.md)（工程边界与 ADR）、[`../core/zh-CN.md`](../core/zh-CN.md)（业务层）、[`../visualization/zh-CN.md`](../visualization/zh-CN.md)（3D 契约）、[`../charts/zh-CN.md`](../charts/zh-CN.md)（2D 契约）、[`../testing/zh-CN.md`](../testing/zh-CN.md)（怎么跑起来）。
 
 `RUSTool.UI` 是**产品本身**（不是界面草稿）：Avalonia + MVVM，`dotnet run` 起来的就是它。
 它同时是唯一的 application 工程、唯一的组合根、以及设计系统的宿主。
@@ -19,17 +19,19 @@
 | 业务 | ✅ 已接入 `RUSTool.Core`：`IRobotService` / `RobotSession` / `ILogService` |
 | 通信 | ✅ 经 `BridgeClient` 连后端 bridge（WebSocket：`/control` / `/state` / `/sensor`；点云帧在 WS 线程解码后进 3D 视口） |
 | 3D | ✅ 已接 `RUSTool.Visualization`：真实 GL 视口 + 图形库自带的朝向 gizmo；拿不到桌面 GL 时降级为主题化空状态 |
-| 影像 / 曲线 / 回放 | ⬜ 占位：静态图形与装饰性曲线，等真实数据源接入后替换 |
+| 数据曲线 | ✅ 已接 `RUSTool.Charts`：六路关节力矩（`/state` 的 `effort`，滚动 300 帧 ≈ 15 s、一路一行、六行等分铺满卡片体）；界面侧只剩控件本身 + 两个绑定 |
+| 影像 / 回放 | ⬜ 占位：超声影像是静态图形、回放时间轴是演示数据，等真实数据源接入后替换 |
 
-**界面上的读数、日志、状态全部来自真实后端。** 连上 bridge 才有数据；
-没连上时工具栏显示「未连接 / 空闲」、HUD 读数为 0、日志为空 —— 这是正确行为，不是坏了。
-截图（`./preview.sh`）不连后端，看到的就是这个离线态；要看真实数据请 `./preview.sh window`。
+**界面上的读数、日志、状态、曲线全部来自真实后端。** 连上 bridge 才有数据；
+没连上时工具栏显示「未连接 / 空闲」、HUD 读数为 0、日志为空、曲线区显示空状态 —— 这是正确行为，不是坏了。
+截图（`./preview.sh`）不连后端，看到的就是这个离线态；要看真实数据请 `./preview.sh window`
+（`./preview.sh cloud` / `torque` 例外：它们注入合成帧，好让离线截图里也能看见点云与曲线）。
 
 ### 1.2 目录结构
 
 ```
 RUSTool.UI/
-├── RUSTool.UI.csproj           WinExe · net8.0 · 引用 RUSTool.Core + RUSTool.Visualization
+├── RUSTool.UI.csproj           WinExe · net8.0 · 引用 RUSTool.Core + RUSTool.Visualization + RUSTool.Charts
 ├── Program.cs                  进程入口：正常启动 / --shot 离屏截图（复用同一份组装）
 ├── App.axaml(.cs)              应用入口 + 依赖图组装（composition root）
 ├── app.manifest                应用程序清单
@@ -52,11 +54,12 @@ RUSTool.UI/
 │                               sunken / canvas / toolbar / segLeft·segRight / tag
 │
 ├── Assets/                     应用图标等静态资源
-├── ViewModels/                 8 个文件
+├── ViewModels/                 9 个文件
 │   ├── ViewModelBase.cs        ObservableObject 基类
 │   ├── MainViewModel.cs        组装点：工具栏状态 + 模式切换
 │   ├── SessionViewModel.cs     连接 / 使能 / 驱动 / 急停（连接类动作的唯一入口）
 │   ├── RobotStatusViewModel.cs 订阅 /state 状态流 → HUD 读数（弧度→度在这一层换算）
+│   ├── TorqueChartViewModel.cs 图表接线（薄适配层）：从通道目录建六行 + 推状态帧 + 透连接状态
 │   ├── RobotControlViewModel.cs 点动 6 轴 + movej / movel / 暂停 / 复位
 │   ├── ScanWorkflowViewModel.cs 四步扫查流程（同步回执 + 异步事件双来源）
 │   ├── LogViewModel.cs         日志面板（增量镜像 + 级别过滤）
@@ -65,10 +68,9 @@ RUSTool.UI/
 └── Views/
     ├── MainWindow.axaml(.cs)   窗口外壳：工具栏 + 工作区宿主（按模式换 Content，见 9.5）
     ├── Debug/                  工程师工作区
-    │   ├── DebugWorkspace.axaml        上排 3D / 影像 / 曲线，下排 指令 / 回放 / 日志
+    │   ├── DebugWorkspace.axaml        上排 3D / 影像 / 曲线（卡片体直接是 charts:RobotStatePanel），下排 指令 / 回放 / 日志
     │   ├── Scene3DView.axaml           三层叠放：占位层 + RobotViewport + 角标
     │   ├── UltrasoundView.axaml        超声影像（占位）
-    │   ├── ChartPanel.axaml            数据曲线（占位）
     │   ├── ArmControlPanel.axaml       点动 / MoveJ / MoveL（「按住走、松手停」）
     │   ├── ScanWorkflowPanel.axaml     四步流程面板
     │   ├── RobotStatusOverlay.axaml    机械臂状态浮层（3D 视口右上角，按需展开）
@@ -451,12 +453,13 @@ var session = new RobotSession();                          // 全局共享状态
 return new MainViewModel(robot, session, log);
 ```
 
-`MainViewModel` 再按固定顺序建 6 个子 VM（日志最先，其余 VM 都要往里写）：
+`MainViewModel` 再按固定顺序建 7 个子 VM（日志最先，其余 VM 都要往里写）：
 
 ```
 MainViewModel
 ├── Session     SessionViewModel         连接 / 使能 / 驱动 / 急停
 ├── Status      RobotStatusViewModel     /state → HUD 读数（右上角浮层，按需展开）
+├── Charts      TorqueChartViewModel     /state → 六路关节力矩曲线（薄适配层，见 11.4）
 ├── Control     RobotControlViewModel    点动 + MoveJ / MoveL
 ├── Scan        ScanWorkflowViewModel    四步扫查流程
 ├── Log         LogViewModel             日志面板
@@ -475,6 +478,10 @@ MainViewModel
                         ▼
                    RobotViewport.JointValues ──► RobotScene.ApplyJointValues（渲染线程）
 
+/state 状态流 ──► TorqueChartViewModel.OnStateUpdated ──► Post 到 UI 线程 ──► Charts.PushFrame
+                   （同一帧的另一条投影：effort 的六路 → RUSTool.Charts 的行模型；
+                     XAML 绑定把 Rows 交给 RobotStatePanel，见 11.4）
+
 /sensor 点云流 ──► MainViewModel.PointCloudFrameReceived ──► Scene3DView.OnPointCloudFrame
                    （WS 线程；解码已由 Core 的 SensorFrameCodec 做完）
                         │ 适配成 PointCloudFrame（两个工程互不认识的接缝）
@@ -486,6 +493,9 @@ MainViewModel
           ◄── CommandResult（回执）：写日志 + 更新状态灯
           ◄── EventNotification（plan_done 等长任务事件）：推进扫查流程
 ```
+
+> 同一个 `/state` 事件有两个消费者（HUD 与曲线），各自在自己的 VM 里 `Post` 到 UI 线程后更新自己的那一份投影 ——
+> HUD 要度数、曲线要牛顿·米，两条投影互不牵就。曲线那侧只**推**不**拉**：没人会去问图表要数据。
 
 > 点云那条路**不经过 XAML 绑定**：帧每秒十几张、每张几 MB，属性绑定会每帧触发通知与布局，
 > 所以走的是「VM 抛事件 → 视图转调视口方法」。两条路的规矩是同一条：数据只写邮箱一格，
@@ -510,7 +520,60 @@ MainViewModel
   `LogViewModel` 对它做增量镜像并按级别过滤 —— 「只看警告」因此是真的会过滤；3D 图形栈日志同源。
 - **点动是「按住走、松手停」**：`ArmControlPanel` 在指针按下 / 松开时分别下发
   `start_jog` / `stop_jog_decel`，并处理「指针被系统抢走」（`PointerCaptureLost`）以免机械臂一直走。
+- **曲线卡片的界面侧只有两个绑定**：`DebugWorkspace.axaml` 把 `Charts.Rows` 与 `Charts.IsConnected`
+  交给图表库的 `RobotStatePanel`，图表怎么画（配色 / 坐标轴 / 主题跟随 / 点集合就地滚动）全在
+  `RUSTool.Charts` 里 —— 与 3D 那侧「界面只认识控件契约」是同一条规矩（见 11.4）。
 - **截图与正式启动共用同一份组装**，所以 `preview/*.png` 画的就是运行时那个界面。
+
+### 11.4 「数据曲线」卡片的接线（薄宿主 + 适配层）
+
+```
+/state（BridgeClient）── 同一个事件的两个消费者之一
+        │
+        ▼  TorqueChartViewModel（RUSTool.UI）—— 薄适配层，只剩三件事：
+        │    · Rows = RobotStateRows.Create(RobotArmChannels.Torques(), WindowFrames)   建行
+        │    · _robot.StateUpdated → Dispatcher.UIThread.Post → PushFrame(state)        推帧
+        │    · ConnectionChanged   → IsConnected                                        透连接状态
+        │
+        ├── Rows（ObservableCollection<RobotStateRow>）─┐ XAML 绑定（编译期检查）
+        └── IsConnected                                ─┤
+                                                        ▼
+                     DebugWorkspace.axaml ← 「数据曲线」卡片体：只有一个控件，没有一行图表代码
+                        <charts:RobotStatePanel Rows="{Binding Charts.Rows}"
+                                                IsConnected="{Binding Charts.IsConnected}" />
+                                                        │
+                                                        ▼
+                     RUSTool.Charts（图表栈隔离容器，LiveCharts / SkiaSharp 只在这里）
+                       · RobotStatePanel —— 六个窗口，一路一行；行头是「色标 + 通道名 + 读数」；
+                                             六行等分铺满卡片体（行高不写死）；没数据时按
+                                             IsConnected 换措辞；配色 / 坐标轴 / 主题跟随
+                       · RobotStateRow   —— 每行一路的滚动历史（窗口 300 帧 ≈ 15 s），
+                                             tail-append + 超窗口 head-delete，绝不整段替换点集合
+```
+
+三条约定：
+
+1. **界面侧不认识图表库。** `RUSTool.UI` 里出现过的图表类型只有 `RobotStatePanel`（控件）与
+   行模型 `RobotStateRow` / `RobotStateRows`（建行 / 推帧 / 清空）—— 图表库换版本或换实现，界面代码不动
+   （与 3D 那侧把 Silk.NET / OpenGL 关在 `RUSTool.Visualization` 里是同一条规矩）。
+2. **一行一路。** 卡片体只有几百像素高，六条线叠在一起会互相遮挡，所以一路一行、行高等分铺满
+   （候选集来自 `RobotArmChannels`，本层不换算单位）；行头的色标取的就是这条线的颜色，
+   所以「哪一行是哪一路」不用先读数字就能对上。
+3. **只有「帧到达」一个数据入口。** 曲线是纯推送的：没人会反过来问图表当前值 ——
+   与此对应，`HasData` 由行模型自己观察点集合得出，宿主不必在推帧之后再补一句「有数据了」。
+
+**为什么曲线色不跟主题走：** 线色是**数据身份**（第 1 路永远是那个颜色），浅色 / 深色下必须同色，
+否则换肤后认不出是哪一路；而布局、坐标轴、空状态文字用的是主题令牌，换肤照常生效。
+线色表在 `RUSTool.Charts/Controls/StatePalette.cs`，**不**进 `Theme/Tokens/Semantic.axaml`；
+行头那条色标也走同一张表（`StatePalette.BrushFor`），色标与线同色。
+
+**卡片头右侧的窗口文案**（`TorqueChartViewModel.WindowCaption`）写的是「15 s · 300 帧」：
+帧数是唯一来源（`WindowFrames` → `RobotStateRow.DefaultWindowFrames`），秒数只是按**标称**
+20 Hz 折出来的旁注（`NominalStateHz`）—— 横轴画的仍然是帧序号。
+
+**离线怎么看得见曲线：** 截图模式用 `--demo-torque` 推满一屏合成状态帧（帧按协议的线格式拼一遍、
+再用生产的解码器解回来），再调 `RobotStatePanel.RedrawAll(window)` 让六张图立刻重画；
+细节见 [`../charts/zh-CN.md`](../charts/zh-CN.md)。
 
 ---
 
@@ -526,14 +589,17 @@ cd RUSTool.UI
 ./preview.sh dark              # 截图：工程师模式 · 深色 -> preview/02-engineer-dark.png
 ./preview.sh clinical-light    # 截图：临床模式 · 浅色   -> preview/03-clinical-light.png
 ./preview.sh clinical-dark     # 截图：临床模式 · 深色   -> preview/04-clinical-dark.png
-./preview.sh all               # 四张一次拍全
+./preview.sh status            # 截图：工程师模式 · 展开机械臂状态浮层 -> preview/06-engineer-status.png
+./preview.sh cloud             # 截图：工程师模式 · 合成点云（走 /sensor 解码真链路）-> preview/07-engineer-cloud.png
+./preview.sh torque            # 截图：工程师模式 · 六路关节力矩曲线（合成状态帧）-> preview/08-engineer-torque.png
+./preview.sh all               # 以上七张一次拍全
 ./preview.sh popup MenuFile    # 展开「文件」菜单后截图（菜单是 Popup，不展开拍不到）
 ```
 
 脚本自己设好 `DOTNET_ROOT` / `PATH`（本机 dotnet 装在 `~/.dotnet`，没进 PATH），
 并把工作目录固定到仓库根 —— 截图路径因此是确定的。产物落在 `RUSTool.UI/preview/`（已在 `.gitignore` 里忽略）。
 
-**目标框架 ≠ 构建 SDK。** 四个工程都是 `net8.0`（跟随 `RobotSimulation` 库），但构建要用
+**目标框架 ≠ 构建 SDK。** 五个工程都是 `net8.0`（跟随 `RobotSimulation` 库），但构建要用
 **.NET SDK 10**：Avalonia 12 的源生成器要求 Roslyn 4.14+，用 SDK 8 会加载不上、整片报 `CS0103`。
 所以本仓库**不放** `global.json` 去钉 SDK 版本（钉了就编译不过）。细节见 [`../testing/zh-CN.md`](../testing/zh-CN.md)。
 
@@ -549,7 +615,9 @@ cd RUSTool.UI
 | 3D 区是空的（主题化空状态） | 拿不到桌面 OpenGL（离屏截图 / 无显卡机器 / GLES 上下文）时控件自己隐藏并走 `Failed`；后端只带 `#version 330 core` 着色器，遇到 GLES 会抛 `NotSupportedException` 并被捕获 |
 | 截图里看不到下拉菜单 | 菜单栏下拉是 Popup，离屏会被托管到 OverlayLayer；用 `./preview.sh popup <菜单名>` 在真实窗口里拍 |
 | 「末端接触力」是近似值 | 状态帧里没有独立的接触力通道，目前用各关节力矩模和代替；后端一旦提供 `contact_force` 字段，只改 `RobotStatusViewModel.OnStateUpdated` 一处 |
-| 影像 / 曲线 / 回放是占位 | 曲线是两条装饰性正弦（红 Fx、绿 Fy），不是真实力信号；回放时间轴也是演示数据 |
+| 影像 / 回放是占位 | 超声影像是静态占位图、回放时间轴是演示数据；**数据曲线已接真实状态帧**（`/state` 的 `effort` → 六路关节力矩） |
+| 曲线区空白不是坏了 | 没数据时曲线区是**设计好的空状态**，并且按连接状态换措辞：「未连接控制通道」要查连接、「等待状态帧」要查后端状态流；连上后端且状态流开始推帧后六条曲线自动出现 |
+| 曲线卡片高度不固定 | 六行装在等分格子里：卡片体多高就平分多高（不会在下半截留白）；宿主得给确定高度（本卡片是 `*` 行）。想换一组要画的量，改 `TorqueChartViewModel` 里那份通道目录即可 |
 | 「急停」没有独立的后端通道 | 后端只回执 `stop`，所以急停是否按下是本地界面状态（`SessionViewModel.IsEmergencyStopped`） |
 | 深色弹层圆角为 0 | 有意为之：没有合成器时透明区会被渲染成黑色；确认有合成器后可改 `Theme` 的 `RadiusOverlay` / `ShadowOverlay` |
 | 日志会落盘 | `LogService` 默认写 `logs/`（相对**进程工作目录**），已在 `.gitignore` 里忽略 |
@@ -562,8 +630,8 @@ cd RUSTool.UI
 2. **点云「选点」交互**：`/sensor` 点云已经解码并渲染进 3D 视口（`PointCloudLayer`），
    但「点击点云表面取点」还没接：`RobotViewport` 的单击目前只做模型拾取
    （库的 `SceneGraph.PickAndSelect`），点云选区 / 最近点求解与选中点标记待做。
-3. **影像 / 超声与曲线**：`/sensor` 的 `image` / `ultrasound` 帧会被整帧丢弃（只记日志），
-   解码与渲染都没有；数据曲线仍是装饰性正弦。
+3. **影像 / 超声**：`/sensor` 的 `image` / `ultrasound` 帧会被整帧丢弃（只记日志），
+   解码与渲染都没有。（数据曲线**已完成**：`/state` 的 `effort` → `RUSTool.Charts`，见 11.4。）
 4. **`set_start_pose` / `set_end_pose` 参数**：仍按「无参采集当前位姿」下发；
    若后端要求传点坐标 `[x,y,z]`（或点索引），需与后端确认后修正。
 5. **回放模块**：时间轴、A/B 循环、双轨联动都还是演示数据。
@@ -579,6 +647,6 @@ cd RUSTool.UI
 | 3D 渲染 | **`RobotSimulation` 0.3.1**（Silk.NET.OpenGL 2.23.0） | 自研图形库；隔离在 `RUSTool.Visualization` |
 | 依赖注入 | 无容器，显式组合根（`App.CreateMainViewModel`） | 依赖图小而固定，引入容器反而多一层间接 |
 | 日志 | **自研 `ILogService`**（契约在 Core、实现在界面层，按天落盘） | 与图形栈日志合流（来源列 `sim`） |
-| 图表 | 占位（装饰性绘制） | 真实数据源接入时再选型 |
+| 图表 | **`LiveChartsCore.SkiaSharpView.Avalonia` 2.1.0-dev-798**（SkiaSharp 跟随 Avalonia 传递引入 3.119.4） | 隔离在 `RUSTool.Charts`；2.0.4 / 2.0.5 在 Avalonia 12.1.0 下抛 `MissingFieldException`，所以钉这个预览版 |
 
 *本文档随实现同步更新。*

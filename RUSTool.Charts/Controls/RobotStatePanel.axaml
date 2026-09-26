@@ -1,0 +1,139 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:data="using:RUSTool.Charts.Data"
+             xmlns:controls="using:RUSTool.Charts.Controls"
+             xmlns:primitives="using:Avalonia.Controls.Primitives"
+             mc:Ignorable="d" d:DesignWidth="440" d:DesignHeight="390"
+             x:Class="RUSTool.Charts.Controls.RobotStatePanel">
+
+    <!--
+      本控件的样式表：这里出现的每一处 DynamicResource（除自定义的 state* 类名外）都是【主题令牌】——
+      宿主设计系统（Theme/Tokens）提供，缺了也不会抛异常（取不到就是默认值），只是不好看。
+
+      为什么把宿主那几个类（canvas / mono / caption）的规则抄一份进来、而不是直接用 Classes="canvas"：
+        那几个类是宿主 Styles/Theme 里的约定（Border.canvas、TextBlock.mono）。本控件是可复用的库成员，
+        不该要求调用方「先给我导一套样式表」，否则拿到别的宿主里就是一块没底色、读数不居中的方块。
+        抄的只有「规则本身」，颜色与字号仍然取自主题令牌 —— 换肤照样跟着走，没有第二份配色的来源。
+    -->
+    <UserControl.Resources>
+        <!-- 行头色标取哪一路的颜色（与曲线同一个 StatePalette，见 ChannelBrushConverter） -->
+        <controls:ChannelBrushConverter x:Key="ChannelBrush" />
+    </UserControl.Resources>
+
+    <UserControl.Styles>
+        <!--
+          曲线区 = 六条曲线之间的「缝」：底用下沉色、只圆下面两角（贴合卡片头），
+          每条曲线是它上面一块更亮的条带，所以缝就是分开六个窗口的那道线。
+        -->
+        <Style Selector="Border.stateCanvas">
+            <Setter Property="CornerRadius" Value="0,0,9,9" />
+            <Setter Property="ClipToBounds" Value="True" />
+            <!-- 每行的上边留 4px 缝、左右各 4px 内衬；最下面一行之下的缝由这里的 Padding 补 -->
+            <Setter Property="Padding" Value="0,0,0,4" />
+        </Style>
+
+        <!--
+          一条曲线 = 一个窗口：比缝亮一档的底色 + 1px 描边 + 行间 4px 缝。
+
+          为什么不再用「固定行高 60 + 1px 分隔线」：那条 1px 线跟下沉底色只差一级明度，
+          六行看起来像被一条细线切开的整块（深色主题下几乎看不出切在哪）；
+          而行高写死则让卡片体下面的剩余高度永远空着 —— 卡片多大、曲线就多大才是对的。
+        -->
+        <Style Selector="Border.stateRow">
+            <Setter Property="Background" Value="{DynamicResource SurfaceBaseBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="{DynamicResource RadiusSm}" />
+            <Setter Property="Margin" Value="4,4,4,0" />
+        </Style>
+
+        <!-- 行头通道名：跟 caption 同号、中性色 —— 一行里只有色标负责「这是哪一路」 -->
+        <Style Selector="TextBlock.stateName">
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+            <Setter Property="FontSize" Value="{DynamicResource FontSizeCaption}" />
+        </Style>
+
+        <!-- 数值、坐标：等宽才能对齐，且数字跳动时不会左右抖 -->
+        <Style Selector="TextBlock.stateValue">
+            <Setter Property="FontFamily" Value="{DynamicResource FontMono}" />
+            <Setter Property="FontSize" Value="{DynamicResource FontSizeBody}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+        </Style>
+
+        <!-- 空数据提示 -->
+        <Style Selector="TextBlock.stateHint">
+            <Setter Property="Foreground" Value="{DynamicResource TextTertiaryBrush}" />
+            <Setter Property="FontSize" Value="{DynamicResource FontSizeCaption}" />
+        </Style>
+    </UserControl.Styles>
+
+    <!--
+      多行曲线：一路一行（行头写的就是这一路的名字），每行一个独立的窗口。
+
+      为什么是"数行各一条"而不是"一张图数条线"：
+        数据曲线卡片只有几百像素高，六路叠进一张图必然是六条互相穿插的线；
+        拆成数行后每行一条，形状互不遮挡，行头还有名字与读数可对照。
+
+      行高不写死：六行装在等分格子里（UniformGrid 一列、行数 = 行数），
+      面板多高就平分多高 —— 卡片体变大时曲线跟着长高，不会在下面留一片白。
+    -->
+    <Grid>
+
+        <!-- 曲线区：整个没有数据时撤掉（见下面空数据态的说明） -->
+        <Border x:Name="ChartArea" Classes="stateCanvas"
+                Background="{DynamicResource SurfaceSunkenBrush}">
+            <ItemsControl x:Name="RowList">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <!-- 一列、行数自动 = 条目数，每个格子等分高度（也等分宽度 → 铺满） -->
+                        <primitives:UniformGrid Columns="1" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="data:RobotStateRow">
+                        <Border Classes="stateRow">
+                            <Grid ColumnDefinitions="Auto,*,Auto" Margin="10,0">
+
+                                <!--
+                                  行头：色标 + 通道名。
+                                  色标取的就是这条线的颜色（同一个 StatePalette，见 ChannelBrushConverter），
+                                  所以「哪一行是哪一路」不用先读数字就能对上；名字保持中性色 ——
+                                  一行里只有色标一种颜色身份，颜色不兼职讲第二件事。
+                                  名字列写死宽度（不然受名字长短影响，六行的曲线左边缘会参差不齐）。
+                                -->
+                                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                    <Rectangle Width="3" Height="14" RadiusX="1.5" RadiusY="1.5"
+                                               Fill="{Binding ChannelIndex, Converter={StaticResource ChannelBrush}}" />
+                                    <TextBlock Classes="stateName" Width="44"
+                                               TextTrimming="CharacterEllipsis"
+                                               Text="{Binding Channel.Name}" />
+                                </StackPanel>
+
+                                <!-- 图表宿主：图表本身由 StateRowChart 建（配色 / 坐标轴 / 主题跟随都在那一处定），
+                                     这里只把行交给它。 -->
+                                <controls:StateRowChart Grid.Column="1" Margin="6,4" Source="{Binding}" />
+
+                                <!-- 最新一帧的读数。等宽 + 固定两位小数，跳动时不左右晃；
+                                     列宽也写死，六行的右边缘（以及曲线右边缘）才在一条竖线上。 -->
+                                <TextBlock Grid.Column="2" Classes="stateValue" Width="78"
+                                           VerticalAlignment="Center" TextAlignment="Right"
+                                           Text="{Binding CurrentText}" />
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </Border>
+
+        <!--
+          空数据态：没有帧时 LiveCharts 画的是一圈空坐标轴到底 —— 看起来像"图坏了"。
+          所以没数据就把整个曲线区撤掉，只留一句"为什么没有"，
+          并分开说"没连上控制通道"和"连上了但还没来帧"（要查的地方完全不同）。
+          文案可以由调用方用 HintText 覆盖（见 RobotStatePanel.axaml.cs）。
+        -->
+        <TextBlock x:Name="HintLabel" Classes="stateHint" Margin="16"
+                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+    </Grid>
+</UserControl>

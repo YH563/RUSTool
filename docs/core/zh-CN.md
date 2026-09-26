@@ -2,7 +2,7 @@
 
 > 状态：反映当前实现。配套：`../README.md`（仓库入口）、`../architecture/zh-CN.md`（架构与 ADR）、`../protocol/zh-CN.md`（bridge 协议）、`../ui/zh-CN.md`（界面层）、`../testing/zh-CN.md`（怎么跑测试）。
 
-`RUSTool.Core` 是本仓库的**纯逻辑层**：对外只提供四类东西 —— 通信客户端、机器人业务服务、流程状态机、日志契约。它不认识 Avalonia / XAML / Silk.NET / OpenGL，因此可以在没有界面、没有显卡、没有网络的情况下被单测覆盖。
+`RUSTool.Core` 是本仓库的**纯逻辑层**：对外只提供四类东西 —— 通信客户端、机器人业务服务、流程状态机、日志契约。它不认识 Avalonia / XAML / Silk.NET / OpenGL，也不认识 LiveCharts / SkiaSharp，因此可以在没有界面、没有显卡、没有网络的情况下被单测覆盖。
 
 ---
 
