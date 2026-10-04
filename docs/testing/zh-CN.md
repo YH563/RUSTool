@@ -75,7 +75,7 @@ RUSTool.UI/preview.sh status                # -> preview/06-engineer-status.png
 RUSTool.UI/preview.sh cloud                 # -> preview/07-engineer-cloud.png
 RUSTool.UI/preview.sh window --demo-cloud    # 真实窗口 + GL：真的能看见点云
 
-# 6) 合成状态帧：推满一屏（300 帧 ≈ 15 s）六路关节力矩曲线 —— 帧按协议的线格式拼一遍、
+# 6) 合成状态帧：推满一屏（600 帧 ≈ 30 s）六路关节力矩曲线 —— 帧按协议的线格式拼一遍、
 #    再用生产的解码器解回来，只跳过 WebSocket 传输
 RUSTool.UI/preview.sh torque                # -> preview/08-engineer-torque.png
 RUSTool.UI/preview.sh window --demo-torque   # 真实窗口：曲线跟着合成帧长出来

@@ -29,12 +29,17 @@
         <Border Classes="toolbar">
             <Grid ColumnDefinitions="Auto,*,Auto" Margin="16,0">
 
-                <!-- 左：标题 + 当前模式标签 -->
-                <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                <!-- 左：标题 + 工作区切换（可点分段开关，不再藏在「视图」菜单里） -->
+                <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
                     <TextBlock Classes="pageTitle" Text="RUSTool" VerticalAlignment="Center" />
-                    <Border Classes="tag">
-                        <TextBlock Text="{Binding ModeName}" />
-                    </Border>
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button Classes="segLeft" Content="工程师" MinWidth="68"
+                                Command="{Binding SwitchToDebugCommand}"
+                                Classes.segOn="{Binding IsDebugMode}" />
+                        <Button Classes="segRight" Content="临床" MinWidth="56"
+                                Command="{Binding SwitchToClinicalCommand}"
+                                Classes.segOn="{Binding IsClinicalMode}" />
+                    </StackPanel>
                 </StackPanel>
 
                 <!-- 中：标准菜单栏。每个顶级项都起了名字，供 preview.sh 的 open 参数展开后截图 -->
@@ -56,12 +61,15 @@
                         <Separator />
                         <MenuItem Header="重置视角" Command="{Binding ResetViewCommand}" />
                     </MenuItem>
+                    <MenuItem x:Name="MenuSettings" Header="设置">
+                        <MenuItem Header="全局参数…" Click="OnOpenSettings" />
+                    </MenuItem>
                     <MenuItem x:Name="MenuHelp" Header="帮助">
                         <MenuItem Header="关于" />
                     </MenuItem>
                 </Menu>
 
-                <!-- 右：常驻状态 + 驱动切换 + 安全操作 -->
+                <!-- 右：状态 + 连接 + 驱动切换 + 安全操作 -->
                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="16"
                             VerticalAlignment="Center">
 
@@ -85,6 +93,17 @@
 
                     <Rectangle Classes="dividerVertical" Height="20" />
 
+                    <!-- 连接 / 断开：连接是首次使用的主操作，直接常驻工具栏
+                         （原来只在「连接」菜单里，新用户找不到）。两个按钮互斥显隐。 -->
+                    <Button Classes="accent" Content="连接"
+                            IsVisible="{Binding Session.IsDisconnected}"
+                            Command="{Binding Session.ConnectCommand}" />
+                    <Button Content="断开"
+                            IsVisible="{Binding Session.IsConnected}"
+                            Command="{Binding Session.DisconnectCommand}" />
+
+                    <Rectangle Classes="dividerVertical" Height="20" />
+
                     <!-- 驱动切换（真实 / 仿真）：分段按钮组。
                          未连接时两个按钮【一起变灰】（IsEnabled 绑连接状态）—— 驱动类型是后端的状态，
                          没连上就无从知道，任何一个"已选中"都是在撒谎；连上后由 SessionViewModel
@@ -105,13 +124,31 @@
 
                     <Rectangle Classes="dividerVertical" Height="20" />
 
-                    <!-- 急停 / 恢复：都用 lg 尺寸，两个按钮高度必然一致 ——
-                         两个按钮都用 lg 尺寸，高度必然一致。 -->
+                    <!-- 录制：全局旁路模块，只决定"录不录"，与手动 / 自动模式无关。
+                         状态灯三色互斥（录制中=红、失败=橙、未录=灰）。 -->
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Ellipse Classes="dot"
+                                 Classes.danger="{Binding Recorder.IsRecording}"
+                                 Classes.warning="{Binding Recorder.IsFailed}"
+                                 Classes.idle="{Binding Recorder.IsStopped}" />
+                        <TextBlock Classes="secondary" Text="{Binding Recorder.StatusText}"
+                                   VerticalAlignment="Center" />
+                        <Button Classes="sm" Content="{Binding Recorder.ActionText}"
+                                IsEnabled="{Binding Recorder.CanToggle}"
+                                Command="{Binding Recorder.ToggleCommand}" />
+                    </StackPanel>
+
+                    <Rectangle Classes="dividerVertical" Height="20" />
+
+                    <!-- 急停 / 恢复：都用 lg 尺寸，高度一致。
+                         「急停」永远可用（安全底线）；「急停恢复」只有急停按下后才可点 ——
+                         未急停时点击 reset 是误操作，置灰把它挡在视觉层。 -->
                     <Button x:Name="EstopButton" Classes="danger lg" Content="急停"
                             FontWeight="{DynamicResource FontWeightBold}"
                             Command="{Binding Session.EmergencyStopCommand}" />
                     <Button Classes="success lg" Content="急停恢复"
                             FontWeight="{DynamicResource FontWeightBold}"
+                            IsEnabled="{Binding Session.IsEmergencyStopped}"
                             Command="{Binding Session.ResetEmergencyCommand}" />
                 </StackPanel>
             </Grid>

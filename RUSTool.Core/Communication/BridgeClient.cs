@@ -134,12 +134,13 @@ public sealed class BridgeClient : IDisposable
     /// 超时（默认 5000ms）未收到 reply → Success=false, Message="timeout"。
     /// </summary>
     public async Task<CommandResult> SendAsync(string cmd, double[]? args = null,
-        int timeoutMs = 5000, CancellationToken ct = default)
+        int timeoutMs = 5000, CancellationToken ct = default, string? text = null)
     {
         var argText = args is { Length: > 0 } ? string.Join(",", args) : "";
-        Logger?.Invoke($"→ 发送指令 {cmd} [{argText}]", false);
+        var textSuffix = string.IsNullOrEmpty(text) ? "" : $" text=\"{text}\"";
+        Logger?.Invoke($"→ 发送指令 {cmd} [{argText}]{textSuffix}", false);
 
-        var result = await SendCoreAsync(cmd, args, timeoutMs, ct);
+        var result = await SendCoreAsync(cmd, args, timeoutMs, ct, text);
 
         Logger?.Invoke($"← 指令 {cmd} 结果: {(result.Success ? "成功" : "失败")} - {result.Message}",
             !result.Success);
@@ -147,12 +148,12 @@ public sealed class BridgeClient : IDisposable
     }
 
     private async Task<CommandResult> SendCoreAsync(string cmd, double[]? args,
-        int timeoutMs, CancellationToken ct)
+        int timeoutMs, CancellationToken ct, string? text = null)
     {
         ThrowIfDisposed();
 
         var id = unchecked((uint)Interlocked.Increment(ref _nextId));
-        var json = BridgeProtocol.Encode(new BridgeProtocol.Command(id, cmd, args ?? []));
+        var json = BridgeProtocol.Encode(new BridgeProtocol.Command(id, cmd, args ?? [], text ?? ""));
         var tcs = new TaskCompletionSource<CommandResult>(TaskCreationOptions.RunContinuationsAsynchronously);
         _pending[id] = tcs;
 
@@ -163,7 +164,7 @@ public sealed class BridgeClient : IDisposable
         catch (Exception ex)
         {
             _pending.TryRemove(id, out _);
-            return new CommandResult(false, ex.Message, []);
+            return new CommandResult(false, ex.Message, [], []);
         }
 
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -176,7 +177,7 @@ public sealed class BridgeClient : IDisposable
         {
             // 超时：从字典移除并返回失败
             _pending.TryRemove(id, out _);
-            return new CommandResult(false, "timeout", []);
+            return new CommandResult(false, "timeout", [], []);
         }
         catch (OperationCanceledException)
         {
@@ -228,7 +229,7 @@ public sealed class BridgeClient : IDisposable
         if (msg.Type == "reply")
         {
             if (_pending.TryRemove(msg.Id, out var tcs))
-                tcs.TrySetResult(new CommandResult(msg.Success, msg.Message, msg.Result));
+                tcs.TrySetResult(new CommandResult(msg.Success, msg.Message, msg.Result, msg.Strings ?? []));
         }
         else if (msg.Type == "event")
         {
@@ -408,7 +409,7 @@ public sealed class BridgeClient : IDisposable
         foreach (var (id, tcs) in _pending)
         {
             if (_pending.TryRemove(id, out _))
-                tcs.TrySetResult(new CommandResult(false, message, []));
+                tcs.TrySetResult(new CommandResult(false, message, [], []));
         }
     }
 
@@ -419,8 +420,11 @@ public sealed class BridgeClient : IDisposable
     }
 }
 
-/// <summary>指令回执（对上层友好的返回值封装）</summary>
-public sealed record CommandResult(bool Success, string Message, double[] Result);
+/// <summary>
+/// 指令回执（对上层友好的返回值封装）。<see cref="Strings"/> 是文本结果
+/// （协议 v0.4）：recorder / replay 的「文件名清单 / 当前文件名」等都从这里取。
+/// </summary>
+public sealed record CommandResult(bool Success, string Message, double[] Result, string[] Strings);
 
 /// <summary>异步事件通知（对上层友好的返回值封装）</summary>
 public sealed record EventNotification(string EventName, bool Success, string Message);

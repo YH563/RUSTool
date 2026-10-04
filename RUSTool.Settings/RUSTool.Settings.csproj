@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <!-- 与其余工程统一 net8.0。 -->
+        <TargetFramework>net8.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <LangVersion>latest</LangVersion>
+        <RootNamespace>RUSTool.Settings</RootNamespace>
+        <AssemblyName>RUSTool.Settings</AssemblyName>
+        <!-- 库工程，只服务于本解决方案，不作为 NuGet 包发布。 -->
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <!-- 设置对象要发变更通知（界面双向绑定）：ObservableObject + ObservableProperty。 -->
+        <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    </ItemGroup>
+
+</Project>

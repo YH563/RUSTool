@@ -9,7 +9,11 @@ namespace RUSTool.Communication;
 public static class BridgeProtocol
 {
     // ---- 请求（前端 → 后端）----
-    public sealed record Command(uint Id, string Cmd, double[] Args);
+    /// <summary>
+    /// 指令请求。<see cref="Text"/> 是字符串参数通道（协议 v0.5），
+    /// 只有字符串类指令（如 <c>replay_load_path</c>）会带非空值；其余指令为空串。
+    /// </summary>
+    public sealed record Command(uint Id, string Cmd, double[] Args, string Text = "");
 
     // ---- 回执 / 事件（后端 → 前端，同构）----
     public sealed record ReplyOrEvent(
@@ -19,7 +23,8 @@ public static class BridgeProtocol
         string Event,       // 仅 event：事件名
         bool Success,
         string Message,
-        double[] Result);
+        double[] Result,
+        string[]? Strings = null); // 文本结果（协议 v0.4）：recorder/replay 的文件名清单等
 
     // ---- 状态帧（/state 通道）----
     public sealed record StateFrame(
@@ -32,7 +37,7 @@ public static class BridgeProtocol
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
     };
 
-    /// <summary>序列化 command（{"id", "cmd", "args"}）</summary>
+    /// <summary>序列化 command（{"id", "cmd", "args", "text"}）</summary>
     public static string Encode(Command cmd)
         => JsonSerializer.Serialize(cmd, JsonOptions);
 
@@ -58,7 +63,7 @@ public static class BridgeProtocol
             var msg = JsonSerializer.Deserialize<ReplyOrEvent>(json, JsonOptions);
             if (msg is null)
                 return null;
-            return msg with { Message = msg.Message ?? "", Result = msg.Result ?? [] };
+            return msg with { Message = msg.Message ?? "", Result = msg.Result ?? [], Strings = msg.Strings ?? [] };
         }
         catch (JsonException)
         {

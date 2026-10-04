@@ -15,13 +15,16 @@
 | 工程 | 类型 | 职责 | 依赖 |
 |---|---|---|---|
 | **`RUSTool.Core`** | 类库 | 纯逻辑层：bridge 通信客户端（`BridgeClient` / `ConnectionManager` / `BridgeProtocol` / `SensorFrameCodec`）、机器人业务服务（`IRobotService` / `RobotService` / `RobotSession`）、流程状态机（`ScanStateMachine`）、日志契约（`ILogService`）。零界面、零图形依赖 | `CommunityToolkit.Mvvm`（仅 `ObservableObject`）、`ZstdSharp.Port`（`/sensor` 点云帧解压） |
-| **`RUSTool.UI`** | WinExe | **唯一的应用**（`dotnet run` 起来的就是它）：Avalonia 界面 + 设计系统 `Theme/` + 依赖图组装（唯一组合根） | `Core`、`Visualization`、`Charts`、Avalonia 12.1.0、CommunityToolkit.Mvvm 8.4.2、Avalonia.Headless（截图） |
-| **`RUSTool.Visualization`** | 类库 | **3D 图形栈的隔离容器**：`RobotViewport`（内嵌 3D 视口）、`RobotScene` + `PointCloudLayer`（URDF + 关节驱动 + 感知点云）、`SimulationLogBridge`（库日志接出）。Silk.NET / OpenGL / `RobotSimulation` 只在这里出现 | 与 `Core` 无关，依赖 `RobotSimulation` 0.3.1、Silk.NET.OpenGL 2.23.0、Avalonia 12.1.0 |
+| **`RUSTool.UI`** | WinExe | **唯一的应用**（`dotnet run` 起来的就是它）：Avalonia 界面 + 设计系统 `Theme/` + 依赖图组装（唯一组合根） | `Core`、`Visualization`、`Charts`、`Replay`、`Settings`、Avalonia 12.1.0、CommunityToolkit.Mvvm 8.4.2、Avalonia.Headless（截图） |
+| **`RUSTool.Visualization`** | 类库 | **3D 图形栈的隔离容器**：`RobotViewport`（内嵌 3D 视口）、`RobotScene` + `PointCloudLayer`（URDF + 关节驱动 + 感知点云）、`SimulationLogBridge`（库日志接出）。Silk.NET / OpenGL / `RobotSimulation` 只在这里出现 | 与 `Core` 无关，依赖 `RobotSimulation` 0.4.0、Silk.NET.OpenGL 2.23.0、Avalonia 12.1.0 |
 | **`RUSTool.Charts`** | 类库 | **2D 图表栈的隔离容器**：`RobotStatePanel`（曲线控件：一路一行、行头色标/名字/读数 + 空数据态）、`RobotStateRow` / `RobotStateRows`（滚动窗口行模型与推帧入口）、`RobotArmChannels`（通道目录）。LiveCharts 2 / SkiaSharp 只在这里出现 | 与 `Core` 无关，依赖 `LiveChartsCore.SkiaSharpView.Avalonia` 2.1.0-dev-798、Avalonia 12.1.0、CommunityToolkit.Mvvm 8.4.2 |
-| *(test) `tests/RUSTool.Core.Tests`* | xUnit | 纯逻辑单测：`ScanStateMachine` 54 + `SensorFrameCodec` 24 + 驱动类型 15 = **93 个用例**，不依赖网络 / 界面 / 图形栈。**不发布** | `Core` |
+| **`RUSTool.Replay`** | 类库 | **回放隔离容器**（回放职责已由后端移交前端）：录音目录发现、`.rusrec` 容器读取 + ROS CDR 解码、本地回放引擎（时间轴 / seek / 倍速 / 单步）。只依赖 `Core` 的两个数据契约，不引用界面 | `Core` |
+| **`RUSTool.Settings`** | 类库 | **全局参数模块**：`AppSettings`（录音目录 / bridge 地址…）+ JSON 持久化（`~/.config/RUSTool/settings.json`）+ 变更通知 | `CommunityToolkit.Mvvm` |
+| *(test) `tests/RUSTool.Core.Tests`* | xUnit | 纯逻辑单测：`ScanStateMachine` 54 + `SensorFrameCodec` 24 + 驱动类型 15 + `BridgeProtocol` 7 = **100 个用例**。**不发布** | `Core` |
+| *(test) `tests/RUSTool.Replay.Tests`* | xUnit | 回放单测：`.rusrec` 容器/CDR/点云 + 目录发现 + 引擎 = **8 个用例**。**不发布** | `Replay` |
 | *(data) `RUSTool.Visualization/Assets/Models`* | 数据 | 随编译复制到输出目录的 URDF + mesh（首选真机模型、兜底 URDF 内置几何） | — |
 
-依赖方向是**单向**的，由编译器强制：`RUSTool.UI` → `RUSTool.Core`、`RUSTool.UI` → `RUSTool.Visualization`、`RUSTool.UI` → `RUSTool.Charts`。
+依赖方向是**单向**的，由编译器强制：`RUSTool.UI` → `Core` / `Visualization` / `Charts` / `Replay` / `Settings`，`RUSTool.Replay` → `Core`。
 
 ```text
 RUSTool.sln
@@ -70,8 +73,8 @@ RUSTool.sln
 ## 2. 核心特性
 
 - **两套工作区、一份业务状态**：共享工具栏（菜单 / 连接与运动状态灯 / `switch_driver` 驱动切换 / 急停与恢复）
-  + 工程师工作区（上排 `3D 场景 / 超声影像 / 数据曲线`，下排 `机器人指令 / 回放 / 日志`）
-  + 临床工作区（左侧扫查主视图 + 右侧 4 步流程向导 + 常驻急停）。业务逻辑**不复制**，只有投影不同。
+  + 工程师工作区（上排 `3D 场景 / 超声影像 / 数据曲线`，下排 `机器人指令 / 日志`，底部全宽 `回放` 传输条）
+  + 临床工作区（左侧主视图分栏：超声影像 + 3D 场景（点云/重建网格），可拖拽 + 右侧 4 步流程向导 + 常驻急停）。业务逻辑**不复制**，只有投影不同。
 - **手动控制**：6 轴点动（**按住走、松手停**，含指针被抢走时补发停止）、MoveJ / MoveL、暂停 / 恢复 / 停止 / 复位。
 - **扫查流程**：① 预扫查建图 → ② 位姿选点 → ③ 路径规划 → ④ 执行扫查；
   按钮按阶段门控，完成标志有**同步回执**与**异步事件**两个来源（`pre_scan_done` / `plan_done` / `motion_done`）。
@@ -83,7 +86,7 @@ RUSTool.sln
   经视口的第二个邮箱整帧替换进场景图；覆盖式只留最新一帧，慢渲染丢帧而不是积压。
   没接后端时可用 `preview.sh window --demo-cloud` 看一眼这条链路。
 - **真实数据曲线**：`/state` 的 `effort`（六路关节力矩）由 `TorqueChartViewModel` 取出后推到曲线控件 ——
-  一路一行（一行一个关节）、滚动 300 帧窗口（标称 20 Hz ≈ 15 s），六行等分铺满卡片体，
+  一路一行（一行一个关节）、滚动 600 帧窗口（30 s @ 20 Hz 显示采样），六行等分铺满卡片体，
   行头的色标就是这个关节的线色。没接后端时 `preview.sh torque` 用合成帧拍一张，走的是生产解码器。
 - **两条隔离带**：Silk.NET / OpenGL / `RobotSimulation` 只出现在 `RUSTool.Visualization`，
   LiveCharts / SkiaSharp 只出现在 `RUSTool.Charts`；界面只认识两侧各自的三个契约
@@ -146,7 +149,7 @@ HUD 读数为 0、日志为空、曲线区显示空状态 —— 这是正确行
 RUSTool.UI/preview.sh all                # 七张一次拍全 -> RUSTool.UI/preview/
 RUSTool.UI/preview.sh dark               # 只拍「工程师模式 · 深色」
 RUSTool.UI/preview.sh cloud              # 合成点云那张（3D 区在离屏下没有 GL，看日志）
-RUSTool.UI/preview.sh torque             # 合成力矩曲线那张（六行真实曲线，300 帧走生产解码器）
+RUSTool.UI/preview.sh torque             # 合成力矩曲线那张（六行真实曲线，600 帧走生产解码器）
 RUSTool.UI/preview.sh popup MenuFile     # 展开菜单后截图（菜单是 Popup，不展开拍不到）
 ```
 
@@ -229,14 +232,18 @@ dotnet run --project RUSTool.UI -- --shot RUSTool.UI/preview/05-menu-MenuFile.pn
 - [x] `/sensor` 点云通道：二进制帧解码（zstd / raw + int16 反量化，坏帧一律丢）+ 覆盖式邮箱 + 3D 视口整帧替换 ✔
       测试 **24 个用例**；没接后端时 `preview.sh window --demo-cloud` 可演一遍 ✔
 - [x] 图表栈拆分 + 真实曲线：LiveCharts / SkiaSharp 收进 `RUSTool.Charts`，`/state` 的 `effort` 驱动六路关节力矩曲线
-      （一路一行、滚动 300 帧窗口、行头色标 = 线色）；界面侧只剩「取数组 + `Post` 到 UI 线程」✔
+      （一路一行、滚动 600 帧窗口、行头色标 = 线色）；界面侧只剩「按显示采样率节流 + `Post` 到 UI 线程」✔
       `preview.sh torque` 拍一张（合成帧走生产解码器）✔
 - [x] 单元测试：`ScanStateMachine` **54 个用例**（含穷举式的「按钮灰不灰 = 能否执行」）✔
 - [x] 驱动类型回读：工具栏「真实 / 仿真」由 `get_driver_type` 回读点亮，未连接 / 掉线两个一起变灰（`DriverTypeTests` **15 个用例**）✔
 - [ ] **状态机接线**：`ScanWorkflowViewModel` 改为驱动 `ScanStateMachine`；`RobotSession.TryEnter*` 接入手动 / 扫查模式仲裁
 - [ ] **点云选点**：3D 视口里点击点云表面取点（raycast / 最近点）→ `set_start_pose` / `set_end_pose` 带坐标
 - [ ] **测试补齐**：`BridgeProtocol`（样例 JSON / 字段缺省 / 坏 JSON）、`BridgeClient`（id 匹配 / 超时 / 断线置失败）
-- [ ] **回放模块**：时间轴、A/B 循环、超声影像与曲线的双轨联动（当前是演示数据）
+- [x] **录制 / 回放接线**：录制走后端（`recorder_start/stop/status`，工具栏状态灯 + 计时 + 丢弃/限流计数）；
+      **回放走前端本地**（后端已移交）：新增子项目 `RUSTool.Replay`（`.rusrec` 容器 + ROS CDR + 回放引擎）
+      + `RUSTool.Settings`（全局参数，含录音目录）；底部回放条直读 `<records_dir>/*.rusrec`，
+      进入回放前"接管"（确认不运动 → `stop` → 断后端）✔
+- [ ] **回放双轨联动**：超声影像与曲线的同步呈现（影像数据源本身尚未接入）
 - [ ] `/sensor` 的 `image` / `ultrasound` 帧解码（当前整帧丢弃并记日志）
 - [ ] 影像 / 超声的真实数据源接入（数据曲线已接真实状态帧，见上方已完成项）
 - [ ] （可选）后端 bridge 的本地联调脚本 / 集成测试
@@ -250,7 +257,7 @@ dotnet run --project RUSTool.UI -- --shot RUSTool.UI/preview/05-menu-MenuFile.pn
 | 3D 里没有点云 | 点云走 `/sensor`，点「连接」即开该通道；**没接后端**时用 `preview.sh window --demo-cloud` 显式投一帧合成点云 |
 | 截图里看不到下拉菜单 | 菜单栏下拉是 Popup，离屏会被托管到 OverlayLayer；用 `./preview.sh popup <菜单名>` 在真实窗口里拍 |
 | 「末端接触力」是近似值 | 状态帧里没有独立的接触力通道，目前用各关节力矩模和代替；后端一旦提供 `contact_force` 字段，只改 `RobotStatusViewModel.OnStateUpdated` 一处 |
-| 影像 / 回放是占位 | 超声影像是静态占位图、回放时间轴是演示数据；**数据曲线已接真实状态帧**（`/state` 的 `effort` → 六路关节力矩），没接后端时 `preview.sh torque` 可离线看一张 |
+| 影像 / 回放 | 超声影像仍是静态占位图；**录制走后端、回放走前端本地**：回放直读 `<records_dir>/*.rusrec`（目录在「设置 → 全局参数」里配成与后端 `output_dir` 同一绝对目录）；后端 `replay_*` 已废弃（仅过渡保留）。离线时录音列表为空、录制按钮变灰属正常 |
 | 「急停」没有独立的后端通道 | 后端只回执 `stop`，所以急停是否按下是本地界面状态（`SessionViewModel.IsEmergencyStopped`） |
 | 状态行一直显示「空闲 / 已暂停」 | 模式仲裁（`RobotSession.TryEnter*`）尚未接线，属已知缺口（见路线图） |
 | 深色弹层圆角为 0 | 有意为之：没有合成器时透明区会被渲染成黑色；确认有合成器后可改 `Theme` 的 `RadiusOverlay` / `ShadowOverlay` |

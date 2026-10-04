@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net8.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <LangVersion>latest</LangVersion>
+        <RootNamespace>RUSTool.Replay</RootNamespace>
+        <AssemblyName>RUSTool.Replay</AssemblyName>
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <!--
+          纯逻辑库：只依赖 Core —— 用它的两个数据契约
+          （BridgeProtocol.StateFrame / SensorPointCloudFrame 与 SensorFrameCodec 的反量化），
+          以及 ILogService 日志出口。不引用 Avalonia / 图形栈 / 界面 VM，
+          因此回放引擎可以脱离界面单测（见 tests/RUSTool.Replay.Tests）。
+        -->
+        <ProjectReference Include="..\RUSTool.Core\RUSTool.Core.csproj" />
+    </ItemGroup>
+
+</Project>

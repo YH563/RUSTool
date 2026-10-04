@@ -127,6 +127,16 @@ internal static class Program
             Console.Error.WriteLine($"[ui] 曲线：已按第 {TorqueChartViewModel.WindowFrames} 帧重画 {charts} 张图");
         }
 
+        // 可选：载入一个本地录音（--replay <path>），把"已载入"这一态（传输条出现）拍进 PNG。
+        // 同步载入：截图线程上直接开文件，避免 async 续体回 UI 线程造成阻塞。
+        var replayIndex = Array.IndexOf(args, "--replay");
+        if (replayIndex >= 0 && replayIndex + 1 < args.Length && !args[replayIndex + 1].StartsWith("--"))
+        {
+            vm.Replay.LoadSynchronously(args[replayIndex + 1]);
+            Dispatcher.UIThread.RunJobs();
+            Console.Error.WriteLine($"[ui] 回放：已载入 {vm.Replay.CurrentFile}");
+        }
+
         var frame = window.CaptureRenderedFrame();
         if (frame is null)
         {

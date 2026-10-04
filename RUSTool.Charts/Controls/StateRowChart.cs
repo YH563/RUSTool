@@ -9,6 +9,7 @@ using LiveChartsCore.SkiaSharpView.Painting;
 using RUSTool.Charts.Data;
 using SkiaSharp;
 using System;
+using System.Collections.Specialized;
 
 namespace RUSTool.Charts.Controls;
 
@@ -48,6 +49,15 @@ public sealed class StateRowChart : ContentControl
     /// <summary>控件当前是否挂在可视树上 —— 建图与重取主题色都以此为前提（见 <see cref="Build"/>）。</summary>
     private bool _inTree;
 
+    /// <summary>当前这一行的数据源（数据变化时据此重算 Y 轴量程；换行 / 摘树时解绑）。</summary>
+    private RobotStateRow? _row;
+
+    /// <summary>
+    /// Y 轴（一条零线 + 稳定后的量程）。整张图只建一次、按需改 <c>MinLimit/MaxLimit</c>，
+    /// 不再每帧重建 Axis —— 重建会让量程在帧与帧之间来回跳，曲线看起来在"抖"。
+    /// </summary>
+    private Axis? _yAxis;
+
     /// <summary>零线的不透明度：够看清「零在哪」，又不至于在六行里连成一组醒目横条。</summary>
     private const byte ZeroLineAlpha = 0x3D;
 
@@ -83,7 +93,11 @@ public sealed class StateRowChart : ContentControl
         if (_chart is null)
             Build();
         else
+        {
+            SubscribeValues();
             ApplyAxisTheme();
+            UpdateYAxis();
+        }
     }
 
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
@@ -93,6 +107,8 @@ public sealed class StateRowChart : ContentControl
 
         // 不销毁已建的图：卸载再挂载（例如切到临床模式又切回来）时留着它，
         // 否则每次切工作区都会重建六张图、把已有的曲线清空一次。重新挂上时重取一遍主题色就够了。
+        // 但数据监听要摘掉 —— 行模型比控件活得久，留着它会把控件钉在内存里。
+        UnsubscribeValues();
     }
 
     /// <summary>换一行：先扔掉旧的画面，再按新行重建（线色与窗口长度都跟着新行走）。</summary>
@@ -110,6 +126,8 @@ public sealed class StateRowChart : ContentControl
     {
         if (!_inTree || Source is not { } row)
             return;
+
+        _row = row;
 
         _series = new LineSeries<double>
         {
@@ -157,16 +175,108 @@ public sealed class StateRowChart : ContentControl
 
         Content = _chart;
 
+        // 数据变化时重算 Y 轴量程（曲线一长出来、量程就稳住，不再随每帧小幅抖动）。
+        SubscribeValues();
+
         // 新图还没配 Y 轴与零线（两处的颜色都要按当前主题取）—— 建完立刻刷一次。
         ApplyAxisTheme();
+        UpdateYAxis();
     }
 
     /// <summary>扔掉当前的画面内容（只是不再引用，不是销毁给图表库的对象）。</summary>
     private void Detach()
     {
+        UnsubscribeValues();
+        _row = null;
         _series = null;
         _chart = null;
+        _yAxis = null;
         Content = null;
+    }
+
+    /// <summary>订阅行模型的数据变化（重算 Y 轴量程用）。</summary>
+    private void SubscribeValues()
+    {
+        if (_row is not null)
+            _row.Values.CollectionChanged += OnValuesChanged;
+    }
+
+    /// <summary>退订行模型的数据变化 —— 行模型比控件活得久，不摘会把控件钉在内存里。</summary>
+    private void UnsubscribeValues()
+    {
+        if (_row is not null)
+            _row.Values.CollectionChanged -= OnValuesChanged;
+    }
+
+    private void OnValuesChanged(object? sender, NotifyCollectionChangedEventArgs e) => UpdateYAxis();
+
+    /// <summary>
+    /// 根据窗口内的数据重算 Y 轴量程，并把边界量化到「好看的档位」。
+    ///
+    /// <para>
+    /// <b>为什么要自己定量程：</b>交给图表库自动缩放的话，每落一个点量程就跟着抖一下 ——
+    /// 六行各自小幅上下抽动，看起来像信号在漂。量化到 1/2/5×10ⁿ 的档位之后，
+    /// 小幅波动不再改变边界，只有真正超出才会跳一档，曲线就稳住了。
+    /// </para>
+    /// </summary>
+    private void UpdateYAxis()
+    {
+        if (_yAxis is null || _row is null)
+            return;
+
+        var values = _row.Values;
+        if (values.Count == 0)
+        {
+            _yAxis.MinLimit = null;
+            _yAxis.MaxLimit = null;
+            return;
+        }
+
+        var min = double.MaxValue;
+        var max = double.MinValue;
+        for (var i = 0; i < values.Count; i++)
+        {
+            var v = values[i];
+            if (v < min) min = v;
+            if (v > max) max = v;
+        }
+
+        var (lo, hi) = NiceBounds(min, max);
+        if (lo != _yAxis.MinLimit || hi != _yAxis.MaxLimit)
+        {
+            _yAxis.MinLimit = lo;
+            _yAxis.MaxLimit = hi;
+        }
+    }
+
+    /// <summary>把数据范围扩一点余量，再量化到 1/2/5×10ⁿ 的档位。</summary>
+    private static (double Lo, double Hi) NiceBounds(double min, double max)
+    {
+        if (max - min < 1e-9)
+        {
+            // 常量信号：给一个以它为中心的对称小量程，别让曲线贴着边框。
+            var pad = Math.Max(0.5, Math.Abs(max) * 0.1);
+            return (min - pad, max + pad);
+        }
+
+        var range = max - min;
+        var step = NiceStep((range * 1.24) / 6.0);
+        return (Math.Floor((min - range * 0.08) / step) * step,
+                Math.Ceiling((max + range * 0.08) / step) * step);
+    }
+
+    /// <summary>取不小于 <paramref name="raw"/> 的「好看档位」（1/2/5×10ⁿ）。</summary>
+    private static double NiceStep(double raw)
+    {
+        if (raw <= 0)
+            return 1;
+
+        var exp = Math.Floor(Math.Log10(raw));
+        var power = Math.Pow(10, exp);
+        var fraction = raw / power;
+
+        var nice = fraction <= 1 ? 1 : fraction <= 2 ? 2 : fraction <= 5 ? 5 : 10;
+        return nice * power;
     }
 
     /// <summary>
@@ -181,9 +291,10 @@ public sealed class StateRowChart : ContentControl
         // 只取一次颜色，但 new 一份画笔：画笔是可变的绘制对象，不跨图共享就没有「谁改了谁」的疑问。
         var labelColor = ThemeColor("TextTertiaryBrush", new SKColor(0x86, 0x8C, 0x9A));
 
-        _chart.YAxes =
-        [
-            new Axis
+        // Y 轴只建一次（量程由 UpdateYAxis 改，见那里）；换主题时只重刷零线颜色。
+        if (_yAxis is null)
+        {
+            _yAxis = new Axis
             {
                 // 不画 Y 刻度字：一行满打满算 ~50px 高，而「小量程」的行（范围才 1 N·m 的那种）
                 // 会被自动缩放切成四五档，9px 的字挤进二三十像素里，叠成一坨糊字 ——
@@ -192,14 +303,16 @@ public sealed class StateRowChart : ContentControl
                 // 顺带一个好处：不提供画笔，库里量标签这一步整个跳过，绘图区拿到满宽满高
                 //（与 X 轴同一个道理，见 Build）。
                 LabelsPaint = null,
-                // 但要一条零线：不依赖刻度字也能读的参考就剩它了 ——
-                // 正负号、有没有压过中轴、摆幅围着谁摆，一眼看得出来。
-                // 用刻度字的颜色压淡：够看清，又不至于在六行里连成一组醒目横条。
-                ZeroPaint = new SolidColorPaint(labelColor.WithAlpha(ZeroLineAlpha), 1),
                 // 其余横向网格线不要：六行各画一组会在视觉上把整块面板切碎。
                 SeparatorsPaint = null,
-            },
-        ];
+            };
+            _chart.YAxes = [_yAxis];
+        }
+
+        // 一条零线：不依赖刻度字也能读的参考就剩它了 ——
+        // 正负号、有没有压过中轴、摆幅围着谁摆，一眼看得出来。
+        // 用刻度字的颜色压淡：够看清，又不至于在六行里连成一组醒目横条。
+        _yAxis.ZeroPaint = new SolidColorPaint(labelColor.WithAlpha(ZeroLineAlpha), 1);
     }
 
     /// <summary>

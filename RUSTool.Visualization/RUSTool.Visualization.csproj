@@ -54,9 +54,9 @@
           选中对象显示自身坐标系（SceneGraph.ShowSelectionAxes，库默认开启 —— 拾取走 PickAndSelect 即可见）、
           点云增量更新。
         -->
-        <PackageReference Include="RobotSimulation.Core" Version="0.3.1" />
-        <PackageReference Include="RobotSimulation.Robot" Version="0.3.1" />
-        <PackageReference Include="RobotSimulation.OpenGL" Version="0.3.1" />
+        <PackageReference Include="RobotSimulation.Core" Version="0.4.0" />
+        <PackageReference Include="RobotSimulation.Robot" Version="0.4.0" />
+        <PackageReference Include="RobotSimulation.OpenGL" Version="0.4.0" />
 
         <!--
           Logging/SimulationLogBridge.cs 直接把库的日志门面接到宿主日志出口上，

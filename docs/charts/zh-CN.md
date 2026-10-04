@@ -46,7 +46,7 @@ RUSTool.UI  ──绑定──►  RobotStatePanel.Rows         （ObservableCol
 | `HasData` | `bool`（**只读**派生属性） | 任意一行有一个点。由点集合的变更自动翻；外部设不了（也设不进去） |
 | `PushFrame(IReadOnlyList<double>)` | 方法，**必须在 UI 线程调用** | 推一帧：交给每一行，各行取自己那一路的分量；分量不足的那些按 0 计 |
 | `ClearHistory()` | 方法，**必须在 UI 线程调用** | 清空所有行的历史与读数（重连后端时用：旧的形状不该冒充新数据） |
-| `RobotStateRows.Create(channels, windowFrames)` | 静态工厂 | 按目录建一组行（第 i 行画第 i 路）；`windowFrames` 默认 `RobotStateRow.DefaultWindowFrames` = 300（按标称 20 Hz 约 15 s） |
+| `RobotStateRows.Create(channels, windowFrames)` | 静态工厂 | 按目录建一组行（第 i 行画第 i 路）；`windowFrames` 缺省取 `RobotStateRow.DefaultWindowFrames`，应用侧显式传 `TorqueChartViewModel.WindowFrames` = 600（30 s × 20 Hz 显示采样） |
 | `RobotStateRows.PushFrame(rows, frame)` / `Clear(rows)` | 静态方法 | 面板与宿主 VM 共用的同一份「推 / 清」语义（宿主不持有面板实例时走这里） |
 | `RobotArmChannels.Torques()` / `JointAngles()` / `FlangePose()` | 静态目录 | 目录顺序 = 数据数组的分量顺序（下标对齐） |
 | `StateChannel(Name, Unit)` | `record` | 一路可画量：名字（行头标签）+ 单位（读数后缀）；`Format(v)` = 两位小数 + 单位 |
@@ -64,6 +64,7 @@ RUSTool.UI  ──绑定──►  RobotStatePanel.Rows         （ObservableCol
 
 ```
 WS 线程  /state 帧 ──► TorqueChartViewModel.OnStateUpdated
+                          │ 按 state.Timestamp 节流到 DisplayHz（125 Hz → 20 Hz）
                           │ Dispatcher.UIThread.Post
                           ▼
                        PushFrame(state.Effort) ──► RobotStateRow.Push（逐行）
@@ -139,7 +140,7 @@ WS 线程  /state 帧 ──► TorqueChartViewModel.OnStateUpdated
 ## 8. 怎么验证（不需要后端）
 
 ```bash
-# 1) 六路关节力矩曲线：按协议的线格式真的拼满一屏（300 帧）状态帧，再走生产解码器解回来（只跳过 WebSocket）
+# 1) 六路关节力矩曲线：按协议的线格式真的拼满一屏（600 帧）状态帧，再走生产解码器解回来（只跳过 WebSocket）
 RUSTool.UI/preview.sh torque                # -> preview/08-engineer-torque.png（浅色 · 工程师模式）
 
 # 2) 空数据态与主题跟随：普通截图不推帧，曲线区撤掉、只留一句提示
@@ -161,10 +162,11 @@ RUSTool.UI/preview.sh window --demo-torque
 1. **行由调用方拥有**：控件只渲染你给的集合、并往行里推帧；不替你造行、也不换行。
 2. **推帧只在 UI 线程**：改的是绑定源集合；跨线程推帧是数据竞争，不是「偶尔会抖」。
 3. **单位在库外换算**：目录只描述「已经是什么」——避免「图上画的是度、读数写的是弧度」这种对不上。
-4. **窗口长度只有一个来源**：`RobotStateRow.DefaultWindowFrames`（宿主 `TorqueChartViewModel.WindowFrames`
-   转发它）—— 否则截图脚本推满一屏的帧数会和图上实际窗口对不上。
-   卡片头上那句「15 s」是按**标称** 20 Hz 折出来的旁注（`NominalStateHz`）；横轴画的一直是帧序号，
-   所以推帧快一点慢一点都不会让「窗口 300 帧」这句话变成假的。
+4. **窗口长度只有一个来源**：宿主 `TorqueChartViewModel.WindowFrames`（= `WindowSeconds` × `DisplayHz`
+   = 30 s × 20 Hz = 600）显式传给 `RobotStateRows.Create`，截图脚本也按它推满一屏 ——
+   否则推的帧数会和图上实际窗口对不上。
+   `/state` 本身约 125 Hz，宿主按 `state.Timestamp` **节流到 `DisplayHz`** 再入行模型，
+   所以「600 帧」稳定对应 30 秒；横轴画的仍然是帧序号。
 5. **颜色只标识数据**：曲线色取自 `StatePalette`，不跟主题走；布局与文字色跟主题走。
 6. **一行一路、行头不可切**：行在构造时就绑定了 `ChannelIndex`，没有「切通道」这个操作 ——
    于是也不存在「切过去之后历史接不接得上」这类状态（见 `../architecture/zh-CN.md` 的 ADR-020）。

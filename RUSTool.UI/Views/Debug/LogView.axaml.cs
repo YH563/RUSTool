@@ -38,7 +38,12 @@ public partial class LogView : UserControl
         ScrollToEnd();
     }
 
-    private void OnEntriesChanged(object? sender, NotifyCollectionChangedEventArgs e) => ScrollToEnd();
+    /// <summary>新日志到达时只在「自动滚动」打开的情况下才追末尾，否则保留用户当前的回看位置。</summary>
+    private void OnEntriesChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if ((DataContext as LogViewModel)?.AutoScroll == true)
+            ScrollToEnd();
+    }
 
     /// <summary>滚到最后一行。集合在变化过程中不能直接滚，先 Post 让布局跑完。</summary>
     private void ScrollToEnd()

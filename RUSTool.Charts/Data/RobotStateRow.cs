@@ -27,12 +27,12 @@ namespace RUSTool.Charts.Data;
 public sealed partial class RobotStateRow : ObservableObject
 {
     /// <summary>
-    /// 默认滚动窗口长度（帧）。按 <c>/state</c> 约 20 Hz 折算 → 一屏约 15 秒历史：
-    /// 够看出一整段动作的形状（起停 / 换向 / 平台段），又不至于把 20 Hz 的点挤成一条实心带。
+    /// 默认滚动窗口长度（帧）—— 只是本层没被告知窗口长度时的兜底值。
     ///
     /// <para>
-    /// <b>这里只认帧数，不认秒：</b>一屏等于几秒取决于上游推帧有多快 —— 「15 秒」是界面层按标称帧率
-    /// 折算出来给人看的（见 <c>TorqueChartViewModel.WindowCaption</c>），横轴画的一直是帧序号。
+    /// <b>应用侧不依赖它：</b>宿主会显式传入窗口长度（<c>TorqueChartViewModel.WindowFrames</c>，
+    /// 由「时间窗口 × 显示采样率」算出，见那一处），所以「一屏几秒」由界面层决定，
+    /// 本层只认帧数、横轴画的也一直是帧序号。
     /// </para>
     /// </summary>
     public const int DefaultWindowFrames = 300;

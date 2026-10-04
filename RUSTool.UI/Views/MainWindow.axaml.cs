@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Avalonia.Interactivity;
 using RUSTool.UI.ViewModels;
 using RUSTool.UI.Views.Clinical;
 using RUSTool.UI.Views.Debug;
@@ -43,6 +44,13 @@ public partial class MainWindow : Window
         // 数据上下文可能早于也可能晚于窗口显示（真实运行在 App 里给、截图模式在 Program 里给），
         // 两种时序都走同一条「取到 VM → 挂当前模式的工作区」，所以挂在事件上而不是构造函数里做一次。
         DataContextChanged += OnDataContextChanged;
+    }
+
+    /// <summary>打开「全局参数」窗口（数据源是组装层注入的 <c>SettingsService</c>）。</summary>
+    private void OnOpenSettings(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainViewModel vm)
+            new SettingsWindow { DataContext = vm.Settings }.ShowDialog(this);
     }
 
     private void OnDataContextChanged(object? sender, EventArgs e)

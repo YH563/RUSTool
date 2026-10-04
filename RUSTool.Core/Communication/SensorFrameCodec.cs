@@ -1,5 +1,6 @@
 using System;
 using System.Buffers.Binary;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
@@ -245,25 +246,46 @@ public static class SensorFrameCodec
         if (payloadLength <= 0)
             throw new SensorFrameException("payload 为空");
 
-        long expected = points * PointStride;
+        return BuildPointCloud(
+            (int)points, rangeMin, rangeMax, encoding,
+            message.Span.Slice(headSize, payloadLength),
+            OptionalUInt32(head, "seq"), OptionalDouble(head, "timestamp"),
+            OptionalString(head, "frame_id"), OptionalString(head, "scope"));
+    }
+
+    /// <summary>
+    /// 由「元数据 + 压缩 payload」构建一帧点云（反量化 + 取色）。
+    /// 是 WS 线格式（<see cref="Decode"/>）与本地 <c>.rusrec</c> 回放（CDR 里取出的同名字段）
+    /// 共用的同一条路径 —— 两处解码必须得到完全相同的点，否则"回放的画面"和"当时的画面"会不一样。
+    /// </summary>
+    /// <exception cref="SensorFrameException">payload 与元数据不自洽（坏帧）。</exception>
+    internal static SensorPointCloudFrame BuildPointCloud(
+        int points, double[] rangeMin, double[] rangeMax, string encoding,
+        ReadOnlySpan<byte> payload, uint seq, double timestamp, string frameId, string scope)
+    {
+        if (points <= 0)
+            throw new SensorFrameException("points 为 0");
+        if (points > MaxPoints)
+            throw new SensorFrameException($"points={points} 超过上限 {MaxPoints}（疑为坏帧）");
+        if (rangeMin.Length < 3 || rangeMax.Length < 3)
+            throw new SensorFrameException("range_min / range_max 不足 3 维");
+
+        long expected = (long)points * PointStride;
         ReadOnlySpan<byte> raw;
         switch (encoding)
         {
             case SensorEncodings.Raw:
-                // raw：payload 就是点数据本身，直接读（不复制）。
-                if (payloadLength != expected)
-                    throw new SensorFrameException($"raw payload {payloadLength} 字节 ≠ points×{PointStride}={expected}");
-                raw = message.Span.Slice(headSize, payloadLength);
+                if (payload.Length != expected)
+                    throw new SensorFrameException($"raw payload {payload.Length} 字节 ≠ points×{PointStride}={expected}");
+                raw = payload;
                 break;
 
             case SensorEncodings.Zstd:
                 // zstd：解压到「刚好点数据大小」的缓冲；多一字节少一字节都算坏帧。
-                // 这是本链路唯一的稳态分配（30 万点 ≈ 3 MB，地图快照数十 MB）——
-                // 解出来的数组本来就要交给渲染侧，且是覆盖式的（旧的那份立刻可回收）。
                 byte[] decompressed = new byte[expected];
                 using (var decompressor = new Decompressor())
                 {
-                    int written = decompressor.Unwrap(message.Span.Slice(headSize, payloadLength), decompressed);
+                    int written = decompressor.Unwrap(payload, decompressed);
                     if (written != expected)
                         throw new SensorFrameException($"解压后 {written} 字节 ≠ points×{PointStride}={expected}");
                 }
@@ -287,14 +309,71 @@ public static class SensorFrameCodec
         }
 
         return new SensorPointCloudFrame(
-            Xyz: xyz,
-            Rgb: rgb,
-            Count: (int)points,
-            Seq: OptionalUInt32(head, "seq"),
-            Timestamp: OptionalDouble(head, "timestamp"),
-            FrameId: OptionalString(head, "frame_id"),
-            Encoding: encoding,
-            Scope: OptionalString(head, "scope"));
+            Xyz: xyz, Rgb: rgb, Count: points, Seq: seq, Timestamp: timestamp,
+            FrameId: frameId, Encoding: encoding, Scope: scope);
+    }
+
+    /// <summary>
+    /// 由已拆好的字段（dtype / fields / points / range / encoding / payload）构建点云，
+    /// 失败返回 <c>null</c> + 原因 —— 供本地 <c>.rusrec</c> 回放使用（CDR 解码后调用）。
+    /// 布局不认识（dtype / fields 不匹配）时整帧丢，绝不"猜着解"。
+    /// </summary>
+    public static SensorPointCloudFrame? TryBuildPointCloud(
+        string dtype, string[] fields, int points, double[] rangeMin, double[] rangeMax,
+        string encoding, ReadOnlySpan<byte> payload,
+        uint seq, double timestamp, string frameId, string scope, out string? error)
+    {
+        error = null;
+        try
+        {
+            if (dtype.Length > 0 && dtype != "int16")
+            {
+                error = $"dtype={dtype} 未实现（当前只支持 int16）";
+                return null;
+            }
+
+            if (!FieldsMatch(fields))
+            {
+                error = "fields 不是 [x,y,z,rgb]（布局不认识，整帧丢弃）";
+                return null;
+            }
+
+            return BuildPointCloud(points, rangeMin, rangeMax, encoding, payload, seq, timestamp, frameId, scope);
+        }
+        catch (SensorFrameException ex)
+        {
+            error = ex.Message;
+            return null;
+        }
+        catch (ZstdException ex)
+        {
+            error = $"zstd 解压失败：{ex.Message}";
+            return null;
+        }
+    }
+
+    /// <summary>字段数组版本的重载（供 CDR 解码），空数组时按协议默认布局处理。</summary>
+    public static SensorPointCloudFrame? TryBuildPointCloud(
+        string dtype, IReadOnlyList<string>? fields, int points, double[] rangeMin, double[] rangeMax,
+        string encoding, ReadOnlySpan<byte> payload,
+        uint seq, double timestamp, string frameId, string scope, out string? error)
+        => TryBuildPointCloud(dtype, fields is null ? [] : [.. fields], points, rangeMin, rangeMax,
+            encoding, payload, seq, timestamp, frameId, scope, out error);
+
+    /// <summary>字段数组校验（缺字段按默认布局处理）。</summary>
+    private static bool FieldsMatch(ReadOnlySpan<string> fields)
+    {
+        if (fields.Length == 0)
+            return true;
+        if (fields.Length != ExpectedFields.Length)
+            return false;
+
+        for (int i = 0; i < fields.Length; i++)
+        {
+            if (!string.Equals(fields[i], ExpectedFields[i], StringComparison.OrdinalIgnoreCase))
+                return false;
+        }
+        return true;
     }
 
     /// <summary>必填字段，缺了就是坏帧。</summary>

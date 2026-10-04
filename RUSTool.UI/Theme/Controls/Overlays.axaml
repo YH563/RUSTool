@@ -76,11 +76,17 @@
     </Style>
 
     <!-- ── ToolTip ──
-         小气泡用 RadiusMd(6) 而不是 8：尺寸越小的圆角越要小，
-         否则一个 20px 高的气泡配 8px 圆角会变成"胶囊"，像按钮而不像提示。 -->
+         ⚠ 和菜单 / 下拉一样必须走 RadiusOverlay（默认 0）与 ShadowOverlay（默认 none）：
+           提示气泡也是独立窗口，没有合成器时圆角外侧的透明区会被渲染成【纯黑】——
+           悬停时那圈"黑框 / 黑角一闪"就是从这来的。之前这里图"小气泡用小圆角"写了
+           RadiusMd(6)，是唯一漏掉这条规则的浮层。方角 + 无阴影即可，层次靠 1px 边框。 -->
     <Style Selector="ToolTip">
-        <Setter Property="CornerRadius" Value="{DynamicResource RadiusMd}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusOverlay}" />
         <Setter Property="Padding" Value="8,4" />
+    </Style>
+    <!-- 模板里的外框也别留阴影（无合成器时同样会糊成一圈黑） -->
+    <Style Selector="ToolTip /template/ Border">
+        <Setter Property="BoxShadow" Value="{DynamicResource ShadowOverlay}" />
     </Style>
 
 </Styles>

@@ -37,7 +37,10 @@ public sealed partial class SessionViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isEmergencyStopped;
 
-    /// <summary>最近一次操作的错误提示（空串 = 无错误），由界面在工具栏附近展示。</summary>
+    /// <summary>
+    /// 最近一次操作的错误提示（空串 = 无错误）。
+    /// 失败信息一律进日志面板（<c>LogService</c>），界面不再单独显示 —— 这里只作为状态留痕。
+    /// </summary>
     [ObservableProperty]
     private string _errorMessage = "";
 
@@ -55,6 +58,9 @@ public sealed partial class SessionViewModel : ViewModelBase
     // ── 转发共享状态（界面直接绑定这些）──
 
     public bool IsConnected => _session.IsConnected;
+
+    /// <summary>未连接（供「连接 / 断开」两枚互斥按钮的显隐绑定，避免取反转换器）。</summary>
+    public bool IsDisconnected => !IsConnected;
 
     public bool IsEnabled => _session.IsEnabled;
 
@@ -294,6 +300,7 @@ public sealed partial class SessionViewModel : ViewModelBase
     private void RaiseAll()
     {
         OnPropertyChanged(nameof(IsConnected));
+        OnPropertyChanged(nameof(IsDisconnected));
         OnPropertyChanged(nameof(IsEnabled));
         OnPropertyChanged(nameof(ConnectText));
         OnPropertyChanged(nameof(ModeText));

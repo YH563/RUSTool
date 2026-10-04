@@ -3,7 +3,9 @@ using CommunityToolkit.Mvvm.Input;
 using RUSTool.Communication;
 using RUSTool.Services.Logging;
 using RUSTool.Services.Robot;
+using RUSTool.Settings;
 using System;
+using System.Threading.Tasks;
 
 namespace RUSTool.UI.ViewModels;
 
@@ -20,10 +22,11 @@ public sealed partial class MainViewModel : ViewModelBase
 {
     private readonly IRobotService _robot;
 
-    public MainViewModel(IRobotService robot, RobotSession session, ILogService log)
+    public MainViewModel(IRobotService robot, RobotSession session, ILogService log, SettingsService settings)
     {
         _robot = robot;
         LogService = log;
+        Settings = settings;
 
         // /sensor 的点云帧只在这里过一道手：服务层抛帧 → 视图层订阅（3D 视口的数据入口）。
         // 本层不认识 RUSTool.Visualization，也不认识 GL —— 转成视口能懂的形状是视图层的事。
@@ -36,7 +39,52 @@ public sealed partial class MainViewModel : ViewModelBase
         Charts = new TorqueChartViewModel(robot);
         Control = new RobotControlViewModel(robot, log);
         Scan = new ScanWorkflowViewModel(robot, log);
-        Replay = new ReplayViewModel(log);
+        Replay = new ReplayViewModel(settings, log);
+        Recorder = new RecorderViewModel(robot, log);
+
+        // 本地回放把读出的两路数据喂回与实时完全相同的下游：
+        // 状态帧 → HUD + 曲线（PublishStateFrame），点云帧 → 3D 视口（PublishPointCloud）。
+        Replay.StateFramePlayed += PublishStateFrame;
+        Replay.PointCloudPlayed += PublishPointCloud;
+
+        // 进入回放前的"接管"：查运动 → 兜底 stop → 断开后端。回放本身是本地行为。
+        Replay.RequestTakeover = RequestReplayTakeoverAsync;
+    }
+
+    /// <summary>全局参数（录音目录 / bridge 地址…），由组装层注入。</summary>
+    public SettingsService Settings { get; }
+
+    /// <summary>
+    /// 回放接管：进入本地回放前调用。
+    ///
+    /// <para>
+    /// 顺序：<b>①</b> 有运动 / 扫查在进行 → 拒绝；<b>②</b> 兜底下发 <c>stop</c> 并等回执，
+    /// 失败则中止（绝不带着未知运动状态断开）；<b>③</b> 断开后端连接（停 /state、/sensor 流）。
+    /// 断开后本地回放才独占 HUD / 曲线 / 3D，不会与实时流打架。
+    /// </para>
+    /// </summary>
+    private async Task<bool> RequestReplayTakeoverAsync()
+    {
+        if (Control.IsJogging || Scan.IsRunning || Session.IsScanning)
+        {
+            LogService.Log("运动 / 扫查进行中，无法进入回放：请先停止", LogLevel.Warn, "replay");
+            return false;
+        }
+
+        if (Session.IsConnected)
+        {
+            var r = await _robot.StopAsync();
+            if (!r.Success)
+            {
+                LogService.Log($"进入回放前停止失败（{r.Message}），已取消回放", LogLevel.Error, "replay");
+                return false;
+            }
+
+            Session.DisconnectCommand.Execute(null);
+        }
+
+        LogService.Log("已进入本地回放：后端连接已断开", LogLevel.Info, "replay");
+        return true;
     }
 
     /// <summary>
@@ -113,6 +161,9 @@ public sealed partial class MainViewModel : ViewModelBase
     /// <summary>记录 / 回放。</summary>
     public ReplayViewModel Replay { get; }
 
+    /// <summary>录制控制（开始 / 停止 / 状态，全局旁路模块）。</summary>
+    public RecorderViewModel Recorder { get; }
+
     /// <summary>true = 工程师模式（3D + 影像 + 曲线 + 控制台），false = 临床模式。</summary>
     [ObservableProperty]
     private bool _isDebugMode = true;
@@ -126,6 +177,12 @@ public sealed partial class MainViewModel : ViewModelBase
     [ObservableProperty]
     private int _robotModeIndex;
 
+    /// <summary>手动面板是否为当前页（供分段标签的选中态绑定，避免值转换器）。</summary>
+    public bool IsManualMode => RobotModeIndex == 0;
+
+    /// <summary>扫查面板是否为当前页（供分段标签的选中态绑定）。</summary>
+    public bool IsScanMode => RobotModeIndex == 1;
+
     partial void OnIsDebugModeChanged(bool value)
     {
         OnPropertyChanged(nameof(IsClinicalMode));
@@ -133,13 +190,22 @@ public sealed partial class MainViewModel : ViewModelBase
     }
 
     /// <summary>机器人指令模式切换后同步给后端（0=手动 / 1=扫查）。</summary>
-    partial void OnRobotModeIndexChanged(int value) => _ = _robot.SetMode(value);
+    partial void OnRobotModeIndexChanged(int value)
+    {
+        _ = _robot.SetMode(value);
+        OnPropertyChanged(nameof(IsManualMode));
+        OnPropertyChanged(nameof(IsScanMode));
+    }
 
     [RelayCommand]
     private void SwitchToDebug() => IsDebugMode = true;
 
     [RelayCommand]
     private void SwitchToClinical() => IsDebugMode = false;
+
+    /// <summary>「机器人指令」卡片里手动 / 扫查两个面板的切换（参数 "0" = 手动 / "1" = 扫查）。</summary>
+    [RelayCommand]
+    private void SelectRobotMode(object? parameter) => RobotModeIndex = parameter?.ToString() == "1" ? 1 : 0;
 
     /// <summary>
     /// 「重置视角」请求。3D 视口的相机是图形栈内部的显示状态（属于视图层），

@@ -74,6 +74,8 @@ public record RobotState
   "args": [0.1, -0.5, 1.2, 0.0, 0.3, 0.0],
   "id":   42
 }
+// v0.5：字符串参数走 text（如按路径载入回放文件）
+{ "id": 43, "cmd": "replay_load_path", "args": [], "text": "/abs/run_20260930_153850.rusrec" }
 ```
 
 | 字段 | 类型 | 说明 |
@@ -81,6 +83,7 @@ public record RobotState
 | `cmd` | string | 指令名 |
 | `args` | double[] | 参数数组 |
 | `id` | int | 请求 ID，用于匹配响应（可选） |
+| `text` | string | 字符串参数（协议 v0.5；缺省空串，仅字符串类指令带非空值） |
 
 ### 2.2 响应格式
 
@@ -88,15 +91,19 @@ public record RobotState
 {
   "id":      42,
   "success": true,
-  "result":  []
+  "message": "ok",
+  "result":  [],
+  "strings": []
 }
 ```
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `id` | int | 对应请求的 ID |
+| `id` | int | 对应请求的 ID（event 恒为 0，用 `ack_id` 关联） |
 | `success` | bool | 执行成功/失败 |
-| `result` | double[] | 返回值（查询类指令使用） |
+| `message` | string | 失败原因 / 附加说明 |
+| `result` | double[] | **数值**返回值（查询类指令使用） |
+| `strings` | string[] | **文本**返回值（协议 v0.4；录制 / 回放的文件名清单等，旧后端缺失时按空数组处理） |
 
 ---
 
@@ -178,16 +185,29 @@ C# 侧的转换只在 `RobotDriverCodec` 一处（见 [`../core/zh-CN.md`](../co
 | `get_sim_time` | `[]` | `[time]` | 查询仿真时间 |
 | `get_frame_rate` | `[]` | `[fps]` | 查询仿真帧率 |
 | `step_once` | `[]` | — | 单步仿真 |
-| `is_playback_active` | `[]` | `[1/0]` | 是否正在回放 |
 
-### 3.7 录制/回放
+### 3.7 录制 / 回放
 
-| 指令 | args | 说明 |
-|------|------|------|
-| `record_start` | `[]` | 开始录制 |
-| `record_stop` | `[]` | 停止录制 |
-| `playback_start` | `[]` | 开始回放 |
-| `playback_stop` | `[]` | 停止回放 |
+**录制走后端，回放走前端本地**（后端协议已把回放职责移交前端）。
+
+**录制（`recorder_*`）**：旁路模块（只订阅），路由到后端 RECORDER；不随手动 / 自动模式切换。
+result 定长 7 项 `state / records / payload_mib / file_mib / dropped / throttled / files`；
+`strings[0]` = 当前 / 最后文件名。`state`：0 = stopped、1 = recording、2 = failed（熔断，需重启节点）。
+
+| 指令 | args | result | strings | 说明 |
+|------|------|--------|---------|------|
+| `recorder_start` | `[]` | 7 项 | [新文件名] | 开始录制（打开新文件，绝不覆盖）；已在录 / 已熔断 → 失败 |
+| `recorder_stop` | `[]` | 7 项 | [已封存文件名] | 停录并封存（写尾索引 + Footer），文件立即可回放 |
+| `recorder_status` | `[]` | 7 项 | [当前 / 最后文件名] | 查询状态（前端"录制中"指示与计时数据源） |
+
+**回放（前端本地，不走 WS）**：后端只把两条流录成 `<records_dir>/*.rusrec`；
+前端与后端**共享文件系统**，直接读该目录、按 `RecFormat.md` 解码、自行播放 / 可视化 ——
+不经 ROS 话题，因此**不会与在线驱动撞话题、无需停驱动**。
+
+- 后端 `replay_*` 指令与 `replayer_node` **已废弃**（仅过渡期保留），新链路不要使用；
+  前端代码里对应的 `Commands.Replay*` / `Events.ReplayDone` / `IRobotService.Replay*` 均标了 `[Obsolete]`。
+- 前端实现见子项目 **`RUSTool.Replay`**（容器读取 + CDR 解码 + 回放引擎）+ `RUSTool.Settings`（录音目录）。
+- 目录口径：后端 `<output_dir>` 默认 `records`（相对 recorder 进程 cwd）；前端需配置到**同一绝对目录**。
 
 ### 3.8 文件执行
 

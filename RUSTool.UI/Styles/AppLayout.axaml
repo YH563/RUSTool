@@ -117,6 +117,13 @@
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="Width" Value="6" />
     </Style>
+    <!-- 行分隔条：横向铺满、6px 高（覆盖上面那条竖分隔的 Width=6） -->
+    <Style Selector="GridSplitter.horizontal">
+        <Setter Property="Width" Value="NaN" />
+        <Setter Property="Height" Value="6" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
 
     <!-- ── 小标签（Tag / Pill）：模式名、单位、计数等 ──
          一个类搞定，底色 / 文字色都跟着主题走，不必逐处写死字号与前景色。 -->

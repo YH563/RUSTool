@@ -72,13 +72,20 @@ public sealed partial class RobotControlViewModel : ViewModelBase
     [ObservableProperty]
     private int _jogFrameIndex;
 
-    /// <summary>点动速度百分比（0~100）。</summary>
+    /// <summary>
+    /// 通用运动速度百分比（0~100）：点动、movej、movel 共用这一项。
+    ///
+    /// <para>
+    /// <b>不含自动扫查</b>：扫查路径由后端规划并按自己的节拍执行（execute 指令不带界面速度），
+    /// 所以这个滑条不参与扫查流程，避免"改了界面速度、扫查却没变"的错觉。
+    /// </para>
+    /// </summary>
     [ObservableProperty]
-    private double _jogSpeed = 35;
+    private double _motionSpeed = 35;
 
-    /// <summary>加速度百分比（0~100）。</summary>
+    /// <summary>通用加速度百分比（0~100）；与 <see cref="MotionSpeed"/> 一起下发。</summary>
     [ObservableProperty]
-    private double _jogAcc = 30;
+    private double _motionAcc = 30;
 
     [ObservableProperty]
     private string _moveJInput = "10, -45, 60, -8, 34, 4";
@@ -97,7 +104,10 @@ public sealed partial class RobotControlViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isConnected;
 
-    /// <summary>最近一次失败的原因（空串 = 无错误）。</summary>
+    /// <summary>
+    /// 最近一次失败的原因（空串 = 无错误）。
+    /// 失败信息一律进日志面板，面板内不再内联显示。
+    /// </summary>
     [ObservableProperty]
     private string _errorMessage = "";
 
@@ -123,14 +133,14 @@ public sealed partial class RobotControlViewModel : ViewModelBase
     /// <summary>点动开始（按下）：按当前参考系下发 start_jog。</summary>
     public async Task BeginJogAsync(int axis, int direction)
     {
-        var jog = new JogParameters(JogRefFrame, axis, direction, (int)JogSpeed, (int)JogAcc, 0);
+        var jog = new JogParameters(JogRefFrame, axis, direction, (int)MotionSpeed, (int)MotionAcc, 0);
         var r = await _robot.StartJogAsync(jog);
 
         if (r.Success)
         {
             IsJogging = true;
             LastAction = "点动中…（松开按钮即减速停止）";
-            _log.Log($"start_jog(axis={axis}, dir={direction}, speed={(int)JogSpeed})",
+            _log.Log($"start_jog(axis={axis}, dir={direction}, speed={(int)MotionSpeed})",
                 LogLevel.Info, "start_jog");
         }
         else
@@ -161,7 +171,7 @@ public sealed partial class RobotControlViewModel : ViewModelBase
 
     // ── 运动指令 ──
 
-    /// <summary>关节空间运动：输入是【度】，下发前转成弧度。</summary>
+    /// <summary>关节空间运动：输入是【度】，下发前转成弧度；速度 / 加速度取通用设置。</summary>
     [RelayCommand]
     private async Task MoveJ()
     {
@@ -176,10 +186,11 @@ public sealed partial class RobotControlViewModel : ViewModelBase
         for (var i = 0; i < joints.Length; i++)
             joints[i] *= Math.PI / 180.0;
 
-        Finish("movej", await _robot.MoveJAsync(joints));
+        // movej 的速度 / 加速度是【比例 0~1】，滑条是百分比，这里换算。
+        Finish("movej", await _robot.MoveJAsync(joints, MotionSpeed / 100.0, MotionAcc / 100.0));
     }
 
-    /// <summary>笛卡尔直线运动：x,y,z 是米，rx,ry,rz 是度（姿态转弧度后下发）。</summary>
+    /// <summary>笛卡尔直线运动：x,y,z 是米，rx,ry,rz 是度（姿态转弧度后下发）；速度取通用设置。</summary>
     [RelayCommand]
     private async Task MoveL()
     {
@@ -194,7 +205,8 @@ public sealed partial class RobotControlViewModel : ViewModelBase
         for (var i = 3; i < 6; i++)
             pose[i] *= Math.PI / 180.0;
 
-        Finish("movel", await _robot.MoveLAsync(pose));
+        // movel 同 movej：速度 / 加速度是比例 0~1。
+        Finish("movel", await _robot.MoveLAsync(pose, MotionSpeed / 100.0, MotionAcc / 100.0));
     }
 
     /// <summary>暂停运动。</summary>

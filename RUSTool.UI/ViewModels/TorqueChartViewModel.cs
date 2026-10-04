@@ -23,24 +23,42 @@ namespace RUSTool.UI.ViewModels;
 /// 视图层也不认识（见 <c>Views/Debug/DebugWorkspace.axaml</c> 的「数据曲线」卡片体）。
 /// </para>
 /// <para>
+/// <b>采样率与时间窗口：</b><c>/state</c> 状态流约 125 Hz，但曲线不需要 125 个点/秒 ——
+/// 那样 300 帧只够 2.4 秒、曲线会像一条飞速掠过的实心带。所以这里把推给行模型的帧
+/// <b>按时间戳节流到 <see cref="DisplayHz"/></b>，窗口因此按「秒」算得准：
+/// <see cref="WindowSeconds"/> 秒 × <see cref="DisplayHz"/> = <see cref="WindowFrames"/> 点。
 /// 状态帧在后台线程到达，所有赋值统一 <c>Post</c> 到 UI 线程（绑定源集合只能在 UI 线程改）。
 /// </para>
 /// </summary>
 public sealed partial class TorqueChartViewModel : ViewModelBase
 {
+    /// <summary>曲线展示的时间窗口（秒）：一屏要覆盖多久的历史。</summary>
+    public const int WindowSeconds = 30;
+
     /// <summary>
-    /// 滚动窗口长度（帧）。<c>/state</c> 约 20 Hz → 一屏约 15 秒历史：
-    /// 够看出一整段动作的形状（起停 / 换向 / 平台段），又不至于把 20 Hz 的点挤成一条实心带。
+    /// 曲线的显示采样率（Hz）—— 状态流多以 125 Hz 到达，这里节流到 20 Hz 再入行模型。
+    /// 20 Hz 足以看清力矩的形状，又不会把一行几十像素高的曲线挤成实心带。
+    /// </summary>
+    public const int DisplayHz = 20;
+
+    /// <summary>
+    /// 滚动窗口长度（帧）= 秒数 × 显示采样率。
     ///
     /// <para>
-    /// 转发 <see cref="RobotStateRow.DefaultWindowFrames"/>：窗口长度是行模型的属性
-    /// （曲线的 X 轴整段长度就是它），本层<b>不另定一个数</b> —— 否则截图脚本推满一屏的帧数
-    /// 和图上实际的窗口会对不上。
+    /// 转发给行模型作为 X 轴整段长度（曲线从这个长度从左往右长满后开始滚动）；
+    /// 截图脚本（<c>--demo-torque</c>）也按它推满一屏的帧数 —— 两者必须同源，
+    /// 否则图上窗口和实际帧数会对不上。
     /// </para>
     /// </summary>
-    public const int WindowFrames = RobotStateRow.DefaultWindowFrames;
+    public const int WindowFrames = WindowSeconds * DisplayHz;
+
+    /// <summary>两个采样点之间的最小时间间隔（秒）：把上游帧率节流到 <see cref="DisplayHz"/>。</summary>
+    private const double MinSampleInterval = 1.0 / DisplayHz;
 
     private readonly IRobotService _robot;
+
+    /// <summary>上一次真正推进行模型的状态帧时间戳（秒）；用于按时间戳节流。</summary>
+    private double _lastPushedTimestamp = double.NegativeInfinity;
 
     public TorqueChartViewModel(IRobotService robot)
     {
@@ -67,24 +85,33 @@ public sealed partial class TorqueChartViewModel : ViewModelBase
     [ObservableProperty] private bool _isConnected;
 
     /// <summary>
-    /// <c>/state</c> 的标称帧率（Hz）。只用来把窗口长度折成「几秒」写到卡片头上 ——
-    /// 横轴画的仍然是帧序号，曲线的形状不依赖这个数（见 <see cref="WindowCaption"/>）。
-    /// 与 <c>DemoStateFrame.Hz</c>（合成流）以及协议里的 <c>frame_rate</c> 是同一个量级。
+    /// 窗口长度文案（卡片头右侧显示）：秒数与帧数一起给。
+    /// 秒数是主信息（一眼对上刚才那段动作有多长），帧数是实现细节的旁注。
     /// </summary>
-    private const double NominalStateHz = 20.0;
-
-    /// <summary>
-    /// 窗口长度文案（卡片头右侧显示）：帧数与秒数一起给。
-    ///
-    /// <para>
-    /// 帧数是唯一来源（<see cref="WindowFrames"/>）；秒数只按标称帧率折出来当旁注 ——
-    /// 「300 帧」对人没有直觉，而「15 秒」一眼就能对上刚才那段动作有多长。
-    /// </para>
-    /// </summary>
-    public string WindowCaption => $"窗口 {WindowFrames / NominalStateHz:0.#} s · {WindowFrames} 帧";
+    public string WindowCaption => $"窗口 {WindowSeconds} s · {WindowFrames} 帧";
 
     private void OnStateUpdated(BridgeProtocol.StateFrame state)
-        => Dispatcher.UIThread.Post(() => PushFrame(state));
+    {
+        if (!ShouldSample(state.Timestamp))
+            return;
+
+        Dispatcher.UIThread.Post(() => PushFrame(state));
+    }
+
+    /// <summary>
+    /// 按时间戳判断这一帧要不要进曲线：距上一帧不足 <see cref="MinSampleInterval"/> 就丢弃。
+    /// 时间戳回退（重连 / 复位 / 换信号源）时强制放行并重设基线，避免从此一帧都进不来。
+    /// </summary>
+    private bool ShouldSample(double timestamp)
+    {
+        if (timestamp <= _lastPushedTimestamp || timestamp - _lastPushedTimestamp >= MinSampleInterval)
+        {
+            _lastPushedTimestamp = timestamp;
+            return true;
+        }
+
+        return false;
+    }
 
     /// <summary>
     /// 推一帧状态帧：同一帧进所有行，每行取自己那一路的分量。

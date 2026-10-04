@@ -34,6 +34,10 @@ public sealed partial class LogViewModel : ViewModelBase
     [ObservableProperty]
     private bool _warningOnly;
 
+    /// <summary>是否自动滚动到最新一条（关闭后可停在历史位置回看）。</summary>
+    [ObservableProperty]
+    private bool _autoScroll = true;
+
     /// <summary>当前选中的日志行。</summary>
     [ObservableProperty]
     private LogEntry? _selected;

@@ -46,14 +46,37 @@ public sealed class RobotService : IRobotService
     public void StopSensorStream() => _client.StopSensorStream();
 
     public Task<CommandResult> SendAsync(string cmd, double[]? args = null,
-        int timeoutMs = 5000, CancellationToken ct = default)
-        => _client.SendAsync(cmd, args, timeoutMs, ct);
+        int timeoutMs = 5000, CancellationToken ct = default, string? text = null)
+        => _client.SendAsync(cmd, args, timeoutMs, ct, text);
 
-    public Task<CommandResult> MoveJAsync(double[] joints)
-        => _client.SendAsync(Commands.MoveJ, joints);
+    public Task<CommandResult> MoveJAsync(double[] joints, double? speed = null, double? acc = null)
+        => _client.SendAsync(Commands.MoveJ, WithMotionParams(joints, speed, acc));
 
-    public Task<CommandResult> MoveLAsync(double[] pose)
-        => _client.SendAsync(Commands.MoveL, pose);
+    public Task<CommandResult> MoveLAsync(double[] pose, double? speed = null, double? acc = null)
+        => _client.SendAsync(Commands.MoveL, WithMotionParams(pose, speed, acc));
+
+    /// <summary>
+    /// 把可选的速度 / 加速度拼到 movej / movel 参数的尾部（协议里它们是可选的后两个参数，
+    /// 且是**比例 0~1**）。
+    ///
+    /// <para>
+    /// 只给 <paramref name="speed"/> 是合法的；<paramref name="acc"/> 只有在 speed 也存在时才拼 ——
+    /// 否则 acc 会错位到 speed 的位置，被后端当成速度解释。
+    /// </para>
+    /// </summary>
+    private static double[] WithMotionParams(double[] values, double? speed, double? acc)
+    {
+        if (speed is null)
+            return values;
+
+        var result = new double[values.Length + (acc is null ? 1 : 2)];
+        Array.Copy(values, result, values.Length);
+        result[values.Length] = speed.Value;
+        if (acc is not null)
+            result[values.Length + 1] = acc.Value;
+
+        return result;
+    }
 
     public Task<CommandResult> StartJogAsync(JogParameters jog)
         => _client.SendAsync(Commands.StartJog,
@@ -139,6 +162,68 @@ public sealed class RobotService : IRobotService
 
     public Task<CommandResult> StepOnceAsync()
         => _client.SendAsync(Commands.StepOnce);
+
+    // ── 录制（RECORDER 旁路） ──
+
+    public Task<CommandResult> RecorderStartAsync()
+        => _client.SendAsync(Commands.RecorderStart);
+
+    public Task<CommandResult> RecorderStopAsync()
+        => _client.SendAsync(Commands.RecorderStop);
+
+    public Task<CommandResult> RecorderStatusAsync()
+        => _client.SendAsync(Commands.RecorderStatus);
+
+    // ── 回放（❌ 后端已废弃：过渡期保留，实现只做协议转发） ──
+    // 这里引用的是标记 [Obsolete] 的协议常量，故本段整体抑制 CS0618。
+
+#pragma warning disable CS0618
+
+    [Obsolete(ReplayDeprecation.Message)]
+    public Task<CommandResult> ReplayListAsync()
+        => _client.SendAsync(Commands.ReplayList);
+
+    [Obsolete(ReplayDeprecation.Message)]
+    public Task<CommandResult> ReplayLoadAsync(int? index = null)
+        => _client.SendAsync(Commands.ReplayLoad, index is null ? [] : [index.Value]);
+
+    [Obsolete(ReplayDeprecation.Message)]
+    public Task<CommandResult> ReplayLoadPathAsync(string path)
+        => _client.SendAsync(Commands.ReplayLoadPath, text: path);
+
+    [Obsolete(ReplayDeprecation.Message)]
+    public Task<CommandResult> ReplayStartAsync(double? speed = null)
+        => _client.SendAsync(Commands.ReplayStart, speed is null ? [] : [speed.Value]);
+
+    [Obsolete(ReplayDeprecation.Message)]
+    public Task<CommandResult> ReplayPauseAsync()
+        => _client.SendAsync(Commands.ReplayPause);
+
+    [Obsolete(ReplayDeprecation.Message)]
+    public Task<CommandResult> ReplayResumeAsync()
+        => _client.SendAsync(Commands.ReplayResume);
+
+    [Obsolete(ReplayDeprecation.Message)]
+    public Task<CommandResult> ReplayStopAsync()
+        => _client.SendAsync(Commands.ReplayStop);
+
+    [Obsolete(ReplayDeprecation.Message)]
+    public Task<CommandResult> ReplaySeekAsync(double seconds)
+        => _client.SendAsync(Commands.ReplaySeek, [seconds]);
+
+    [Obsolete(ReplayDeprecation.Message)]
+    public Task<CommandResult> ReplaySetSpeedAsync(double speed)
+        => _client.SendAsync(Commands.ReplaySetSpeed, [speed]);
+
+    [Obsolete(ReplayDeprecation.Message)]
+    public Task<CommandResult> ReplayStepAsync(int count = 1)
+        => _client.SendAsync(Commands.ReplayStep, [count]);
+
+    [Obsolete(ReplayDeprecation.Message)]
+    public Task<CommandResult> ReplayStatusAsync()
+        => _client.SendAsync(Commands.ReplayStatus);
+
+#pragma warning restore CS0618
 
     public void Dispose() => _client.Dispose();
 }

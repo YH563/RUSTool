@@ -1,0 +1,575 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>RUSTool · UI 优化布局方案（静态线框图）</title>
+<style>
+  /* ───────── 设计令牌（对齐 Theme/Tokens，仅用于线框图展示） ───────── */
+  :root{
+    --space-2:2px; --space-4:4px; --space-8:8px; --space-12:12px; --space-16:16px; --space-24:24px;
+    --r-xs:3px; --r-sm:4px; --r-md:6px; --r-lg:10px; --r-pill:999px;
+    --toolbar-h:48px; --cardhead-h:40px;
+    --font:"Inter","Segoe UI","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+    --mono:"JetBrains Mono","SFMono-Regular",Consolas,monospace;
+  }
+  /* 浅色 */
+  body[data-theme="light"]{
+    --page:#F8FAFC; --base:#FFFFFF; --sunken:#F1F5F9; --raised:#FFFFFF; --disabled:#E2E8F0;
+    --border-subtle:#E2E8F0; --border-default:#CBD5E1; --border-strong:#94A3B8;
+    --txt-1:#1E293B; --txt-2:#475569; --txt-3:#64748B; --txt-disabled:#94A3B8; --on-accent:#FFFFFF;
+    --accent:#1F8CAF; --accent-hover:#4AACCB; --accent-subtle:#E6F4F8;
+    --danger:#F04438; --danger-hover:#D92D20; --success:#12B76A; --success-hover:#0E9F5C;
+    --warn:#F79009; --info:#1F8CAF;
+    --shadow-sm:0 1px 2px rgba(15,23,42,.08); --shadow-md:0 2px 6px rgba(15,23,42,.10);
+    --canvas:#EEF2F6;
+  }
+  /* 深色 */
+  body[data-theme="dark"]{
+    --page:#0A111F; --base:#111A29; --sunken:#0D1522; --raised:#1B2536; --disabled:#0D1522;
+    --border-subtle:#233044; --border-default:#33445C; --border-strong:#4A5D78;
+    --txt-1:#E5EAF1; --txt-2:#B6C2D4; --txt-3:#8798AE; --txt-disabled:#5B6B82; --on-accent:#0A111F;
+    --accent:#3FA9CC; --accent-hover:#5FBDD9; --accent-subtle:#12303B;
+    --danger:#F04438; --danger-hover:#FF6A5E; --success:#12B76A; --success-hover:#21C77B;
+    --warn:#F79009; --info:#3FA9CC;
+    --shadow-sm:0 1px 2px rgba(0,0,0,.35); --shadow-md:0 2px 8px rgba(0,0,0,.45);
+    --canvas:#08101C;
+  }
+
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{font-family:var(--font);background:var(--page);color:var(--txt-1);font-size:13px;line-height:1.45}
+
+  /* ───────── 线框图自身的外壳控制条 ───────── */
+  .demo-bar{
+    position:sticky;top:0;z-index:50;display:flex;gap:var(--space-12);align-items:center;
+    padding:10px var(--space-16);background:var(--raised);border-bottom:1px solid var(--border-default);
+    box-shadow:var(--shadow-sm);flex-wrap:wrap;
+  }
+  .demo-bar .title{font-weight:700;letter-spacing:.3px}
+  .demo-bar .sub{color:var(--txt-3);font-size:12px}
+  .demo-bar .spacer{flex:1}
+  .demo-btn{
+    height:30px;padding:0 12px;border-radius:var(--r-md);border:1px solid var(--border-strong);
+    background:var(--base);color:var(--txt-1);cursor:pointer;font-size:12px;font-weight:600;
+  }
+  .demo-btn.on{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+
+  /* ───────── 模拟应用 ───────── */
+  .app{max-width:1680px;margin:0 auto;padding:var(--space-16);}
+  .toolbar{
+    height:var(--toolbar-h);display:flex;align-items:center;gap:var(--space-12);
+    background:var(--base);border:1px solid var(--border-subtle);border-radius:var(--r-lg) var(--r-lg) 0 0;
+    padding:0 var(--space-16);box-shadow:var(--shadow-sm);
+  }
+  .app-title{font-size:16px;font-weight:700}
+  .menu{display:flex;gap:var(--space-16);color:var(--txt-2);font-size:13px;margin-left:var(--space-8)}
+  .menu span{cursor:default;padding:4px 2px;border-radius:var(--r-sm)}
+  .tb-right{margin-left:auto;display:flex;align-items:center;gap:var(--space-12)}
+  .status-cluster{display:flex;align-items:center;gap:6px;color:var(--txt-2);font-size:12px}
+  .status-cluster .sep{width:1px;height:20px;background:var(--border-subtle);margin:0 2px}
+  .dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+  .dot.idle{background:#94A3B8}.dot.info{background:var(--info)}.dot.success{background:var(--success)}
+  .dot.warn{background:var(--warn)}.dot.danger{background:var(--danger)}
+  .vdiv{width:1px;height:22px;background:var(--border-subtle)}
+
+  .seg{display:inline-flex}
+  .seg-item{
+    height:32px;padding:0 12px;border:1px solid var(--border-strong);background:var(--base);color:var(--txt-1);
+    font-size:13px;cursor:default;
+  }
+  .seg-item:first-child{border-radius:var(--r-md) 0 0 var(--r-md)}
+  .seg-item:last-child{border-radius:0 var(--r-md) var(--r-md) 0;border-left:none}
+  .seg-item.on{background:var(--accent-subtle);border-color:var(--accent);color:var(--accent)}
+
+  .btn{
+    height:32px;padding:0 14px;border-radius:var(--r-md);border:1px solid var(--border-strong);
+    background:var(--base);color:var(--txt-1);font-size:13px;font-weight:600;cursor:default;white-space:nowrap;
+  }
+  .btn.accent{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+  .btn.accent:hover{background:var(--accent-hover);border-color:var(--accent-hover)}
+  .btn.ghost{background:transparent;border-color:transparent;color:var(--txt-2);font-weight:500}
+  .btn.sm{height:26px;padding:0 10px;font-size:12px}
+  .btn.lg{height:38px;padding:0 18px;font-size:14px}
+  .btn.danger{background:var(--danger);border-color:var(--danger);color:#fff}
+  .btn.success{background:var(--success);border-color:var(--success);color:#fff}
+  .btn.recover{background:transparent;border-color:var(--border-strong);color:var(--txt-disabled);cursor:not-allowed}
+  .btn.disabled{background:var(--disabled);border-color:var(--border-subtle);color:var(--txt-disabled);cursor:not-allowed}
+  .btn.estop{
+    height:40px;padding:0 20px;background:var(--danger);border:2px solid #FFB4AD;border-radius:var(--r-md);
+    color:#fff;font-weight:800;letter-spacing:.5px;box-shadow:0 0 0 3px rgba(240,68,56,.18);
+  }
+  .btn.estop:hover{background:var(--danger-hover)}
+  .badge{
+    display:inline-block;padding:2px 8px;border-radius:var(--r-pill);font-size:11px;font-weight:600;
+    background:var(--sunken);color:var(--txt-2);border:1px solid var(--border-subtle);
+  }
+  .badge.accent{background:var(--accent-subtle);color:var(--accent);border-color:transparent}
+  .badge.warn{background:rgba(247,144,9,.14);color:var(--warn);border-color:transparent}
+
+  /* 工作区网格 */
+  .workspace{margin-top:0;background:var(--page);border:1px solid var(--border-subtle);border-top:none;
+    border-radius:0 0 var(--r-lg) var(--r-lg);padding:var(--space-12);}
+  .row{display:grid;gap:var(--space-12)}
+  .row.split{grid-template-columns: var(--cols)}
+  .hsplit{height:8px;display:flex;align-items:center;justify-content:center;color:var(--border-strong);cursor:row-resize}
+  .hsplit::before{content:"";width:60px;height:3px;border-radius:2px;background:var(--border-default)}
+
+  .card{background:var(--base);border:1px solid var(--border-subtle);border-radius:var(--r-lg);
+    box-shadow:var(--shadow-sm);overflow:hidden;display:flex;flex-direction:column;position:relative}
+  .cardhead{height:var(--cardhead-h);display:flex;align-items:center;gap:var(--space-8);
+    padding:0 var(--space-16);border-bottom:1px solid var(--border-subtle);flex:none}
+  .cardhead .ptitle{font-size:14px;font-weight:600}
+  .cardhead .right{margin-left:auto;display:flex;align-items:center;gap:var(--space-8)}
+  .cardbody{padding:var(--space-16);flex:1;min-height:0}
+  .caption{font-size:11px;color:var(--txt-3)}
+  .mono{font-family:var(--mono)}
+
+  .canvas{background:var(--canvas);color:var(--txt-3);flex:1;display:flex;align-items:center;justify-content:center;
+    border-radius:0 0 var(--r-lg) var(--r-lg);min-height:120px}
+
+  .sunken{background:var(--sunken);border-radius:var(--r-md)}
+  .tag{display:inline-flex;align-items:center;padding:2px 8px;border-radius:var(--r-pill);font-size:11px;
+    background:var(--sunken);color:var(--txt-2)}
+  .tag.accent{background:var(--accent-subtle);color:var(--accent)}
+
+  /* 标注针 */
+  .pin{
+    position:absolute;z-index:20;width:20px;height:20px;border-radius:50%;background:var(--accent);color:#fff;
+    font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;
+    box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 25%, transparent);pointer-events:none;
+    border:1.5px solid var(--base);
+  }
+  .pin.tl{top:6px;left:6px}.pin.tr{top:6px;right:6px}.pin.bl{bottom:6px;left:6px}.pin.br{bottom:6px;right:6px}
+  body.hide-pins .pin{display:none}
+
+  /* 图例 */
+  .legend{max-width:1680px;margin:var(--space-24) auto 64px;padding:0 var(--space-16)}
+  .legend h2{font-size:15px;margin:0 0 var(--space-12)}
+  .legend .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:var(--space-12)}
+  .legend .item{display:flex;gap:var(--space-8);background:var(--base);border:1px solid var(--border-subtle);
+    border-radius:var(--r-md);padding:var(--space-12);box-shadow:var(--shadow-sm)}
+  .legend .n{flex:none;width:20px;height:20px;border-radius:50%;background:var(--accent);color:#fff;
+    font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center}
+  .legend .item b{display:block;margin-bottom:2px}
+  .legend .item p{margin:0;color:var(--txt-2);font-size:12px}
+
+  /* 点动轴等小构件 */
+  .jog{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-8)}
+  .axis{display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--sunken);
+    border-radius:var(--r-md);padding:6px 10px;font-size:12px}
+  .axis .keybtns{display:flex;gap:6px}
+  .mini{height:26px;min-width:44px;border:1px solid var(--border-strong);background:var(--base);
+    border-radius:var(--r-sm);color:var(--txt-1);font-size:13px;cursor:default}
+  .field{height:32px;border:1px solid var(--border-strong);border-radius:var(--r-md);background:var(--base);
+    display:flex;align-items:center;padding:0 10px;font-family:var(--mono);font-size:12px;color:var(--txt-2)}
+  .step{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:var(--r-md);margin:4px 0;
+    background:var(--sunken)}
+  .step.active{outline:2px solid var(--accent);background:var(--accent-subtle)}
+  .step .stitle{font-weight:600;font-size:13px}
+  .step .shint{font-size:11px;color:var(--txt-3)}
+  .step .sdetail{margin-left:auto}
+  .nextbar{display:flex;gap:var(--space-8);align-items:center;margin-top:auto;padding-top:var(--space-12)}
+  .bigcta{flex:1;height:48px;border-radius:var(--r-md);border:none;background:var(--accent);color:var(--on-accent);
+    font-size:15px;font-weight:700;cursor:default}
+  .meter{font-family:var(--mono);font-size:28px;font-weight:600}
+  .hud{position:absolute;top:12px;right:12px;background:var(--raised);border:1px solid var(--border-default);
+    border-radius:var(--r-md);box-shadow:var(--shadow-md);padding:10px 14px;z-index:10}
+  .errbar{display:flex;align-items:center;gap:10px;margin:0 0 var(--space-12);padding:8px 12px;
+    background:rgba(240,68,56,.12);border:1px solid rgba(240,68,56,.4);border-radius:var(--r-md);color:var(--danger);
+    font-size:12px;font-weight:600}
+  .errbar .x{margin-left:auto;cursor:default;opacity:.7}
+
+  [hidden]{display:none !important}
+</style>
+</head>
+<body data-theme="light">
+
+<!-- ══════════ 演示控制条（不属于应用本身） ══════════ -->
+<div class="demo-bar">
+  <span class="title">RUSTool · UI 优化布局方案</span>
+  <span class="sub">静态线框图 · 不参与项目构建 · 仅用于评审</span>
+  <span class="spacer"></span>
+  <button class="demo-btn on" data-ws="engineer">工程师工作区</button>
+  <button class="demo-btn" data-ws="clinical">临床工作区</button>
+  <button class="demo-btn" id="pinsBtn">标注：显示</button>
+  <button class="demo-btn" id="themeBtn">主题：浅色</button>
+</div>
+
+<!-- ══════════ 工程师工作区 ══════════ -->
+<section id="ws-engineer" class="app">
+  <!-- 工具栏 -->
+  <div class="toolbar">
+    <span class="app-title">RUSTool</span>
+
+    <!-- ① 模式做成可点分段开关（原来藏在“视图”菜单里） -->
+    <div class="seg" style="margin-left:4px">
+      <button class="seg-item on">工程师模式</button>
+      <button class="seg-item">临床模式</button>
+      <span class="pin tl" data-n="1">1</span>
+    </div>
+
+    <nav class="menu">
+      <span>文件</span><span>连接</span><span>视图</span><span>帮助</span>
+    </nav>
+
+    <div class="tb-right">
+      <!-- ② 状态簇：连接态 + 运动态，中间加竖分隔，语义分明 -->
+      <div class="status-cluster">
+        <span class="dot idle"></span><span>未连接</span>
+        <span class="sep"></span>
+        <span class="dot idle"></span><span>空闲</span>
+        <span class="pin tr" data-n="2">2</span>
+      </div>
+
+      <!-- ③ 连接升为主操作，直接暴露在工具栏（原来是菜单里的一行） -->
+      <button class="btn accent">连接</button>
+      <span class="pin tr" data-n="3" style="top:auto;bottom:-26px;right:96px">3</span>
+
+      <div class="seg">
+        <button class="seg-item disabled">真实</button>
+        <button class="seg-item disabled">仿真</button>
+      </div>
+
+      <span class="vdiv"></span>
+
+      <!-- ④ 急停：加大、加描边环，永远可用；恢复在未急停时置灰 -->
+      <button class="btn estop">急停</button>
+      <button class="btn recover" disabled>急停恢复</button>
+      <span class="pin tr" data-n="4" style="top:auto;bottom:-26px;right:-6px">4</span>
+    </div>
+  </div>
+
+  <div class="workspace">
+    <!-- ⑤ 全局错误提示条（原来 ErrorMessage 从不显示） -->
+    <div class="errbar">
+      <span>⚠</span>
+      <span>连接失败：无法连接到 ws://127.0.0.1:8765（3 秒后自动重试）</span>
+      <span class="x">✕</span>
+      <span class="pin tl" data-n="5" style="top:-10px;left:-10px">5</span>
+    </div>
+
+    <!-- 上排 -->
+    <div class="row split" style="--cols: 4.2fr 6px 3fr 6px 2.4fr">
+      <div class="card" style="min-height:320px">
+        <div class="cardhead">
+          <span class="ptitle">3D 场景</span>
+          <div class="right">
+            <span class="caption">视角 默认</span>
+            <button class="btn sm ghost">重置视角</button>
+          </div>
+        </div>
+        <div class="canvas">3D 场景渲染区域（真实 OpenGL 视口）</div>
+        <button class="btn sm ghost" style="position:absolute;top:52px;right:12px;background:var(--raised);border:1px solid var(--border-default)">机械臂状态</button>
+      </div>
+      <div></div>
+      <div class="card" style="min-height:320px">
+        <div class="cardhead">
+          <span class="ptitle">数据曲线</span>
+          <div class="right"><span class="caption">窗口 15 s · 300 帧</span></div>
+        </div>
+        <div class="canvas" style="flex-direction:column;gap:8px;padding:16px">
+          <div style="width:100%;display:grid;gap:6px">
+            <div style="height:34px;background:var(--base);border:1px solid var(--border-subtle);border-radius:4px"></div>
+            <div style="height:34px;background:var(--base);border:1px solid var(--border-subtle);border-radius:4px"></div>
+            <div style="height:34px;background:var(--base);border:1px solid var(--border-subtle);border-radius:4px"></div>
+            <div style="height:34px;background:var(--base);border:1px solid var(--border-subtle);border-radius:4px"></div>
+            <div style="height:34px;background:var(--base);border:1px solid var(--border-subtle);border-radius:4px"></div>
+            <div style="height:34px;background:var(--base);border:1px solid var(--border-subtle);border-radius:4px"></div>
+          </div>
+          <span>六路关节力矩 · 一行一路</span>
+        </div>
+      </div>
+      <div></div>
+      <div class="card" style="min-height:320px">
+        <div class="cardhead"><span class="ptitle">超声影像</span></div>
+        <div class="canvas" style="background:#0B1220;color:#94A3B8">超声影像</div>
+      </div>
+    </div>
+
+    <!-- ⑥ 行分隔：上/下排高度交给用户拖拽，不再写死 380 -->
+    <div class="hsplit" title="拖拽调整上下排高度"><span class="pin tl" data-n="6" style="top:-6px;left:8px">6</span></div>
+
+    <!-- 下排 -->
+    <div class="row split" style="--cols: 2.2fr 6px 1.5fr 6px 1fr">
+      <!-- 机器人指令：⑦ 分段标签替代 ComboBox，且只切视图、不触发 set_mode -->
+      <div class="card" style="min-height:330px">
+        <div class="cardhead">
+          <span class="ptitle">机器人指令</span>
+          <div class="right">
+            <div class="seg">
+              <button class="seg-item on">手动</button>
+              <button class="seg-item">扫查</button>
+            </div>
+            <span class="pin tr" data-n="7">7</span>
+          </div>
+        </div>
+        <div class="cardbody" style="display:grid;grid-template-columns:1.1fr 1px 1.1fr;gap:14px">
+          <!-- 左：点动，6 轴 2 列网格，压缩高度 -->
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div style="display:flex;align-items:center;gap:8px">
+              <b style="font-size:13px">点动控制</b>
+              <span class="caption" style="margin-left:auto">参考系</span>
+              <span class="field" style="width:110px">基坐标系 ▾</span>
+            </div>
+            <div class="jog">
+              <div class="axis"><span>X 方向</span><span class="keybtns"><button class="mini">−</button><button class="mini">+</button></span></div>
+              <div class="axis"><span>Y 方向</span><span class="keybtns"><button class="mini">−</button><button class="mini">+</button></span></div>
+              <div class="axis"><span>Z 方向</span><span class="keybtns"><button class="mini">−</button><button class="mini">+</button></span></div>
+              <div class="axis"><span>绕 X</span><span class="keybtns"><button class="mini">−</button><button class="mini">+</button></span></div>
+              <div class="axis"><span>绕 Y</span><span class="keybtns"><button class="mini">−</button><button class="mini">+</button></span></div>
+              <div class="axis"><span>绕 Z</span><span class="keybtns"><button class="mini">−</button><button class="mini">+</button></span></div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <span class="caption">速度</span>
+              <div style="flex:1;height:4px;border-radius:2px;background:var(--border-default);position:relative">
+                <span style="position:absolute;left:34%;top:-5px;width:14px;height:14px;border-radius:50%;background:var(--accent)"></span>
+              </div>
+              <span class="mono" style="width:42px;text-align:right">35%</span>
+            </div>
+          </div>
+          <div style="background:var(--border-subtle)"></div>
+          <!-- 右：运动指令 -->
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <div>
+              <div class="caption">关节空间运动 movej</div>
+              <div style="display:flex;gap:6px;margin-top:4px">
+                <div class="field" style="flex:1">10, -45, 60, -8, 34, 4</div>
+                <button class="btn accent">执行</button>
+              </div>
+            </div>
+            <div>
+              <div class="caption">笛卡尔直线运动 movel</div>
+              <div style="display:flex;gap:6px;margin-top:4px">
+                <div class="field" style="flex:1">0.420, -0.080, 0.310, 178.5, -3.2, 91.0</div>
+                <button class="btn accent">执行</button>
+              </div>
+            </div>
+            <div class="sunken" style="padding:8px 10px">
+              <div class="caption">最近动作</div>
+              <div class="mono" style="font-size:12px">就绪</div>
+            </div>
+          </div>
+        </div>
+        <!-- ⑧ 操作行横跨整卡底部，主次分明 -->
+        <div style="display:flex;gap:8px;align-items:center;padding:0 16px 14px">
+          <button class="btn sm">停止点动</button>
+          <button class="btn sm ghost">偏移清零</button>
+          <span style="flex:1"></span>
+          <button class="btn sm">暂停</button>
+          <button class="btn sm">继续</button>
+          <span class="pin bl" data-n="8">8</span>
+        </div>
+      </div>
+
+      <div></div>
+
+      <!-- 日志：⑨ 自动滚动开关 -->
+      <div class="card" style="min-height:330px">
+        <div class="cardhead">
+          <span class="ptitle">日志</span>
+          <span class="tag">128 条</span>
+          <div class="right">
+            <label class="caption" style="display:flex;align-items:center;gap:5px">
+              <input type="checkbox" checked />自动滚动
+            </label>
+            <label class="caption" style="display:flex;align-items:center;gap:5px">
+              <input type="checkbox" />只看警告
+            </label>
+            <button class="btn sm ghost">清空</button>
+            <span class="pin tr" data-n="9">9</span>
+          </div>
+        </div>
+        <div class="cardbody mono" style="font-size:12px;color:var(--txt-2);white-space:nowrap;overflow:hidden">
+          <div>17:57:52.1 <span style="color:var(--txt-3)">DBG</span> &nbsp;3D 图形栈日志已接入（来源 sim）…</div>
+          <div>17:57:53.4 <span style="color:var(--success)">SUC</span> &nbsp;connect → 成功</div>
+          <div>17:57:53.9 <span style="color:var(--danger)">ERR</span> &nbsp;上使能失败: timeout</div>
+        </div>
+      </div>
+
+      <div></div>
+
+      <!-- 回放：⑩ 标注“演示”并收缩，主区域留给日志/指令 -->
+      <div class="card" style="min-height:330px">
+        <div class="cardhead">
+          <span class="ptitle">回放</span>
+          <span class="badge warn">演示数据</span>
+          <span class="pin tr" data-n="10">10</span>
+        </div>
+        <div class="cardbody" style="display:flex;flex-direction:column;gap:10px">
+          <div style="display:flex;align-items:center;gap:10px">
+            <div style="flex:1;height:4px;border-radius:2px;background:var(--border-default);position:relative">
+              <span style="position:absolute;left:27%;top:-5px;width:14px;height:14px;border-radius:50%;background:var(--accent)"></span>
+            </div>
+            <span class="mono caption">00:03:21 / 00:12:45</span>
+          </div>
+          <div style="display:flex;gap:6px;justify-content:center">
+            <button class="btn sm">⏮</button><button class="btn sm">◀◀</button>
+            <button class="btn accent" style="width:48px">▶</button>
+            <button class="btn sm">▶▶</button><button class="btn sm">⏭</button>
+          </div>
+          <div class="caption">速度 1.0x · A/B 循环 · 导出 CSV</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="legend">
+    <h2>工程师工作区 · 改动说明</h2>
+    <div class="grid">
+      <div class="item"><span class="n">1</span><div><b>模式切换前置</b><p>“工程师/临床”改为工具栏分段开关，一眼可见、一点即切；不再藏在“视图”菜单。</p></div></div>
+      <div class="item"><span class="n">2</span><div><b>状态簇分组</b><p>连接态与运动态加竖分隔，明确是两个维度，避免两个灰点语义重复。</p></div></div>
+      <div class="item"><span class="n">3</span><div><b>连接升为主操作</b><p>主色“连接”按钮常驻工具栏；菜单只保留进阶项，并带启用态。</p></div></div>
+      <div class="item"><span class="n">4</span><div><b>急停强化 + 恢复门控</b><p>急停加大、描边环、永远可用；“急停恢复”未急停时置灰不可点。</p></div></div>
+      <div class="item"><span class="n">5</span><div><b>全局错误条</b><p>连接/指令失败在此可见（原来 ErrorMessage 从不显示），可关闭。</p></div></div>
+      <div class="item"><span class="n">6</span><div><b>上下排可拖拽</b><p>去掉写死 Height=380，改为比例 + 可拖拽行分隔，小屏不被压瘪、大屏不浪费。</p></div></div>
+      <div class="item"><span class="n">7</span><div><b>指令面板分段标签</b><p>ComboBox/Carousel → “手动|扫查”分段标签，一次点击；并解耦后端 set_mode。</p></div></div>
+      <div class="item"><span class="n">8</span><div><b>操作行对齐</b><p>“停止点动/暂停/继续”横跨整卡底部，与左侧速度条基线一致，不再右列漂浮。</p></div></div>
+      <div class="item"><span class="n">9</span><div><b>日志自动滚动开关</b><p>可暂停跟随，回看历史不再被新日志打断。</p></div></div>
+      <div class="item"><span class="n">10</span><div><b>回放标注与收缩</b><p>显式标“演示数据”，宽度收窄，把空间让给日志与指令。</p></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ 临床工作区 ══════════ -->
+<section id="ws-clinical" class="app" hidden>
+  <div class="toolbar">
+    <span class="app-title">RUSTool</span>
+    <div class="seg" style="margin-left:4px">
+      <button class="seg-item">工程师模式</button>
+      <button class="seg-item on">临床模式</button>
+    </div>
+    <nav class="menu"><span>文件</span><span>连接</span><span>视图</span><span>帮助</span></nav>
+    <div class="tb-right">
+      <div class="status-cluster">
+        <span class="dot success"></span><span>已连接</span>
+        <span class="sep"></span>
+        <span class="dot info"></span><span>扫查中</span>
+      </div>
+      <button class="btn">断开</button>
+      <span class="vdiv"></span>
+      <button class="btn estop">急停</button>
+      <button class="btn recover" disabled>急停恢复</button>
+    </div>
+  </div>
+
+  <div class="workspace" style="display:grid;grid-template-columns:1fr 6px 340px;gap:0">
+    <div class="card" style="min-height:520px">
+      <div class="cardhead">
+        <span class="ptitle">扫查视图</span>
+        <div class="right">
+          <span class="dot success"></span><span class="caption">已连接</span>
+          <span class="dot info"></span><span class="caption">扫查中</span>
+          <span class="tag accent">③ 路径规划</span>
+        </div>
+      </div>
+      <div class="canvas" style="position:relative">
+        3D / 超声主视图
+        <div class="hud">
+          <div class="caption">末端接触力</div>
+          <div class="meter">2.4 N</div>
+        </div>
+      </div>
+    </div>
+
+    <div></div>
+
+    <div class="card" style="min-height:520px">
+      <div class="cardhead"><span class="ptitle">扫查流程</span></div>
+      <div class="cardbody" style="display:flex;flex-direction:column;gap:12px">
+        <!-- ⑪ 患者信息带“录入/选择”入口 -->
+        <div class="sunken" style="padding:10px 12px">
+          <div style="display:flex;align-items:center;margin-bottom:6px">
+            <span class="caption">患者信息</span>
+            <button class="btn sm ghost" style="margin-left:auto">录入 / 切换</button>
+            <span class="pin tr" data-n="11" style="top:6px;right:6px">11</span>
+          </div>
+          <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 10px;font-size:12px">
+            <span class="caption">姓名</span><b>示例患者</b>
+            <span class="caption">检查号</span><span class="mono">US-20260913-0042</span>
+            <span class="caption">部位</span><span>腹部（肝右叶）</span>
+          </div>
+        </div>
+
+        <!-- ⑫ 步骤字号加大、当前步高亮 -->
+        <div>
+          <div class="step"><span class="dot success"></span><div><div class="stitle">① 预扫查建图</div><div class="shint">点动探头扫过体表</div></div><span class="tag sdetail">完成</span></div>
+          <div class="step active"><span class="dot info"></span><div><div class="stitle">③ 路径规划</div><div class="shint">plan 生成扫查路径</div></div><span class="tag accent sdetail">进行中</span></div>
+          <div class="step"><span class="dot idle"></span><div><div class="stitle">④ 执行扫查</div><div class="shint">execute 沿路径运动</div></div></div>
+        </div>
+
+        <!-- ⑬ 主 CTA：文案与动作一致、按阶段门控、触控 48 高；危险操作独立且醒目 -->
+        <div class="nextbar">
+          <button class="bigcta">下一步：开始规划</button>
+          <span class="pin tr" data-n="12" style="top:-8px;right:-6px">12</span>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn danger lg" style="flex:1">停止</button>
+          <button class="btn lg" style="flex:1">复位</button>
+          <button class="btn lg ghost">刷新状态</button>
+        </div>
+
+        <!-- ⑭ 安全：急停留在此处，恢复门控 -->
+        <div style="display:flex;gap:8px;margin-top:auto;padding-top:12px">
+          <button class="btn danger lg" style="flex:1">急停</button>
+          <button class="btn recover lg" style="flex:1" disabled>急停恢复</button>
+          <span class="pin br" data-n="13">13</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="legend">
+    <h2>临床工作区 · 改动说明</h2>
+    <div class="grid">
+      <div class="item"><span class="n">11</span><div><b>患者信息可操作</b><p>增加“录入/切换”入口，避免整块硬编码信息看起来已就绪却不可改。</p></div></div>
+      <div class="item"><span class="n">12</span><div><b>主 CTA 名实相符</b><p>按钮文案“下一步：……”对应真正要执行的命令，并按阶段门控；不再文案是 A、动作恒为 execute。</p></div></div>
+      <div class="item"><span class="n">13</span><div><b>安全操作分层</b><p>停止/复位/刷新一行，急停/恢复独立一行；恢复未急停时置灰；按钮高度 38→48 提升触控友好度。</p></div></div>
+    </div>
+  </div>
+</section>
+
+<script>
+  // 工作区切换
+  const wsBtns = document.querySelectorAll('.demo-btn[data-ws]');
+  wsBtns.forEach(b => b.addEventListener('click', () => {
+    wsBtns.forEach(x => x.classList.remove('on'));
+    b.classList.add('on');
+    const ws = b.dataset.ws;
+    document.getElementById('ws-engineer').hidden = ws !== 'engineer';
+    document.getElementById('ws-clinical').hidden = ws !== 'clinical';
+  }));
+
+  // 主题切换
+  const themeBtn = document.getElementById('themeBtn');
+  themeBtn.addEventListener('click', () => {
+    const dark = document.body.dataset.theme === 'dark';
+    document.body.dataset.theme = dark ? 'light' : 'dark';
+    themeBtn.textContent = '主题：' + (dark ? '浅色' : '深色');
+  });
+
+  // 标注开关
+  const pinsBtn = document.getElementById('pinsBtn');
+  pinsBtn.addEventListener('click', () => {
+    const hidden = document.body.classList.toggle('hide-pins');
+    pinsBtn.textContent = '标注：' + (hidden ? '隐藏' : '显示');
+  });
+
+  // 支持 ?ws=clinical&theme=dark&pins=0 便于离屏截图
+  const q = new URLSearchParams(location.search);
+  if (q.get('theme') === 'dark') {
+    document.body.dataset.theme = 'dark';
+    themeBtn.textContent = '主题：深色';
+  }
+  if (q.get('pins') === '0') {
+    document.body.classList.add('hide-pins');
+    pinsBtn.textContent = '标注：隐藏';
+  }
+  if (q.get('ws') === 'clinical') {
+    wsBtns.forEach(x => x.classList.toggle('on', x.dataset.ws === 'clinical'));
+    document.getElementById('ws-engineer').hidden = true;
+    document.getElementById('ws-clinical').hidden = false;
+  }
+</script>
+</body>
+</html>

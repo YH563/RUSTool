@@ -1,3 +1,5 @@
+using System;
+
 namespace RUSTool.Communication;
 
 /// <summary>WebSocket 通道路径（与后端 string_consts.hpp 的 WsPath 对齐）</summary>
@@ -65,6 +67,45 @@ public static class Commands
     public const string GetSimTime = "get_sim_time";
     public const string StepOnce = "step_once";
     public const string GetFrameRate = "get_frame_rate";
+
+    // ── 录制开关指令（路由到 RECORDER，旁路，与手动/自动模式无关） ──
+    public const string RecorderStart = "recorder_start";
+    public const string RecorderStop = "recorder_stop";
+    public const string RecorderStatus = "recorder_status";
+
+    // ── 回放指令（❌ 后端回放已废弃：回放职责移交前端） ──
+    // 新链路：前端走共享文件系统直读 <records_dir>/*.rusrec 自行解码 / 播放。
+    // 本节常量与后端 replayer 仅"暂留过渡"，不要在新代码里使用（见 WsProtocol.md §4.7）。
+
+    [Obsolete(ReplayDeprecation.Message)]
+    public const string ReplayList = "replay_list";
+    [Obsolete(ReplayDeprecation.Message)]
+    public const string ReplayLoad = "replay_load";
+    [Obsolete(ReplayDeprecation.Message)]
+    public const string ReplayLoadPath = "replay_load_path";
+    [Obsolete(ReplayDeprecation.Message)]
+    public const string ReplayStart = "replay_start";
+    [Obsolete(ReplayDeprecation.Message)]
+    public const string ReplayPause = "replay_pause";
+    [Obsolete(ReplayDeprecation.Message)]
+    public const string ReplayResume = "replay_resume";
+    [Obsolete(ReplayDeprecation.Message)]
+    public const string ReplayStop = "replay_stop";
+    [Obsolete(ReplayDeprecation.Message)]
+    public const string ReplaySeek = "replay_seek";
+    [Obsolete(ReplayDeprecation.Message)]
+    public const string ReplaySetSpeed = "replay_set_speed";
+    [Obsolete(ReplayDeprecation.Message)]
+    public const string ReplayStep = "replay_step";
+    [Obsolete(ReplayDeprecation.Message)]
+    public const string ReplayStatus = "replay_status";
+}
+
+/// <summary>后端回放废弃说明（统一文案，供各处 <c>[Obsolete]</c> 引用）。</summary>
+public static class ReplayDeprecation
+{
+    public const string Message =
+        "后端回放已废弃（移交前端）：前端本地读 <records_dir>/*.rusrec 自行回放，仅过渡期保留。";
 }
 
 /// <summary>异步事件名（与后端 string_consts.hpp 的 EventName 对齐）</summary>
@@ -75,6 +116,10 @@ public static class Events
     public const string ScanDone = "scan_done";
     public const string MotionDone = "motion_done";
     public const string Error = "error";
+
+    /// <summary>回放播到末尾（<c>loop=false</c>）时由回放节点广播；<c>ack_id</c> = 触发播放的指令 id。</summary>
+    [Obsolete(ReplayDeprecation.Message)]
+    public const string ReplayDone = "replay_done";
 }
 
 /// <summary>感知帧类型（与后端 string_consts.hpp 的 SensorType 对齐）</summary>

@@ -212,7 +212,8 @@ public sealed class BridgeClient : IDisposable
 对上层友好的返回值封装（屏蔽协议原始字段）：
 
 ```csharp
-public sealed record CommandResult(bool Success, string Message, double[] Result);
+// Strings：文本结果（协议 v0.4）——录制 / 回放的文件名清单、当前文件名等从这里取
+public sealed record CommandResult(bool Success, string Message, double[] Result, string[] Strings);
 public sealed record EventNotification(string EventName, bool Success, string Message);
 ```
 
@@ -340,6 +341,8 @@ UI/Sender         BridgeClient              ConnectionManager        bridge
 | 扫查流程 | `PreScanStartAsync` / `PreScanEndAsync` / `SetStartPoseAsync` / `SetEndPoseAsync` / `PlanAsync` / `ExecuteAsync` | `pre_scan_start` / `pre_scan_end` / `set_start_pose` / `set_end_pose` / `plan` / `execute` |
 | 流程控制 | `StopAsync` / `PauseAsync` / `ResumeAsync` / `ResetAsync` / `QueryPreScanDoneAsync` / `QueryMotionDoneAsync` | `stop` / `pause` / `resume` / `reset` / `query_prescan_done` / `query_motion_done` |
 | 仿真（仅 Sim 驱动） | `SetTimeSpeedAsync` / `GetTimeSpeedAsync` / `GetSimTimeAsync` / `GetFrameRateAsync` / `StepOnceAsync` | `set_time_speed` / `get_time_speed` / `get_sim_time` / `get_frame_rate` / `step_once` |
+| 录制（旁路） | `RecorderStartAsync` / `RecorderStopAsync` / `RecorderStatusAsync` | `recorder_start` / `recorder_stop` / `recorder_status` |
+| 回放（旁路） | `ReplayListAsync` / `ReplayLoadAsync` / `ReplayLoadPathAsync` / `ReplayStartAsync` / `ReplayPauseAsync` / `ReplayResumeAsync` / `ReplayStopAsync` / `ReplaySeekAsync` / `ReplaySetSpeedAsync` / `ReplayStepAsync` / `ReplayStatusAsync` | `replay_list` / `replay_load` / `replay_load_path` / `replay_start` / `replay_pause` / `replay_resume` / `replay_stop` / `replay_seek` / `replay_set_speed` / `replay_step` / `replay_status` |
 
 三条规则：
 

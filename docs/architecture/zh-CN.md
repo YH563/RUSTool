@@ -17,17 +17,17 @@
 
 **设计原则（按优先级）**
 
-1. **单一依赖方向**：`RUSTool.UI` → `RUSTool.Core` / `RUSTool.Visualization` / `RUSTool.Charts`，禁止反向引用（编译器强制）。
+1. **单一依赖方向**：`RUSTool.UI` → `RUSTool.Core` / `RUSTool.Visualization` / `RUSTool.Charts` / `RUSTool.Replay` / `RUSTool.Settings`，禁止反向引用（编译器强制）。
 2. **纯逻辑与框架分离**：`RUSTool.Core` 不得出现 Avalonia / XAML / Silk.NET / OpenGL / LiveCharts —— 写了就编译不过。
 3. **接口在 Core，实现在界面层**：范例 `ILogService`（契约在 Core，`LogService` 在界面层，需要 `Dispatcher.UIThread`）。
-4. **图形栈各有唯一出口**：Silk.NET / OpenGL / `RobotSimulation` 只出现在 `RUSTool.Visualization`；LiveCharts / SkiaSharp 只出现在 `RUSTool.Charts`。
+4. **图形栈各有唯一出口**：Silk.NET / OpenGL / `RobotSimulation` 只出现在 `RUSTool.Visualization`；LiveCharts / SkiaSharp 只出现在 `RUSTool.Charts`；`.rusrec` 读取 / CDR / 回放引擎只在 `RUSTool.Replay`；全局参数读写只在 `RUSTool.Settings`。
 5. **状态变化只有一个入口**：流程走 `ScanStateMachine.TryFire()`，操作模式走 `RobotSession.TryEnter*` / `ExitToIdle`，连接类动作走 `SessionViewModel`。
 
 ---
 
 ## 2. 包含的工程与依赖方向
 
-依赖方向**单向**，由编译器强制：`RUSTool.UI`（界面）→ `RUSTool.Core`（逻辑）、`RUSTool.UI`（界面）→ `RUSTool.Visualization`（3D 图形栈隔离容器）、`RUSTool.UI`（界面）→ `RUSTool.Charts`（2D 图表栈隔离容器）。
+依赖方向**单向**，由编译器强制：`RUSTool.UI`（界面）→ `RUSTool.Core`（逻辑）、`RUSTool.Visualization`（3D 图形栈隔离容器）、`RUSTool.Charts`（2D 图表栈隔离容器）、`RUSTool.Replay`（本地回放隔离容器）、`RUSTool.Settings`（全局参数）。`RUSTool.Replay` → `RUSTool.Core`（只借两个数据契约），其余库互不引用。
 
 ```
 RUSTool.sln
@@ -94,23 +94,38 @@ RUSTool.sln
 │   │   └── StateChannel.cs   — 一路可画量：名字 + 单位（本层不做换算）
 │   └── README.md             — 工程级说明（导航到 docs/charts/zh-CN.md）
 │
+├── RUSTool.Replay/           ← 类库 · 本地回放隔离容器（回放职责已由后端移交前端）
+│   ├── RusRec.cs             — .rusrec 容器读取（头/通道表/记录扫描/CRC/尾索引）
+│   ├── CdrReader.cs          — 极简 ROS CDR 读取（对齐/序列/字符串/Time）
+│   ├── RecPayloadDecoder.cs  — payload → StateFrame / 点云（复用 SensorFrameCodec 反量化）
+│   ├── RecordingsLibrary.cs  — 录音目录发现（*.rusrec，文件名升序）
+│   └── LocalReplayPlayer.cs  — 回放引擎（时间轴 / seek / 倍速 / 单步；事件在后台线程）
+│
+├── RUSTool.Settings/         ← 类库 · 全局参数（录音目录 / bridge 地址…）
+│   ├── AppSettings.cs        — 可序列化模型（带默认值）
+│   ├── ISettingsStore.cs / JsonSettingsStore.cs — JSON 持久化（~/.config/RUSTool/settings.json）
+│   └── SettingsService.cs    — 绑定用服务（改动即落盘 + 变更通知）
+│
 ├── docs/                     ← 分模块文档（中文）：architecture / core / protocol / ui / visualization / charts / testing
 │                               索引见 docs/README.md
 │
-└── tests/RUSTool.Core.Tests/ ← 单元测试（xUnit · 不依赖网络 / 界面 / 图形栈）
-    └── ScanStateMachineTests.cs
+├── tests/RUSTool.Core.Tests/ ← 单元测试（xUnit · 不依赖网络 / 界面 / 图形栈）
+│   └── ScanStateMachineTests.cs
+└── tests/RUSTool.Replay.Tests/ ← 回放单测（.rusrec 容器 / CDR / 目录 / 引擎）
 ```
 
 ## 3. 项目边界规则
 
 | 规则 | 内容 |
 |---|---|
-| **依赖单向** | `RUSTool.UI` → `RUSTool.Core`、`RUSTool.UI` → `RUSTool.Visualization`、`RUSTool.UI` → `RUSTool.Charts`；三者都不得反向引用界面层 |
+| **依赖单向** | `RUSTool.UI` → `Core` / `Visualization` / `Charts` / `Replay` / `Settings`；`Replay` → `Core`。各库都不得反向引用界面层 |
 | **Core 不认识 UI** | `RUSTool.Core` 内不得出现 `Avalonia.*`、XAML、窗口/控件类型；写了就编译不过 |
 | **接口在 Core，实现在界面层** | 范例：`ILogService` 在 Core，`LogService` 在界面层（需 `Dispatcher.UIThread`） |
 | **命名空间不随项目名变** | `RUSTool.Core` 内的类型命名空间仍是 `RUSTool.Communication.*` / `RUSTool.Services.*`，与拆分前完全一致，故调用方 `using` 无需改动 |
 | **设计系统不单独成工程** | 令牌与控件样式放在 `RUSTool.UI/Theme/`，只含 XAML 资源；不产出 C# 类型，也不依赖任何业务代码 |
 | **图形栈只在一个工程里** | `Silk.NET` / `OpenGL` / `RobotSimulation` 只出现在 `RUSTool.Visualization`，`LiveCharts` / `SkiaSharp` 只出现在 `RUSTool.Charts`；其余工程都不得引用它们 |
+| **回放只在一个工程里** | `.rusrec` 容器解析 / ROS CDR 解码 / 回放引擎只出现在 `RUSTool.Replay`（不引用 Avalonia）；`RUSTool.UI` 只经 `LocalReplayPlayer` + `SettingsService` 两个契约使用它 |
+| **全局参数只在一个工程里** | 设置的读取 / 落盘只在 `RUSTool.Settings`；界面直接绑定 `SettingsService`，不在各处散落硬编码或自读文件 |
 | **界面只认识 3D 图形契约** | `RUSTool.UI` 允许出现的 3D 图形类型只有三个：`RobotViewport`（控件；数据入口是纯 `float` 列表与 `SubmitPointCloud(PointCloudFrame)`）、`PointCloudFrame`（点云帧的形状）与 `ISimulationLogSink`（日志出口）—— 图形栈换实现（或再换一个引擎）界面代码不用改 |
 | **界面只认识图表契约** | `RUSTool.UI` 允许出现的图表类型只有 `RobotStatePanel`（控件；数据入口是 `Rows` + `PushFrame`）与行模型 `RobotStateRow` / `RobotStateRows`（建行 / 推帧 / 清空）—— 换图表库界面代码不用改 |
 

@@ -1,180 +1,291 @@
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using RUSTool.Communication;
+using RUSTool.Replay;
 using RUSTool.Services.Logging;
+using RUSTool.Settings;
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace RUSTool.UI.ViewModels;
 
 /// <summary>
-/// 记录 / 回放面板：把一次扫查的过程按时间轴重放。
+/// 回放面板的 ViewModel —— <b>薄适配层</b>：把 <see cref="LocalReplayPlayer"/>（纯逻辑，后台线程）
+/// 的状态与事件翻译成界面可绑定的属性与命令。
 ///
 /// <para>
-/// 时间轴是真正的 <c>Slider</c>，支持 A/B 循环点与逐帧步进；
-/// 播放进度由面板【自己的定时器】推进 —— 只在"正在播放"时走表，暂停即停表，
-/// 不像原来那样让主 ViewModel 一直空转。
+/// <b>回放是本地行为</b>（后端协议已把回放移交前端）：前端直接读录音目录
+/// <c>&lt;records_dir&gt;/*.rusrec</c>（目录来自 <see cref="SettingsService"/>），
+/// 自行解码 / 播放 / 可视化，不再经 ROS 话题。
+/// </para>
+/// <para>
+/// <b>进入回放要"接管"</b>：播放前回调 <see cref="RequestTakeover"/>（由组装层提供）——
+/// 先确认没有运动在进行、兜底 `stop`、再断开后端连接，之后才本地播放。引擎事件在后台线程触发，
+/// 这里统一 Post 回 UI 线程再更新绑定/抛给下游。
 /// </para>
 /// </summary>
 public sealed partial class ReplayViewModel : ViewModelBase
 {
     private readonly ILogService _log;
-    private readonly DispatcherTimer? _timer;
+    private readonly SettingsService _settings;
+    private readonly LocalReplayPlayer _player;
+    private readonly List<string> _filePaths = [];
 
-    /// <summary>回放总时长（秒）—— 00:12:45。</summary>
-    public double TotalSeconds => 765;
+    /// <summary>是否已完成一次"接管"（断开后端）。完成后不再重复。</summary>
+    private bool _takenOver;
 
-    public IReadOnlyList<string> SpeedOptions { get; } = new[] { "0.5x", "1.0x", "1.5x", "2.0x" };
+    /// <summary>一帧状态（通道 0）到达：接到 HUD + 曲线（与实时同一下游）。</summary>
+    public event Action<BridgeProtocol.StateFrame>? StateFramePlayed;
 
-    public IReadOnlyList<string> Sources { get; } =
-        new[] { "最近一次扫查", "已保存记录 01", "已保存记录 02" };
+    /// <summary>一帧点云（通道 1）到达：接到 3D 视口的点云邮箱。</summary>
+    public event Action<SensorPointCloudFrame>? PointCloudPlayed;
 
-    [ObservableProperty]
-    private double _position = 201; // 秒
+    /// <summary>
+    /// 播放前的"接管"回调（组装层注入）：检查运动 → 兜底 stop → 断开后端。
+    /// 返回 false 表示不允许进入回放（如运动进行中 / 停止失败）。
+    /// </summary>
+    public Func<Task<bool>>? RequestTakeover { get; set; }
 
-    [ObservableProperty]
-    private bool _isPlaying;
-
-    [ObservableProperty]
-    private int _speedIndex = 1;
-
-    /// <summary>播放速度倍率，由 <see cref="SpeedIndex"/> 决定。</summary>
-    public double Speed => SpeedIndex switch
+    public ReplayViewModel(SettingsService settings, ILogService log)
     {
-        0 => 0.5,
-        2 => 1.5,
-        3 => 2.0,
-        _ => 1.0,
+        _settings = settings;
+        _log = log;
+        _player = new LocalReplayPlayer(log);
+
+        _player.StateFramePlayed += frame => Dispatcher.UIThread.Post(() => StateFramePlayed?.Invoke(frame));
+        _player.PointCloudPlayed += cloud => Dispatcher.UIThread.Post(() => PointCloudPlayed?.Invoke(cloud));
+        _player.Changed += () => Dispatcher.UIThread.Post(SyncFromEngine);
+        _player.Error += _ => Dispatcher.UIThread.Post(SyncFromEngine);
+
+        // 启动即列出默认录音目录（离线也能看到有哪些录音）。
+        RefreshList();
+    }
+
+    /// <summary>录音目录下的文件（仅文件名，下拉显示用）。</summary>
+    public ObservableCollection<string> Files { get; } = new();
+
+    public IReadOnlyList<string> SpeedOptions { get; } =
+        new[] { "0.25x", "0.5x", "1.0x", "2.0x", "4.0x" };
+
+    private static readonly double[] SpeedValues = { 0.25, 0.5, 1.0, 2.0, 4.0 };
+
+    [ObservableProperty] private int _selectedFileIndex = -1;
+    [ObservableProperty] private int _state;        // 0 idle / 1 playing / 2 paused / 3 finished
+    [ObservableProperty] private double _position;
+    [ObservableProperty] private double _duration;
+    [ObservableProperty] private double _speed = 1.0;
+    [ObservableProperty] private bool _isLoaded;
+    [ObservableProperty] private string _currentFile = "";
+    [ObservableProperty] private string _detail = "";
+    [ObservableProperty] private int _speedIndex = 2;
+
+    public bool HasFiles => Files.Count > 0;
+    public bool IsIdle => State == 0;
+    public bool IsPlaying => State == 1;
+    public bool IsPaused => State == 2;
+    public bool IsFinished => State == 3;
+    public bool IsDataEmpty => !IsLoaded;
+
+    public string PlayButtonText => IsPlaying ? "⏸" : "▶";
+    public string StatusText => State switch
+    {
+        1 => $"播放中 {SpeedText}",
+        2 => "已暂停",
+        3 => "已结束",
+        _ => IsLoaded ? "已载入" : "未载入",
     };
+    public string TimeText => $"{Format(Position)} / {Format(Duration)}";
+    public string SpeedText => $"{Speed:0.##}x";
+    public double MaxPosition => Duration > 0 ? Duration : 1.0;
 
-    [ObservableProperty]
-    private int _sourceIndex;
-
-    [ObservableProperty]
-    private bool _loop;
-
-    [ObservableProperty]
-    private bool _hasMarkA;
-
-    [ObservableProperty]
-    private bool _hasMarkB;
-
-    [ObservableProperty]
-    private double _markA;
-
-    [ObservableProperty]
-    private double _markB;
-
-    /// <summary>"00:03:21 / 00:12:45" —— 等宽字体下不会左右抖。</summary>
-    public string TimeText => $"{Format(Position)} / {Format(TotalSeconds)}";
-
-    public string SpeedText => SpeedOptions[SpeedIndex];
+    partial void OnSelectedFileIndexChanged(int value)
+    {
+        if (value >= 0 && value < _filePaths.Count)
+            _settings.LastReplayFile = _filePaths[value];
+    }
 
     partial void OnPositionChanged(double value) => OnPropertyChanged(nameof(TimeText));
-
+    partial void OnDurationChanged(double value)
+    {
+        OnPropertyChanged(nameof(TimeText));
+        OnPropertyChanged(nameof(MaxPosition));
+    }
+    partial void OnSpeedChanged(double value) => OnPropertyChanged(nameof(SpeedText));
+    partial void OnCurrentFileChanged(string value) => OnPropertyChanged(nameof(TimeText));
+    partial void OnIsLoadedChanged(bool value)
+    {
+        OnPropertyChanged(nameof(IsDataEmpty));
+        OnPropertyChanged(nameof(StatusText));
+    }
+    partial void OnStateChanged(int value)
+    {
+        OnPropertyChanged(nameof(IsIdle));
+        OnPropertyChanged(nameof(IsPlaying));
+        OnPropertyChanged(nameof(IsPaused));
+        OnPropertyChanged(nameof(IsFinished));
+        OnPropertyChanged(nameof(PlayButtonText));
+        OnPropertyChanged(nameof(StatusText));
+    }
     partial void OnSpeedIndexChanged(int value)
     {
-        OnPropertyChanged(nameof(Speed));
-        OnPropertyChanged(nameof(SpeedText));
+        if (value < 0 || value >= SpeedValues.Length)
+            return;
+        Speed = SpeedValues[value];
+        _player.SetSpeed(Speed);
     }
 
-    public ReplayViewModel(ILogService log)
-    {
-        _log = log;
-        _markA = 138;
-        _markB = 566;
-        _hasMarkA = true;
-        _hasMarkB = true;
+    // ── 目录 / 文件 ──
 
-        // 33ms ≈ 30 fps：与状态流的刷新率对齐，进度看起来才是连续走动的。
-        _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(33) };
-        _timer.Tick += (_, _) => Advance(1.0 / 30);
-    }
-
-    /// <summary>推进播放进度（由本面板的定时器驱动）。</summary>
-    public void Advance(double deltaSeconds)
+    /// <summary>重新列出录音目录（目录来自设置）。</summary>
+    [RelayCommand]
+    private void RefreshList()
     {
-        if (!IsPlaying)
+        Files.Clear();
+        _filePaths.Clear();
+
+        IReadOnlyList<string> files = RecordingsLibrary.List(_settings.RecordsDirectory);
+        foreach (string path in files)
         {
+            _filePaths.Add(path);
+            Files.Add(Path.GetFileName(path));
+        }
+        OnPropertyChanged(nameof(HasFiles));
+
+        // 尝试回填上次打开的文件。
+        int index = _filePaths.FindIndex(p => p == _settings.LastReplayFile);
+        SelectedFileIndex = index >= 0 ? index : (Files.Count > 0 ? 0 : -1);
+
+        _log.Log($"录音目录：{_settings.RecordsDirectoryFull}（{Files.Count} 个文件）", LogLevel.Info, "replay");
+    }
+
+    /// <summary>载入当前选中的录音（不播放）。</summary>
+    [RelayCommand]
+    private Task LoadSelected()
+    {
+        if (SelectedFileIndex < 0 || SelectedFileIndex >= _filePaths.Count)
+        {
+            _log.Log("未选择录音文件", LogLevel.Warn, "replay");
+            return Task.CompletedTask;
+        }
+        return LoadCoreAsync(_filePaths[SelectedFileIndex]);
+    }
+
+    /// <summary>按绝对路径载入（由「打开…」文件对话框调用）。</summary>
+    public async Task LoadFileAsync(string path)
+    {
+        await LoadCoreAsync(path);
+        // 打开的文件不在目录清单里也能载入，但下拉不强行加项；记录到设置以便下次。
+        _settings.LastReplayFile = path;
+    }
+
+    /// <summary>
+    /// 同步载入（仅供离屏截图 / 测试把"已载入"这一态渲染出来）：
+    /// UI 线程上直接打开文件，避免 <see cref="LoadFileAsync"/> 的 <c>Task.Run</c> 续体回 UI 线程造成阻塞。
+    /// </summary>
+    public void LoadSynchronously(string path)
+    {
+        try
+        {
+            _player.Load(path);
+        }
+        catch (Exception ex)
+        {
+            _log.Log($"打开录音失败：{ex.Message}", LogLevel.Error, "replay");
+            return;
+        }
+        _settings.LastReplayFile = path;
+        SyncFromEngine();
+    }
+
+    private async Task LoadCoreAsync(string path)
+    {
+        try
+        {
+            await Task.Run(() => _player.Load(path)); // 打开 + 扫描在后台
+            SyncFromEngine();
+            _log.Log($"已载入本地录音 {CurrentFile}（{Detail}）", LogLevel.Success, "replay");
+        }
+        catch (Exception ex)
+        {
+            _log.Log($"打开录音失败：{ex.Message}", LogLevel.Error, "replay");
+        }
+    }
+
+    // ── 传输 ──
+
+    [RelayCommand]
+    private async Task TogglePlay()
+    {
+        if (!IsLoaded)
+        {
+            _log.Log("请先载入回放文件", LogLevel.Warn, "replay");
             return;
         }
 
-        var next = Position + deltaSeconds * Speed;
-
-        // A/B 循环：设了循环点就只在 A~B 之间往返，否则从头再来。
-        var upper = Loop && HasMarkB ? MarkB : TotalSeconds;
-        var lower = Loop && HasMarkA ? MarkA : 0;
-
-        if (next >= upper)
+        if (IsPlaying)
         {
-            if (Loop)
-            {
-                next = lower;
-            }
-            else
-            {
-                next = TotalSeconds;
-                IsPlaying = false;
-                _timer?.Stop();
-                _log.Log("回放结束", LogLevel.Info, "replay");
-            }
+            _player.Pause();
+            return;
         }
 
-        Position = next;
+        // 首次播放先接管：断后端、确保不再运动，之后才本地播放。
+        if (!_takenOver)
+        {
+            if (RequestTakeover is null)
+            {
+                _log.Log("未配置回放接管流程，无法进入回放", LogLevel.Error, "replay");
+                return;
+            }
+            if (!await RequestTakeover())
+                return; // 拒绝（运动进行中 / 停止失败），保持现状
+            _takenOver = true;
+        }
+
+        _player.Play();
     }
 
     [RelayCommand]
-    private void TogglePlay()
+    private void Stop() => _player.Stop();
+
+    [RelayCommand]
+    private void JumpStart() => _player.SeekTo(0);
+
+    [RelayCommand]
+    private void SkipBack() => _player.Skip(-5);
+
+    [RelayCommand]
+    private void SkipForward() => _player.Skip(5);
+
+    [RelayCommand]
+    private void StepForward() => _player.Step();
+
+    /// <summary>时间轴拖拽 / 方向键定位（由 ReplayModule 的 code-behind 调用）。</summary>
+    public void SeekTo(double seconds) => _player.SeekTo(seconds);
+
+    /// <summary>把引擎状态读进绑定属性（在 UI 线程调用）。</summary>
+    private void SyncFromEngine()
     {
-        IsPlaying = !IsPlaying;
+        State = (int)_player.State;
+        Position = _player.Position;
+        Duration = _player.Duration;
+        IsLoaded = _player.IsLoaded;
+        CurrentFile = _player.CurrentFile;
+        Speed = _player.Speed;
 
-        // 只在这块面板真的在播放时才走表。
-        if (IsPlaying)
-            _timer?.Start();
-        else
-            _timer?.Stop();
-
-        _log.Log(IsPlaying ? $"开始回放（{SpeedText}）" : "回放已暂停", LogLevel.Info, "replay");
+        Detail = _player.IsLoaded
+            ? $"{_player.RecordCount} 条记录 · {(_player.HasIndex ? "有索引" : "无索引(可能崩溃/未封存)")}"
+            : "";
     }
 
-    [RelayCommand]
-    private void JumpStart() => Position = Loop && HasMarkA ? MarkA : 0;
-
-    [RelayCommand]
-    private void JumpEnd() => Position = Loop && HasMarkB ? MarkB : TotalSeconds;
-
-    /// <summary>步退 / 步进：一帧 = 1/30 秒。</summary>
-    [RelayCommand]
-    private void StepBack() => Position = Math.Max(0, Position - 1.0 / 30);
-
-    [RelayCommand]
-    private void StepForward() => Position = Math.Min(TotalSeconds, Position + 1.0 / 30);
-
-    /// <summary>把 A 点设到当前位置。
-    /// ⚠ 方法名不能叫 MarkA —— 那会和 [ObservableProperty] 生成的 MarkA 属性同名（CS0102）。</summary>
-    [RelayCommand]
-    private void SetMarkA()
+    private static string Format(double seconds)
     {
-        MarkA = Position;
-        HasMarkA = true;
-        _log.Log($"A 点已设为 {Format(MarkA)}", LogLevel.Info, "replay");
+        if (seconds < 0 || double.IsNaN(seconds))
+            seconds = 0;
+        return TimeSpan.FromSeconds(seconds).ToString(@"hh\:mm\:ss");
     }
-
-    /// <summary>把 B 点设到当前位置。</summary>
-    [RelayCommand]
-    private void SetMarkB()
-    {
-        MarkB = Position;
-        HasMarkB = true;
-        _log.Log($"B 点已设为 {Format(MarkB)}", LogLevel.Info, "replay");
-    }
-
-    [RelayCommand]
-    private void Export() => _log.Log("导出回放数据（CSV）…", LogLevel.Info, "replay");
-
-    [RelayCommand]
-    private void Browse() => _log.Log("打开记录文件选择框…", LogLevel.Info, "replay");
-
-    private static string Format(double seconds) =>
-        TimeSpan.FromSeconds(seconds).ToString(@"hh\:mm\:ss");
 }

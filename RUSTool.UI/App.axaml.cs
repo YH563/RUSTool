@@ -5,6 +5,7 @@ using Avalonia.Threading;
 using RUSTool.Communication;
 using RUSTool.Services.Logging;
 using RUSTool.Services.Robot;
+using RUSTool.Settings;
 using RUSTool.UI.Services;
 using RUSTool.UI.Services.Logging;
 using RUSTool.UI.ViewModels;
@@ -61,7 +62,10 @@ public partial class App : Application
     /// </summary>
     internal static MainViewModel CreateMainViewModel(string[] args)
     {
-        var bridge = new BridgeClient();
+        // 全局参数（录音目录 / bridge 地址…）：从用户配置目录读取，界面可改、改动即落盘。
+        var settings = new SettingsService(new JsonSettingsStore());
+
+        var bridge = new BridgeClient(settings.BridgeHost, (ushort)settings.BridgePort);
         ILogService log = new LogService();
 
         // 所有后端指令的发送与结果都写进全局日志（同时落盘，便于事后追溯）。
@@ -78,7 +82,7 @@ public partial class App : Application
         var session = new RobotSession();
 
         // 允许 `--clinical` 直接以临床模式启动，方便反复对照两种界面。
-        return new MainViewModel(robot, session, log)
+        return new MainViewModel(robot, session, log, settings)
         {
             IsDebugMode = !args.Contains("--clinical"),
         };

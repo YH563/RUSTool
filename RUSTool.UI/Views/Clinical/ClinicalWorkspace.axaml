@@ -18,14 +18,34 @@
         · 状态用三色灯表达，数值只留一个临床最关心的"末端接触力"。
     -->
 
+    <UserControl.Styles>
+        <!-- 步骤行：字号放大、当前步用主色底描边，触控更友好（临床场景的核心主张） -->
+        <Style Selector="Border.step">
+            <Setter Property="Background" Value="{DynamicResource SurfaceSunkenBrush}" />
+            <Setter Property="CornerRadius" Value="{DynamicResource RadiusMd}" />
+            <Setter Property="Padding" Value="12,10" />
+            <Setter Property="Margin" Value="0,4" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+        </Style>
+        <Style Selector="Border.step.active">
+            <Setter Property="Background" Value="{DynamicResource AccentSubtleBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+        </Style>
+        <Style Selector="TextBlock.stepTitle">
+            <Setter Property="FontSize" Value="{DynamicResource FontSizeSubtitle}" />
+            <Setter Property="FontWeight" Value="{DynamicResource FontWeightSemiBold}" />
+        </Style>
+</UserControl.Styles>
+
     <Grid ColumnDefinitions="*,6,340" Margin="16,12">
 
-        <!-- ═══ 左：主视图（随阶段切换的内容区） ═══ -->
+        <!-- ═══ 左：主视图 = 超声影像（临床主内容）+ 左下角 3D 画中画 ═══ -->
         <Border Classes="card">
             <Grid RowDefinitions="Auto,*">
                 <Border Classes="cardHeader">
                     <Grid ColumnDefinitions="*,Auto">
-                        <TextBlock Classes="panelTitle" Text="扫查视图" />
+                        <TextBlock Classes="panelTitle" Text="超声影像" />
                         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="16">
 
                             <StackPanel Orientation="Horizontal" Spacing="6">
@@ -51,19 +71,27 @@
                     </Grid>
                 </Border>
 
-                <Grid Grid.Row="1">
-                    <!-- 右下角朝向 gizmo 与这块常驻 HUD 共处一格：把 HUD 的实测高度递给视口，
-                         覆盖层下面放不下库的最小 gizmo 方块时视口就不画它（0.3.0 起 gizmo 尺寸归渲染器，
-                         视口只能决定让不让位、不能决定缩到多小）。
-                         （调试工作区不设这个属性：那边的机械臂状态读数改成了【按需展开的浮层】，
-                          收起时视口上没有覆盖层，展开也只在右上角与右下角的 gizmo 不打架。
-                          这里留在常驻浮层是因为只有一行读数，贴右上角比专门占一列省地方。） -->
-                    <debug:Scene3DView GizmoTopInset="{Binding #ContactForceOverlay.Bounds.Height}" />
+                <!-- 主视图分栏：超声（主）| 3D 场景（点云 / 重建网格 / 探头位姿）。
+                     两栏用 GridSplitter 分隔、可拖拽；3D 视口与工程师工作区互斥挂树，
+                     仍是"同一时刻只有一个 3D 视口"。 -->
+                <Grid Grid.Row="1" ColumnDefinitions="5*,6,4*">
+                    <!-- ① 超声影像：临床主内容，占主栏 -->
+                    <debug:UltrasoundView Grid.Column="0" />
 
-                    <!-- 临床 HUD 只留一项：末端接触力（用 metric 大读数）。
-                         x:Name 只给上面那条绑定用：它得量到卡片自己的高度（Border 收成内容大小，
-                         实测高度 = 卡片 + 它 12 的外边距），而不是整格。 -->
-                    <Border x:Name="ContactForceOverlay"
+                    <GridSplitter Grid.Column="1" />
+
+                    <!-- ② 3D 场景：点云、重建网格、探头位姿都看这里 —— 必须有足够尺寸，
+                         所以用分栏而不是小画中画。 -->
+                    <Border Grid.Column="2"
+                            BorderBrush="{DynamicResource BorderSubtleBrush}"
+                            BorderThickness="1,0,0,0"
+                            ClipToBounds="True">
+                        <debug:Scene3DView />
+                    </Border>
+
+                    <!-- ③ 临床 HUD 只留一项：末端接触力（用 metric 大读数），叠在【3D 视图】右上角 ——
+                         接触力是机械臂末端的量，理应贴着 3D 场景看，而不是压在超声图像上。 -->
+                    <Border x:Name="ContactForceOverlay" Grid.Column="2"
                             Background="{DynamicResource SurfaceRaisedBrush}"
                             BorderBrush="{DynamicResource BorderDefaultBrush}"
                             BorderThickness="1"
@@ -110,20 +138,17 @@
                 <ItemsControl Grid.Row="2" ItemsSource="{Binding Scan.Steps}" Margin="16,12">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="vm:ScanStep">
-                            <Border Background="{DynamicResource SurfaceSunkenBrush}"
-                                    CornerRadius="{DynamicResource RadiusMd}"
-                                    Padding="12,8" Margin="0,3">
+                            <Border Classes="step" Classes.active="{Binding IsActive}">
                                 <Grid ColumnDefinitions="Auto,*,Auto">
                                     <Ellipse Classes="dot"
                                              Classes.idle="{Binding IsPending}"
                                              Classes.info="{Binding IsActive}"
                                              Classes.success="{Binding IsDone}" />
-                                    <StackPanel Grid.Column="1" Margin="10,0,0,0">
-                                        <TextBlock Text="{Binding Title}"
-                                                   FontWeight="{DynamicResource FontWeightSemiBold}" />
+                                    <StackPanel Grid.Column="1" Margin="12,0,0,0">
+                                        <TextBlock Classes="stepTitle" Text="{Binding Title}" />
                                         <TextBlock Classes="caption" Text="{Binding Hint}" />
                                     </StackPanel>
-                                    <TextBlock Grid.Column="2" Classes="caption"
+                                    <TextBlock Grid.Column="2" Classes="caption" VerticalAlignment="Center"
                                                Text="{Binding Detail}" />
                                 </Grid>
                             </Border>
@@ -131,13 +156,26 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
 
-                <!-- 下一步：按钮文案直接说"该做什么"，是向导感的关键 -->
-                <Button Grid.Row="3" Classes="accent lg" Margin="16,0,16,10"
-                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
-                        Content="{Binding Scan.NextAction}"
-                        Command="{Binding Scan.ExecuteCommand}" />
+                <!-- 下一步：主操作，按钮文案直接说"该做什么"（向导感的关键）。
+                     MinHeight 48 —— 临床场景触控友好，比工程师侧的 38 更高一档。 -->
+                <StackPanel Grid.Row="3" Spacing="8" Margin="16,0,16,10">
+                    <Button Classes="accent lg" MinHeight="48"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                            Content="{Binding Scan.NextAction}"
+                            Command="{Binding Scan.ExecuteCommand}" />
 
-                <!-- 安全：急停永远可达 -->
+                    <!-- 停止 / 复位：都是运动级操作，给足尺寸、危险操作用 danger -->
+                    <Grid ColumnDefinitions="*,8,*">
+                        <Button Classes="danger lg" Content="停止"
+                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                Command="{Binding Scan.StopCommand}" />
+                        <Button Grid.Column="2" Classes="lg" Content="复位"
+                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                Command="{Binding Scan.ResetCommand}" />
+                    </Grid>
+                </StackPanel>
+
+                <!-- 安全：急停永远可达；恢复只在急停后可用（未急停时置灰挡误操作） -->
                 <Grid Grid.Row="4" ColumnDefinitions="*,8,*" Margin="16,0,16,16">
                     <Button Classes="danger lg" Content="急停"
                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
@@ -146,6 +184,7 @@
                     <Button Grid.Column="2" Classes="success lg" Content="急停恢复"
                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                             FontWeight="{DynamicResource FontWeightBold}"
+                            IsEnabled="{Binding Session.IsEmergencyStopped}"
                             Command="{Binding Session.ResetEmergencyCommand}" />
                 </Grid>
             </Grid>

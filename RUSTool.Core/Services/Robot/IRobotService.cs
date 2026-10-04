@@ -53,15 +53,18 @@ public interface IRobotService : IDisposable
     /// <summary>关闭 /sensor 感知流。</summary>
     void StopSensorStream();
 
-    /// <summary>下发任意指令（扩展用）。</summary>
+    /// <summary>下发任意指令（扩展用）。<paramref name="text"/> 是字符串参数通道（协议 v0.5）。</summary>
     Task<CommandResult> SendAsync(string cmd, double[]? args = null,
-        int timeoutMs = 5000, CancellationToken ct = default);
+        int timeoutMs = 5000, CancellationToken ct = default, string? text = null);
 
-    /// <summary>关节空间运动（q1..q6）。</summary>
-    Task<CommandResult> MoveJAsync(double[] joints);
+    /// <summary>
+    /// 关节空间运动（q1..q6）。可选速度 / 加速度（**比例 0~1**，null = 不携带、用后端默认）。
+    /// 协议里速度 / 加速度是参数尾部可选的两项，且是比例而非百分比。
+    /// </summary>
+    Task<CommandResult> MoveJAsync(double[] joints, double? speed = null, double? acc = null);
 
-    /// <summary>笛卡尔直线运动（x,y,z,rx,ry,rz）。</summary>
-    Task<CommandResult> MoveLAsync(double[] pose);
+    /// <summary>笛卡尔直线运动（x,y,z,rx,ry,rz）。可选速度 / 加速度（比例 0~1，null = 用后端默认）。</summary>
+    Task<CommandResult> MoveLAsync(double[] pose, double? speed = null, double? acc = null);
 
     /// <summary>启动点动。</summary>
     Task<CommandResult> StartJogAsync(JogParameters jog);
@@ -149,6 +152,56 @@ public interface IRobotService : IDisposable
 
     /// <summary>单步仿真。</summary>
     Task<CommandResult> StepOnceAsync();
+
+    // ── 录制（路由到 RECORDER，旁路，与手动/自动模式无关） ──
+    // result 定长 7 项：state / records / payload_mib / file_mib / dropped / throttled / files；
+    // strings = [文件名]。state：0=stopped、1=recording、2=failed。
+
+    /// <summary>开始录制（打开新文件，绝不覆盖）。</summary>
+    Task<CommandResult> RecorderStartAsync();
+
+    /// <summary>停止录制（排空队列并封存，文件立即可回放 / 体检）。</summary>
+    Task<CommandResult> RecorderStopAsync();
+
+    /// <summary>查询录制状态（前端"录制中"指示与计时数据源）。</summary>
+    Task<CommandResult> RecorderStatusAsync();
+
+    // ── 回放（❌ 已废弃：回放职责移交前端） ──
+    // 前端不再通过后端回放：直接读 <records_dir>/*.rusrec 自行解码/播放（见 RUSTool.Replay）。
+    // 以下接口仅"暂留过渡"，新代码不要使用。
+
+    [Obsolete(ReplayDeprecation.Message)]
+    Task<CommandResult> ReplayListAsync();
+
+    [Obsolete(ReplayDeprecation.Message)]
+    Task<CommandResult> ReplayLoadAsync(int? index = null);
+
+    [Obsolete(ReplayDeprecation.Message)]
+    Task<CommandResult> ReplayLoadPathAsync(string path);
+
+    [Obsolete(ReplayDeprecation.Message)]
+    Task<CommandResult> ReplayStartAsync(double? speed = null);
+
+    [Obsolete(ReplayDeprecation.Message)]
+    Task<CommandResult> ReplayPauseAsync();
+
+    [Obsolete(ReplayDeprecation.Message)]
+    Task<CommandResult> ReplayResumeAsync();
+
+    [Obsolete(ReplayDeprecation.Message)]
+    Task<CommandResult> ReplayStopAsync();
+
+    [Obsolete(ReplayDeprecation.Message)]
+    Task<CommandResult> ReplaySeekAsync(double seconds);
+
+    [Obsolete(ReplayDeprecation.Message)]
+    Task<CommandResult> ReplaySetSpeedAsync(double speed);
+
+    [Obsolete(ReplayDeprecation.Message)]
+    Task<CommandResult> ReplayStepAsync(int count = 1);
+
+    [Obsolete(ReplayDeprecation.Message)]
+    Task<CommandResult> ReplayStatusAsync();
 }
 
 /// <summary>点动参数。</summary>

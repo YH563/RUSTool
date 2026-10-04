@@ -16,10 +16,20 @@
       "底色 + 阴影 + 圆角 + 分隔线"四件事一处定义、六处复用，改一次全局生效。
     -->
 
-    <Grid RowDefinitions="*,Auto" Margin="16,12">
+    <!--
+      上下排高度改用比例 + 可拖拽的行分隔，而不是把下排写死 380：
+      小窗口（MinHeight 720）时上排不被压瘪、大窗口时增量也能分给下排，
+      用户还能自己拖到顺手的位置。行分隔只是一个 8px 的透明热区。
+    -->
+    <!--
+      行结构：上排 * ─ 行分隔 ─ 下排 * ─ 回放条（Auto）。
+      回放从下排的一整张卡片改成底部一条全宽传输条：时间轴可以拉长、控件挤在一行里，
+      信息密度高、也不再把下排的空间白白占掉（它此刻还是演示数据）。
+    -->
+    <Grid RowDefinitions="1.15*,8,*,Auto" Margin="16,12">
 
         <!-- ═══ 上排：3D / 影像 / 曲线 ═══ -->
-        <Grid ColumnDefinitions="3*,6,2*,6,2*">
+        <Grid ColumnDefinitions="3*,6,2*,6,2*" MinHeight="280">
 
             <Border Classes="card" MinWidth="320">
                 <Grid RowDefinitions="Auto,*">
@@ -69,8 +79,7 @@
                                     Opacity="0.9">
                                 <Button Classes="ghost sm"
                                         Content="{Binding Status.PanelToggleText}"
-                                        Command="{Binding Status.TogglePanelCommand}"
-                                        ToolTip.Tip="显示 / 隐藏机械臂状态读数" />
+                                        Command="{Binding Status.TogglePanelCommand}" />
                             </Border>
 
                             <!-- 读数浮层：收起时整块不存在（IsVisible=false），不占任何地方。
@@ -129,8 +138,11 @@
             </Border>
         </Grid>
 
-        <!-- ═══ 下排：指令 / 回放 / 日志 ═══ -->
-        <Grid Grid.Row="1" ColumnDefinitions="1.8*,6,1.3*,6,1*" Height="380" Margin="0,12,0,0">
+        <!-- 行分隔：上下排之间可拖拽 -->
+        <GridSplitter Grid.Row="1" Classes="horizontal" ResizeDirection="Rows" />
+
+        <!-- ═══ 下排：指令 / 日志（回放已移到最底部的全宽传输条） ═══ -->
+        <Grid Grid.Row="2" ColumnDefinitions="1.6*,6,1*" MinHeight="240">
 
             <!-- 机器人指令：同一状态机的两个投影（手动 / 扫查），用 Carousel 切换 -->
             <Border Classes="card" MinWidth="280">
@@ -138,11 +150,18 @@
                     <Border Classes="cardHeader">
                         <Grid ColumnDefinitions="*,Auto">
                             <TextBlock Classes="panelTitle" Text="机器人指令" />
-                            <ComboBox Grid.Column="1" MinWidth="112"
-                                      SelectedIndex="{Binding RobotModeIndex, Mode=TwoWay}">
-                                <ComboBoxItem Content="手动模式" />
-                                <ComboBoxItem Content="扫查模式" />
-                            </ComboBox>
+                            <!-- 手动 / 扫查：分段标签（一眼看出这是"切页"，一次点击到位），
+                                 比原来的下拉少一次点击，也更像标签页而不是选项选择。 -->
+                            <!-- sm 尺寸：卡片头 40 高，32 高的按钮只剩 4px，太小；26 高上下各留 7px -->
+                            <StackPanel Grid.Column="1" Orientation="Horizontal"
+                                        VerticalAlignment="Center">
+                                <Button Classes="segLeft sm" Content="手动"
+                                        Command="{Binding SelectRobotModeCommand}" CommandParameter="0"
+                                        Classes.segOn="{Binding IsManualMode}" />
+                                <Button Classes="segRight sm" Content="扫查"
+                                        Command="{Binding SelectRobotModeCommand}" CommandParameter="1"
+                                        Classes.segOn="{Binding IsScanMode}" />
+                            </StackPanel>
                         </Grid>
                     </Border>
                     <Carousel Grid.Row="1" SelectedIndex="{Binding RobotModeIndex}">
@@ -154,18 +173,7 @@
 
             <GridSplitter Grid.Column="1" />
 
-            <Border Grid.Column="2" Classes="card" MinWidth="220">
-                <Grid RowDefinitions="Auto,*">
-                    <Border Classes="cardHeader">
-                        <TextBlock Classes="panelTitle" Text="回放" />
-                    </Border>
-                    <debug:ReplayModule Grid.Row="1" DataContext="{Binding Replay}" />
-                </Grid>
-            </Border>
-
-            <GridSplitter Grid.Column="3" />
-
-            <Border Grid.Column="4" Classes="card" MinWidth="240">
+            <Border Grid.Column="2" Classes="card" MinWidth="240">
                 <Grid RowDefinitions="Auto,*">
                     <Border Classes="cardHeader">
                         <Grid ColumnDefinitions="*,Auto">
@@ -176,6 +184,9 @@
                                 </Border>
                             </StackPanel>
                             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                                <!-- 自动滚动可关：关掉后新日志不再把列表拽到底，方便回看历史 -->
+                                <CheckBox Content="自动滚动" IsChecked="{Binding Log.AutoScroll}"
+                                          VerticalAlignment="Center" />
                                 <CheckBox Content="只看警告" IsChecked="{Binding Log.WarningOnly}"
                                           VerticalAlignment="Center" />
                                 <Button Classes="sm ghost" Content="清空"
@@ -187,6 +198,46 @@
                 </Grid>
             </Border>
         </Grid>
+
+        <!-- ═══ 回放条：本地回放（前端直读 .rusrec，不经后端） ═══
+             目录来自设置（可编辑 / 选择目录），文件升序=时间顺序；载入后本地播放。
+             首次播放前会"接管"：确保不运动 → 断开后端 → 独占 HUD/曲线/3D。 -->
+        <Border Grid.Row="3" Classes="card" Margin="0,12,0,0">
+            <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,*" ColumnSpacing="10"
+                  Margin="16,6" VerticalAlignment="Center">
+                <TextBlock Grid.Column="0" Classes="panelTitle" Text="回放" />
+                <TextBlock Grid.Column="1" Classes="caption" VerticalAlignment="Center"
+                           Text="{Binding Replay.StatusText}" />
+
+                <!-- 录音目录（可编辑，写入设置；与后端 recorder 的 output_dir 指向同一绝对目录） -->
+                <TextBox Grid.Column="2" MinWidth="200" MaxWidth="300" VerticalAlignment="Center"
+                         Text="{Binding Settings.RecordsDirectory}" />
+                <!-- 整条回放条统一 32 高。左侧控件【必须】显式 VerticalAlignment=Center：
+                     行高被右侧传输条的滑块撑高后，默认 Stretch 的按钮会被拉长（主操作尤其明显）。 -->
+                <Button Grid.Column="3" Content="选择目录" VerticalAlignment="Center"
+                        Click="OnReplayPickDirectory" />
+
+                <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="6"
+                            VerticalAlignment="Center">
+                    <Button Content="刷新" VerticalAlignment="Center"
+                            Command="{Binding Replay.RefreshListCommand}" />
+                    <ComboBox MinWidth="150" MaxWidth="220" VerticalAlignment="Center"
+                              ItemsSource="{Binding Replay.Files}"
+                              SelectedIndex="{Binding Replay.SelectedFileIndex}"
+                              PlaceholderText="（无录音）" />
+                    <Button Classes="accent" Content="载入" VerticalAlignment="Center"
+                            Command="{Binding Replay.LoadSelectedCommand}" />
+                    <Button Content="打开…" VerticalAlignment="Center" Click="OnReplayOpen" />
+                </StackPanel>
+
+                <!-- 未载入：一句提示；已载入：整条传输控件 -->
+                <TextBlock Grid.Column="5" Classes="caption" VerticalAlignment="Center"
+                           IsVisible="{Binding Replay.IsDataEmpty}"
+                           Text="选目录 → 刷新 → 载入，再播放（播放前会断开后端连接）" />
+                <debug:ReplayModule Grid.Column="5" DataContext="{Binding Replay}"
+                                    IsVisible="{Binding IsLoaded}" />
+            </Grid>
+        </Border>
 
     </Grid>
 </UserControl>

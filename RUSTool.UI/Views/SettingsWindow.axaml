@@ -1,0 +1,46 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:settings="using:RUSTool.Settings"
+        mc:Ignorable="d" d:DesignWidth="560" d:DesignHeight="380"
+        x:Class="RUSTool.UI.Views.SettingsWindow"
+        x:DataType="settings:SettingsService"
+        Title="全局参数"
+        Width="560" Height="400"
+        WindowStartupLocation="CenterOwner">
+
+    <!--
+      全局参数（RUSTool.Settings）：界面直接绑定 SettingsService，改动即落盘。
+      端口改动下次启动生效（BridgeClient 在启动时用该值建立连接）。
+    -->
+    <Grid RowDefinitions="Auto,*,Auto" Margin="20" RowSpacing="14">
+
+        <TextBlock Grid.Row="0" Classes="pageTitle" Text="全局参数" />
+
+        <StackPanel Grid.Row="1" Spacing="14">
+            <StackPanel Spacing="4">
+                <TextBlock Classes="caption"
+                           Text="录音目录（与后端 recorder 的 output_dir 指向同一绝对目录）" />
+                <TextBox Text="{Binding RecordsDirectory}" />
+            </StackPanel>
+
+            <StackPanel Spacing="4">
+                <TextBlock Classes="caption" Text="后端 bridge 主机" />
+                <TextBox Text="{Binding BridgeHost}" />
+            </StackPanel>
+
+            <StackPanel Spacing="4">
+                <TextBlock Classes="caption" Text="后端 bridge 端口（改动下次启动生效）" />
+                <TextBox Text="{Binding BridgePort}" Width="140" HorizontalAlignment="Left" />
+            </StackPanel>
+        </StackPanel>
+
+        <Grid Grid.Row="2" ColumnDefinitions="*,Auto">
+            <TextBlock Grid.Column="0" Classes="caption" VerticalAlignment="Center"
+                       TextTrimming="CharacterEllipsis"
+                       Text="{Binding Location, StringFormat='配置文件：{0}'}" />
+            <Button Grid.Column="1" Classes="accent" Content="关闭" Click="OnClose" />
+        </Grid>
+    </Grid>
+</Window>

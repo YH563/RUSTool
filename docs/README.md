@@ -13,6 +13,7 @@
 | **`RUSTool.UI`**（界面层） | [`ui/zh-CN.md`](ui/zh-CN.md) |
 | **`RUSTool.Visualization`**（3D 图形栈隔离容器） | [`visualization/zh-CN.md`](visualization/zh-CN.md) |
 | **`RUSTool.Charts`**（2D 图表栈隔离容器） | [`charts/zh-CN.md`](charts/zh-CN.md) |
+| **`RUSTool.Replay` / `RUSTool.Settings`**（本地回放 / 全局参数） | [`replay/zh-CN.md`](replay/zh-CN.md) |
 | **构建、测试与验证** | [`testing/zh-CN.md`](testing/zh-CN.md) |
 
 ## 工程内文档（就近放）
@@ -35,6 +36,7 @@
 4. [`ui/zh-CN.md`](ui/zh-CN.md) — 界面层：两类使用者的心智模型、指令分层、主题、组装根与数据流、已知边界。
 5. [`visualization/zh-CN.md`](visualization/zh-CN.md) — 3D 图形栈隔离容器：数据契约（`RobotViewport`）与日志出口。
 6. [`charts/zh-CN.md`](charts/zh-CN.md) — 2D 图表栈隔离容器：曲线行模型、推帧线程契约、空数据态、配色与主题。
-7. [`testing/zh-CN.md`](testing/zh-CN.md) — 构建 SDK 要求、单元测试、界面截图与手工验证清单。
+7. [`replay/zh-CN.md`](replay/zh-CN.md) — 本地回放（`.rusrec` 读取 / CDR / 引擎 / 接管）与全局参数（`RUSTool.Settings`）。
+8. [`testing/zh-CN.md`](testing/zh-CN.md) — 构建 SDK 要求、单元测试、界面截图与手工验证清单。
 
 > 仓库根入口见 [`../README.md`](../README.md)。
