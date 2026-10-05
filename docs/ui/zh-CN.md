@@ -183,14 +183,14 @@ RUSTool.UI/
 
 | 设计侧 | 内核（`RUSTool.Core`） | 界面（`RUSTool.UI`） |
 |---|---|---|
-| 8 阶段转移表 | `ScanStateMachine`（`Idle` → … → `Completed` / `Faulted`） | —（目前未接线） |
-| 四步展示 | — | `ScanWorkflowViewModel.Steps`（`ScanStep`：`Pending` / `Active` / `Done`） |
-| 门控 | `CanFire()` / `TryFire()` | 每步按钮的 `CanExecute`（按步骤状态 + 回执 / 事件推进） |
-| 双通道状态更新 | `EndPreScan`（回执）与 `PreScanDone`（事件）互为无害自转移 | `OnEvent` 订阅 `pre_scan_done` / `plan_done` / `motion_done` / `scan_done`；短指令看回执 |
+| 8 阶段转移表 | `ScanStateMachine`（`Idle` → … → `Completed` / `Faulted`） | `ScanWorkflowViewModel` 持有它，阶段派生当前阶段 / 下一步 / 四步状态灯 |
+| 四步展示 | — | `ScanWorkflowViewModel.Steps`（`ScanStep`：`Pending` / `Active` / `Done`）——由 `Stage` 推导 |
+| 门控 | `CanFire()` / `TryFire()` | 每步按钮的 `CanXxx` 全部转发 `CanFire()`（同源）；临床「下一步」按阶段路由 |
+| 双通道状态更新 | `EndPreScan`（回执）与 `PreScanDone`（事件）互为无害自转移 | `OnEvent` 订阅 `pre_scan_done` / `plan_done` / `motion_done` / `scan_done` / `error`；短指令看回执 |
 
-> **待接线**：把 `ScanWorkflowViewModel` 的步骤推进改为驱动 `ScanStateMachine`，
-> 并把「扫查中禁止手动控制」交给 `RobotSession.TryEnter*` 仲裁 —— 这两条是同一件事的两半，
-> 见 [`../core/zh-CN.md`](../core/zh-CN.md) 第 8 / 9 节的「接线现状」。
+> **模式仲裁**：切「手动 / 扫查」页签时经 `SessionViewModel.EnterManualMode / EnterScanMode`
+> 调用 `RobotSession.TryEnter*`（先 `ExitToIdle` 再进入），工具栏运动状态灯随之变化。
+> 连接成功后按当前页签补一次仲裁。
 
 ---
 
@@ -323,7 +323,7 @@ RUSTool.UI/
 |------|------|------|
 | 机械臂 DH 模型 | 真实尺寸连杆与关节 | ✅ 已接（URDF + 关节驱动） |
 | 点云 | 预扫查生成的病人体表点云（验证建图质量） | ✅ 已接：`/sensor` 帧整帧替换（当前帧 / 累积地图快照都走同一条路径） |
-| TCP 坐标系 | 工具中心点 XYZ 三轴 | ⬜ 未接（拾取某个部件时可看它自己的局部坐标轴） |
+| TCP 坐标系 | 工具中心点 XYZ 三轴（库自带 `Axes`，rviz 风格三色箭头、恒定屏幕尺寸、永远可见） | ✅ 已接：`/state.tool_pose` → `RobotViewport.TcpPose` → 每帧更新；无 `tool_pose`（如未连后端）时不显示。3D 卡片头另有「点云」开关，与它无关 |
 | 规划路径线 | 预设扫查路径 | ⬜ 未接 |
 | 实时轨迹 | TCP 实际运动轨迹（透明度渐变） | ⬜ 未接 |
 | 力矢量箭头 | 末端接触力大小与方向 | ⬜ 未接（HUD 里有数值） |
@@ -649,8 +649,9 @@ cd RUSTool.UI
 
 ### 13.2 待办（设计与实现之间的缺口）
 
-1. **状态机接线**：`ScanWorkflowViewModel` 的步骤门控改为驱动 `ScanStateMachine`；
-   并把 `RobotSession.TryEnter*` 接进手动 / 扫查模式仲裁（当前只有 `ExitToIdle()` 被调用）。
+1. ~~**状态机接线**~~ ✅ 已完成：`ScanWorkflowViewModel` 已驱动 `ScanStateMachine`（用户动作过 `CanFire`、
+   后端事件推进阶段，按钮门控与状态机同源）；`RobotSession.TryEnter*` 已接入手动 / 扫查模式仲裁；
+   临床主 CTA 已改为按阶段路由的「下一步」。
 2. **点云「选点」交互**：`/sensor` 点云已经解码并渲染进 3D 视口（`PointCloudLayer`），
    但「点击点云表面取点」还没接：`RobotViewport` 的单击目前只做模型拾取
    （库的 `SceneGraph.PickAndSelect`），点云选区 / 最近点求解与选中点标记待做。

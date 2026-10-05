@@ -69,8 +69,11 @@
         </ItemsControl>
 
         <!-- ── 流程控制 ── -->
+        <!-- 每个按钮的 IsEnabled 都来自状态机 CanFire —— 与「点了能不能执行」同源 -->
         <WrapPanel Grid.Row="2" Orientation="Horizontal" ItemSpacing="6" Margin="0,8,0,0">
-            <Button Classes="sm" Content="结束预扫查"
+            <Button Classes="sm accent" Content="开始预扫查" IsEnabled="{Binding CanStartPreScan}"
+                    Command="{Binding StartPreScanCommand}" />
+            <Button Classes="sm" Content="结束预扫查" IsEnabled="{Binding CanEndPreScan}"
                     Command="{Binding EndPreScanCommand}" />
             <Button Classes="sm" Content="设为起点" IsEnabled="{Binding CanSetStart}"
                     Command="{Binding SetStartPoseCommand}" />
@@ -80,10 +83,14 @@
                     Command="{Binding PlanCommand}" />
             <Button Classes="sm accent" Content="执行" IsEnabled="{Binding CanExecute}"
                     Command="{Binding ExecuteCommand}" />
-            <Button Classes="sm" Content="暂停" Command="{Binding PauseCommand}" />
-            <Button Classes="sm" Content="恢复" Command="{Binding ResumeCommand}" />
-            <Button Classes="sm danger" Content="停止" Command="{Binding StopCommand}" />
-            <Button Classes="sm" Content="复位" Command="{Binding ResetCommand}" />
+            <Button Classes="sm" Content="暂停" IsEnabled="{Binding CanPause}"
+                    Command="{Binding PauseCommand}" />
+            <Button Classes="sm" Content="恢复" IsEnabled="{Binding CanResume}"
+                    Command="{Binding ResumeCommand}" />
+            <Button Classes="sm danger" Content="停止" IsEnabled="{Binding CanStop}"
+                    Command="{Binding StopCommand}" />
+            <Button Classes="sm" Content="复位" IsEnabled="{Binding CanReset}"
+                    Command="{Binding ResetCommand}" />
             <Button Classes="sm ghost" Content="刷新状态"
                     Command="{Binding RefreshStatusCommand}" />
         </WrapPanel>

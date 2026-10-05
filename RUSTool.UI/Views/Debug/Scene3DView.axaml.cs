@@ -98,6 +98,17 @@ public partial class Scene3DView : UserControl
         set => SetValue(GizmoTopInsetProperty, value);
     }
 
+    /// <summary>是否显示点云（转发给视口）。默认显示；界面可绑一个开关。</summary>
+    public static readonly StyledProperty<bool> ShowPointCloudProperty =
+        AvaloniaProperty.Register<Scene3DView, bool>(nameof(ShowPointCloud), defaultValue: true);
+
+    /// <inheritdoc cref="ShowPointCloudProperty"/>
+    public bool ShowPointCloud
+    {
+        get => GetValue(ShowPointCloudProperty);
+        set => SetValue(ShowPointCloudProperty, value);
+    }
+
     /// <summary>
     /// 转发 <see cref="GizmoTopInsetProperty"/> 到视口。
     /// XAML 里的属性赋值发生在构造函数之后，所以这时 <c>Viewport</c> 一定已经建好（无需判空）。
@@ -108,6 +119,8 @@ public partial class Scene3DView : UserControl
 
         if (change.Property == GizmoTopInsetProperty)
             Viewport.GizmoTopInset = change.NewValue is double inset ? inset : 0d;
+        else if (change.Property == ShowPointCloudProperty)
+            Viewport.ShowPointCloud = change.NewValue is bool show && show;
     }
 
     /// <summary>数据上下文里的主 VM（订阅菜单事件与点云流用）。</summary>

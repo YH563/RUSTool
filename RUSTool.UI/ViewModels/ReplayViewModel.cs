@@ -51,6 +51,12 @@ public sealed partial class ReplayViewModel : ViewModelBase
     /// </summary>
     public Func<Task<bool>>? RequestTakeover { get; set; }
 
+    /// <summary>
+    /// 重置"已接管"标记，使下一次播放重新执行接管（停后端 → 断开）。
+    /// 用于「暂停期间用户又连上了后端」这种情形 —— 否则继续播放会与实时流打架。
+    /// </summary>
+    public void ResetTakeover() => _takenOver = false;
+
     public ReplayViewModel(SettingsService settings, ILogService log)
     {
         _settings = settings;
@@ -91,6 +97,13 @@ public sealed partial class ReplayViewModel : ViewModelBase
     public bool IsFinished => State == 3;
     public bool IsDataEmpty => !IsLoaded;
 
+    /// <summary>
+    /// 是否允许后端相关操作（连接 / 切换驱动 / 下发指令）。
+    /// 回放<b>播放中</b>时禁止（此时后端已被接管断开，任何后端动作都与回放打架）；
+    /// 暂停 / 空闲 / 结束后恢复。
+    /// </summary>
+    public bool CanUseBackend => !IsPlaying;
+
     public string PlayButtonText => IsPlaying ? "⏸" : "▶";
     public string StatusText => State switch
     {
@@ -130,6 +143,7 @@ public sealed partial class ReplayViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsFinished));
         OnPropertyChanged(nameof(PlayButtonText));
         OnPropertyChanged(nameof(StatusText));
+        OnPropertyChanged(nameof(CanUseBackend));
     }
     partial void OnSpeedIndexChanged(int value)
     {
@@ -199,6 +213,14 @@ public sealed partial class ReplayViewModel : ViewModelBase
             return;
         }
         _settings.LastReplayFile = path;
+        SyncFromEngine();
+    }
+
+    /// <summary>同步进入"播放中"态（仅供离屏截图 / 测试，跳过接管）。</summary>
+    public void PlaySynchronously()
+    {
+        _takenOver = true;
+        _player.Play();
         SyncFromEngine();
     }
 

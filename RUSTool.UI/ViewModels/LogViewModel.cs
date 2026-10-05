@@ -34,6 +34,10 @@ public sealed partial class LogViewModel : ViewModelBase
     [ObservableProperty]
     private bool _warningOnly;
 
+    /// <summary>是否显示 Debug 级日志。<b>默认否</b>：调试信息太吵，先过滤掉。</summary>
+    [ObservableProperty]
+    private bool _includeDebug;
+
     /// <summary>是否自动滚动到最新一条（关闭后可停在历史位置回看）。</summary>
     [ObservableProperty]
     private bool _autoScroll = true;
@@ -51,7 +55,12 @@ public sealed partial class LogViewModel : ViewModelBase
 
     partial void OnWarningOnlyChanged(bool value) => Rebuild();
 
-    private bool Match(LogEntry entry) => !WarningOnly || entry.IsWarning || entry.IsError;
+    partial void OnIncludeDebugChanged(bool value) => Rebuild();
+
+    /// <summary>过滤：Debug 默认不显示（勾选后才显示）；「只看警告」时只留 Warn / Error。</summary>
+    private bool Match(LogEntry entry)
+        => (IncludeDebug || !entry.IsDebug)
+           && (!WarningOnly || entry.IsWarning || entry.IsError);
 
     private void OnServiceEntriesChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {

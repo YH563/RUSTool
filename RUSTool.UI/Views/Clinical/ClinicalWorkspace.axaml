@@ -86,7 +86,7 @@
                             BorderBrush="{DynamicResource BorderSubtleBrush}"
                             BorderThickness="1,0,0,0"
                             ClipToBounds="True">
-                        <debug:Scene3DView />
+                        <debug:Scene3DView ShowPointCloud="{Binding ShowPointCloud}" />
                     </Border>
 
                     <!-- ③ 临床 HUD 只留一项：末端接触力（用 metric 大读数），叠在【3D 视图】右上角 ——
@@ -158,19 +158,24 @@
 
                 <!-- 下一步：主操作，按钮文案直接说"该做什么"（向导感的关键）。
                      MinHeight 48 —— 临床场景触控友好，比工程师侧的 38 更高一档。 -->
-                <StackPanel Grid.Row="3" Spacing="8" Margin="16,0,16,10">
+                <!-- 回放播放中：流程主操作 / 停止 / 复位整体置灰（后端指令，此时后端已被接管断开） -->
+                <StackPanel Grid.Row="3" Spacing="8" Margin="16,0,16,10"
+                            IsEnabled="{Binding Replay.CanUseBackend}">
                     <Button Classes="accent lg" MinHeight="48"
                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                             Content="{Binding Scan.NextAction}"
-                            Command="{Binding Scan.ExecuteCommand}" />
+                            IsEnabled="{Binding Scan.CanNextStep}"
+                            Command="{Binding Scan.NextStepCommand}" />
 
                     <!-- 停止 / 复位：都是运动级操作，给足尺寸、危险操作用 danger -->
                     <Grid ColumnDefinitions="*,8,*">
                         <Button Classes="danger lg" Content="停止"
                                 HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                IsEnabled="{Binding Scan.CanStop}"
                                 Command="{Binding Scan.StopCommand}" />
                         <Button Grid.Column="2" Classes="lg" Content="复位"
                                 HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                IsEnabled="{Binding Scan.CanReset}"
                                 Command="{Binding Scan.ResetCommand}" />
                     </Grid>
                 </StackPanel>

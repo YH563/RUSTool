@@ -236,7 +236,9 @@ dotnet run --project RUSTool.UI -- --shot RUSTool.UI/preview/05-menu-MenuFile.pn
       `preview.sh torque` 拍一张（合成帧走生产解码器）✔
 - [x] 单元测试：`ScanStateMachine` **54 个用例**（含穷举式的「按钮灰不灰 = 能否执行」）✔
 - [x] 驱动类型回读：工具栏「真实 / 仿真」由 `get_driver_type` 回读点亮，未连接 / 掉线两个一起变灰（`DriverTypeTests` **15 个用例**）✔
-- [ ] **状态机接线**：`ScanWorkflowViewModel` 改为驱动 `ScanStateMachine`；`RobotSession.TryEnter*` 接入手动 / 扫查模式仲裁
+- [x] **状态机接线**：`ScanWorkflowViewModel` 改为驱动 `ScanStateMachine`（用户动作过 `CanFire`、后端事件推进阶段，
+      「按钮灰不灰 = 能否执行」同源）；`RobotSession.TryEnter*` 接入手动 / 扫查模式仲裁（工具栏状态灯不再永远「空闲」）；
+      临床主 CTA 改为按阶段路由的「下一步」✔
 - [ ] **点云选点**：3D 视口里点击点云表面取点（raycast / 最近点）→ `set_start_pose` / `set_end_pose` 带坐标
 - [ ] **测试补齐**：`BridgeProtocol`（样例 JSON / 字段缺省 / 坏 JSON）、`BridgeClient`（id 匹配 / 超时 / 断线置失败）
 - [x] **录制 / 回放接线**：录制走后端（`recorder_start/stop/status`，工具栏状态灯 + 计时 + 丢弃/限流计数）；
@@ -259,7 +261,7 @@ dotnet run --project RUSTool.UI -- --shot RUSTool.UI/preview/05-menu-MenuFile.pn
 | 「末端接触力」是近似值 | 状态帧里没有独立的接触力通道，目前用各关节力矩模和代替；后端一旦提供 `contact_force` 字段，只改 `RobotStatusViewModel.OnStateUpdated` 一处 |
 | 影像 / 回放 | 超声影像仍是静态占位图；**录制走后端、回放走前端本地**：回放直读 `<records_dir>/*.rusrec`（目录在「设置 → 全局参数」里配成与后端 `output_dir` 同一绝对目录）；后端 `replay_*` 已废弃（仅过渡保留）。离线时录音列表为空、录制按钮变灰属正常 |
 | 「急停」没有独立的后端通道 | 后端只回执 `stop`，所以急停是否按下是本地界面状态（`SessionViewModel.IsEmergencyStopped`） |
-| 状态行一直显示「空闲 / 已暂停」 | 模式仲裁（`RobotSession.TryEnter*`）尚未接线，属已知缺口（见路线图） |
+| 状态行一直显示「空闲 / 已暂停」 | 已修：切「手动 / 扫查」页签会做模式仲裁（`RobotSession.TryEnter*`），状态灯随之变化 |
 | 深色弹层圆角为 0 | 有意为之：没有合成器时透明区会被渲染成黑色；确认有合成器后可改 `Theme` 的 `RadiusOverlay` / `ShadowOverlay` |
 | 日志会落盘 | `LogService` 默认写 `logs/`（相对**进程工作目录**），已在 `.gitignore` 里忽略 |
 | 构建报 `CS0103` 一大片 | 用了 .NET SDK 8 构建。Avalonia 12 的源生成器需要 Roslyn 4.14+，请换 SDK 10 |

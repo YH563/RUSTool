@@ -35,6 +35,9 @@ public sealed class RobotScene : IDisposable
 
     private readonly StringBuilder _log = new();
 
+    /// <summary>TCP 坐标系（三色箭头，rviz 风格）：默认隐藏，收到有效 TCP 位姿才显示、随后实时跟随。</summary>
+    private readonly Axes _tcpAxes;
+
     private RobotScene(SceneGraph graph)
     {
         Graph = graph;
@@ -43,6 +46,16 @@ public sealed class RobotScene : IDisposable
         // 结构一次性定下来，此后整份生命期只管往里灌数据 —— 见 PointCloudLayer 的注释。
         PointCloud = new PointCloudLayer();
         graph.Add(PointCloud.Node);
+
+        // TCP 坐标系：库自带的 Axes（+X 红 / +Y 绿 / +Z 蓝）。用「恒定屏幕尺寸 + 永远可见」
+        // 当一个小标记 —— 它是给操作者指 TCP 朝向的，不该被机械臂本体挡住、也不该随镜头变大变小。
+        _tcpAxes = new Axes(0.08f, 0.0025f, 0.007f, 0.02f, "TcpFrame")
+        {
+            Sizing = AxesSizing.ConstantScreenSize,
+            AlwaysOnTop = true,
+            Visible = false,
+        };
+        graph.Add(_tcpAxes);
     }
 
     /// <summary>场景图：已含默认网格 / 灯光 / 世界坐标轴与一个可用机位（由库的构造函数给出）。</summary>
@@ -96,6 +109,30 @@ public sealed class RobotScene : IDisposable
         Robot.ApplyJointValues(radians);
         return true;
     }
+
+    /// <summary>
+    /// 实时更新 TCP 坐标系：位置为基坐标（m），姿态为固定轴 XYZ 的 RPY（rad，R = Rz·Ry·Rx）。
+    /// <paramref name="pose"/> 为 <c>null</c> / 不足 6 维时隐藏坐标系。
+    /// <b>只能在场景图属主线程（渲染回调）调用。</b>
+    /// </summary>
+    public void ApplyTcpPose(IReadOnlyList<float>? pose)
+    {
+        if (pose is null || pose.Count < 6)
+        {
+            _tcpAxes.Visible = false;
+            return;
+        }
+
+        _tcpAxes.Transform.Position = new Vector3(pose[0], pose[1], pose[2]);
+        _tcpAxes.Transform.Rotation = RpyToQuaternion(pose[3], pose[4], pose[5]);
+        _tcpAxes.Visible = true;
+    }
+
+    /// <summary>固定轴 XYZ（R = Rz·Ry·Rx）的 RPY → 四元数（与驱动 / 协议口径一致）。</summary>
+    private static Quaternion RpyToQuaternion(float rx, float ry, float rz)
+        => Quaternion.CreateFromAxisAngle(Vector3.UnitZ, rz)
+         * Quaternion.CreateFromAxisAngle(Vector3.UnitY, ry)
+         * Quaternion.CreateFromAxisAngle(Vector3.UnitX, rx);
 
     /// <summary>
     /// 用一帧感知点云整帧替换点云图层。

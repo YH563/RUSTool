@@ -27,10 +27,15 @@ public static class BridgeProtocol
         string[]? Strings = null); // 文本结果（协议 v0.4）：recorder/replay 的文件名清单等
 
     // ---- 状态帧（/state 通道）----
+    /// <summary>
+    /// 状态帧。<see cref="FlangePos"/> 是法兰位姿；<see cref="ToolPose"/> 是 TCP 位姿
+    /// （基坐标系下，长度 6，m/rad；<see cref="ToolIndex"/> 是工具号）——后端会带这两个字段。
+    /// </summary>
     public sealed record StateFrame(
         double Timestamp, double FrameRate,
         double[] JointPos, double[] JointVel, double[] JointAcc,
-        double[] Effort, double[] FlangePos);
+        double[] Effort, double[] FlangePos,
+        int ToolIndex = 0, double[]? ToolPose = null);
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -85,7 +90,8 @@ public static class BridgeProtocol
                 JointVel = frame.JointVel ?? [],
                 JointAcc = frame.JointAcc ?? [],
                 Effort = frame.Effort ?? [],
-                FlangePos = frame.FlangePos ?? []
+                FlangePos = frame.FlangePos ?? [],
+                ToolPose = frame.ToolPose ?? []
             };
         }
         catch (JsonException)

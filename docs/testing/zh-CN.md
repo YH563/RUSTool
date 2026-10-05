@@ -201,7 +201,7 @@ grep ' sim ' logs/$(date +%F).log
 | 截图里菜单没展开 | 菜单是 Popup，必须 `preview.sh popup <菜单名>` |
 | 界面读数全是 0、日志空白 | 没连后端。`preview.sh window` → 点「连接」；这是正确行为 |
 | `logs/` 里找不到文件 | 日志相对**进程工作目录**写；用 `preview.sh` 时工作目录是仓库根 |
-| 状态行的值一直是「空闲 / 已暂停」 | 模式仲裁（`RobotSession.TryEnter*`）尚未接线，见 [`../ui/zh-CN.md`](../ui/zh-CN.md) 第 13.2 节 |
+| 状态行的值一直是「空闲 / 已暂停」 | 已修：切「手动 / 扫查」页签会做模式仲裁（`RobotSession.TryEnter*`），状态灯随之变化；未连接时仍是「空闲」（`IsManual/IsScanning` 要求已连接） |
 | 点云 / 影像没有数据 | 点云要连后端并开 `/sensor`（点「连接」即开）；**没接后端**时可用 `preview.sh window --demo-cloud` 看合成帧。影像是静态占位，见 [`../ui/zh-CN.md`](../ui/zh-CN.md) 第 13 节 |
 | 曲线区空白 | 没连后端时是**设计好的空状态**（文案会区分「未连接控制通道 · 曲线待数据」与「等待状态帧…」）；离线想看曲线用 `preview.sh torque`，连上后端后状态流一推帧六条曲线就出来 |
 | 截图里曲线是空坐标轴 | 图表的更新有节流器（合批重画），截图进程会在推完帧后显式调 `RobotStatePanel.RedrawAll(window)`；若仍为空，多半是少了这一步或没推进渲染计时器（见 [`../charts/zh-CN.md`](../charts/zh-CN.md) 的截图钩子一节） |

@@ -49,6 +49,40 @@ public sealed partial class MainViewModel : ViewModelBase
 
         // 进入回放前的"接管"：查运动 → 兜底 stop → 断开后端。回放本身是本地行为。
         Replay.RequestTakeover = RequestReplayTakeoverAsync;
+
+        // 回放暂停期间若用户又连上后端（连接按钮在暂停时可用），下一次播放要重新接管 ——
+        // 否则实时流会和回放同时写 HUD / 曲线 / 3D。
+        // ⚠ SessionViewModel.RaiseAll() 每次变化都会重发 IsConnected，
+        //   所以不能只看 PropertyName —— 必须用「上一次的连接态」判断真正的翻转，
+        //   否则 ApplyRobotMode 改 Mode → 又重发 IsConnected → 无限递归（栈溢出）。
+        Session.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName != nameof(SessionViewModel.IsConnected))
+                return;
+
+            bool connected = Session.IsConnected;
+            if (connected == _lastConnected)
+                return;
+
+            _lastConnected = connected;
+            if (!connected)
+                return;
+
+            Replay.ResetTakeover();
+            ApplyRobotMode(); // 连上后按当前 tab 进入手动 / 扫查模式（本地仲裁，恢复状态灯）
+        };
+    }
+
+    /// <summary>上一次观察到的连接态，用于识别「真正的连接翻转」（见构造函数里的说明）。</summary>
+    private bool _lastConnected;
+
+    /// <summary>按当前"机器人指令"页签进入对应操作模式（本地互斥仲裁，不发指令）。</summary>
+    private void ApplyRobotMode()
+    {
+        if (RobotModeIndex == 1)
+            Session.EnterScanMode();
+        else
+            Session.EnterManualMode();
     }
 
     /// <summary>全局参数（录音目录 / bridge 地址…），由组装层注入。</summary>
@@ -168,6 +202,10 @@ public sealed partial class MainViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isDebugMode = true;
 
+    /// <summary>3D 视口是否显示感知点云（默认显示）。关掉可排除点云与模型的遮挡/深度冲突。</summary>
+    [ObservableProperty]
+    private bool _showPointCloud = true;
+
     public bool IsClinicalMode => !IsDebugMode;
 
     /// <summary>工具栏上的模式标签文案。</summary>
@@ -189,10 +227,11 @@ public sealed partial class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(ModeName));
     }
 
-    /// <summary>机器人指令模式切换后同步给后端（0=手动 / 1=扫查）。</summary>
+    /// <summary>机器人指令模式切换：同步给后端（0=手动 / 1=扫查）并做本地模式仲裁。</summary>
     partial void OnRobotModeIndexChanged(int value)
     {
         _ = _robot.SetMode(value);
+        ApplyRobotMode();
         OnPropertyChanged(nameof(IsManualMode));
         OnPropertyChanged(nameof(IsScanMode));
     }

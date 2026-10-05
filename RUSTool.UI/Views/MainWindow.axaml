@@ -50,10 +50,14 @@
                         <Separator />
                         <MenuItem Header="退出" />
                     </MenuItem>
-                    <MenuItem x:Name="MenuConnect" Header="连接">
-                        <MenuItem Header="连接" Command="{Binding Session.ConnectCommand}" />
-                        <MenuItem Header="断开连接" Command="{Binding Session.DisconnectCommand}" />
-                        <MenuItem Header="关闭设备" Command="{Binding Session.DisableRobotCommand}" />
+                    <MenuItem x:Name="MenuConnect" Header="连接"
+                              IsEnabled="{Binding Replay.CanUseBackend}">
+                        <MenuItem Header="连接" Command="{Binding Session.ConnectCommand}"
+                                  IsEnabled="{Binding Replay.CanUseBackend}" />
+                        <MenuItem Header="断开连接" Command="{Binding Session.DisconnectCommand}"
+                                  IsEnabled="{Binding Replay.CanUseBackend}" />
+                        <MenuItem Header="关闭设备" Command="{Binding Session.DisableRobotCommand}"
+                                  IsEnabled="{Binding Replay.CanUseBackend}" />
                     </MenuItem>
                     <MenuItem x:Name="MenuView" Header="视图">
                         <MenuItem Header="工程师模式" Command="{Binding SwitchToDebugCommand}" />
@@ -95,11 +99,14 @@
 
                     <!-- 连接 / 断开：连接是首次使用的主操作，直接常驻工具栏
                          （原来只在「连接」菜单里，新用户找不到）。两个按钮互斥显隐。 -->
+                    <!-- 回放播放中禁止连接 / 断开（后端已被接管，动它只会和回放打架） -->
                     <Button Classes="accent" Content="连接"
                             IsVisible="{Binding Session.IsDisconnected}"
+                            IsEnabled="{Binding Replay.CanUseBackend}"
                             Command="{Binding Session.ConnectCommand}" />
                     <Button Content="断开"
                             IsVisible="{Binding Session.IsConnected}"
+                            IsEnabled="{Binding Replay.CanUseBackend}"
                             Command="{Binding Session.DisconnectCommand}" />
 
                     <Rectangle Classes="dividerVertical" Height="20" />

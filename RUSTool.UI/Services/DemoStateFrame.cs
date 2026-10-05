@@ -66,7 +66,11 @@ internal static class DemoStateFrame
             JointVel: new double[6],
             JointAcc: new double[6],
             Effort: effort,
-            FlangePos: flangePos);
+            FlangePos: flangePos,
+            // 工具 0 = 法兰坐标系，TCP 位姿就等于法兰位姿；给合成帧也带上，
+            // 好让 `preview.sh window --demo-torque` 里能看见实时 TCP 坐标系。
+            ToolIndex: 0,
+            ToolPose: [.. flangePos]);
 
         // 合成帧解不开就是本文件与协议的定义不一致 —— 这是程序员错误，直接炸掉（截图脚本要立刻发现）。
         var decoded = BridgeProtocol.TryParseState(BridgeProtocol.Encode(state));

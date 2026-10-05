@@ -140,6 +140,27 @@ public sealed partial class SessionViewModel : ViewModelBase
         IsEmergencyStopped = false;
     }
 
+    /// <summary>
+    /// 进入手动模式（本地互斥仲裁）：先退出当前模式再进入 ——
+    /// `TryEnter*` 只在 Mode==Idle 时成功，所以切换等于「ExitToIdle + TryEnter」。
+    /// </summary>
+    public void EnterManualMode()
+    {
+        if (!IsConnected || _session.Mode == RobotMode.Manual)
+            return; // 未连接 / 已是该模式：不动（幂等，避免无谓的模式抖动）
+        _session.ExitToIdle();
+        _session.TryEnterManual();
+    }
+
+    /// <summary>进入扫查模式（同上）。</summary>
+    public void EnterScanMode()
+    {
+        if (!IsConnected || _session.Mode == RobotMode.Scan)
+            return;
+        _session.ExitToIdle();
+        _session.TryEnterScan();
+    }
+
     /// <summary>下使能（robot_enable 0）。</summary>
     [RelayCommand]
     private async Task DisableRobot()

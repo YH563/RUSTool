@@ -71,6 +71,12 @@ public sealed partial class RobotStatusViewModel : ViewModelBase
     /// </summary>
     [ObservableProperty] private float[] _jointsRadians = new float[6];
 
+    /// <summary>
+    /// TCP 位姿（基坐标系，m/rad，长度 6 = x,y,z,rx,ry,rz）—— 喂给 3D 视口实时画一个 TCP 坐标系。
+    /// 后端未提供 <c>tool_pose</c> 时为 <c>null</c>（视口隐藏该坐标系）。
+    /// </summary>
+    [ObservableProperty] private float[]? _tcpPose;
+
     /// <summary>是否已连上控制通道（未连接时 HUD 各读数保持为 0）。</summary>
     [ObservableProperty] private bool _isConnected;
 
@@ -94,6 +100,15 @@ public sealed partial class RobotStatusViewModel : ViewModelBase
     [RelayCommand]
     private void TogglePanel() => IsPanelVisible = !IsPanelVisible;
 
+    /// <summary>
+    /// 状态帧 → 界面的更新频率上限（Hz）。上游 <c>/state</c> 约 125 Hz，但 HUD 读数和 3D 视口
+    /// 按显示刷新率量级更新即可 —— 协议文档也建议「C# 端 UI 更新限制在 30~60fps」。
+    /// 逐帧 Post 会把 UI 线程与合成器压满，弱机（真机现场那台）上表现为 3D 视口频闪。
+    /// </summary>
+    private const double UiUpdateHz = 60.0;
+
+    private double _lastUiStamp = double.NegativeInfinity;
+
     public RobotStatusViewModel(IRobotService robot)
     {
         _robot = robot;
@@ -101,8 +116,18 @@ public sealed partial class RobotStatusViewModel : ViewModelBase
         _robot.StateUpdated += OnStateUpdated;
     }
 
+    /// <summary>
+    /// 按时间戳把状态帧节流到 <see cref="UiUpdateHz"/> 再 <c>Post</c> 到 UI 线程。
+    /// 时间戳回退（换驱动 / 时钟复位）时强制放行并重设基线，避免从此不再更新。
+    /// </summary>
     private void OnStateUpdated(BridgeProtocol.StateFrame state)
-        => Dispatcher.UIThread.Post(() => PushFrame(state));
+    {
+        if (state.Timestamp > _lastUiStamp && state.Timestamp - _lastUiStamp < 1.0 / UiUpdateHz)
+            return;
+
+        _lastUiStamp = state.Timestamp;
+        Dispatcher.UIThread.Post(() => PushFrame(state));
+    }
 
     /// <summary>
     /// 用一帧状态帧刷新全部读数。<b>必须在 UI 线程调用</b>（改的是绑定属性）。
@@ -127,6 +152,10 @@ public sealed partial class RobotStatusViewModel : ViewModelBase
 
         // 3D 视口的同一份关节角（弧度，不换算）—— 姿态与上面几行来自同一帧，不会各说各话。
         JointsRadians = ToFloats(state.JointPos, 6);
+
+        // TCP 位姿（基坐标，m/rad）—— 3D 视口据此实时画一个 TCP 坐标系。字段不全就置空（隐藏）。
+        double[] toolPose = state.ToolPose ?? [];
+        TcpPose = toolPose.Length >= 6 ? ToFloats(toolPose, 6) : null;
 
         // 法兰位姿：位置本身就是米，姿态是弧度 → 度。
         FlangeX = At(state.FlangePos, 0);

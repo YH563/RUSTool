@@ -34,9 +34,12 @@
             <Border Classes="card" MinWidth="320">
                 <Grid RowDefinitions="Auto,*">
                     <Border Classes="cardHeader">
-                        <Grid ColumnDefinitions="*,Auto">
+                        <Grid ColumnDefinitions="*,Auto,Auto">
                             <TextBlock Classes="panelTitle" Text="3D 场景" />
                             <TextBlock Grid.Column="1" Classes="caption" Text="视角 默认" />
+                            <CheckBox Grid.Column="2" Content="点云" Margin="12,0,0,0"
+                                      VerticalAlignment="Center"
+                                      IsChecked="{Binding ShowPointCloud}" />
                         </Grid>
                     </Border>
                     <!--
@@ -48,7 +51,7 @@
                       所以下限定得比「停靠一列」那一版（520）低得多。
                     -->
                     <Grid Grid.Row="1">
-                        <debug:Scene3DView />
+                        <debug:Scene3DView ShowPointCloud="{Binding ShowPointCloud}" />
                         <!--
                           右上角一列：上面是开关，下面是展开出来的读数浮层。
 
@@ -164,7 +167,9 @@
                             </StackPanel>
                         </Grid>
                     </Border>
-                    <Carousel Grid.Row="1" SelectedIndex="{Binding RobotModeIndex}">
+                    <!-- 回放播放中：手动 / 扫查两个面板整体置灰（它们都是后端指令，此时后端已被接管断开） -->
+                    <Carousel Grid.Row="1" SelectedIndex="{Binding RobotModeIndex}"
+                              IsEnabled="{Binding Replay.CanUseBackend}">
                         <debug:ArmControlPanel DataContext="{Binding Control}" />
                         <debug:ScanWorkflowPanel DataContext="{Binding Scan}" />
                     </Carousel>
@@ -188,6 +193,8 @@
                                 <CheckBox Content="自动滚动" IsChecked="{Binding Log.AutoScroll}"
                                           VerticalAlignment="Center" />
                                 <CheckBox Content="只看警告" IsChecked="{Binding Log.WarningOnly}"
+                                          VerticalAlignment="Center" />
+                                <CheckBox Content="调试" IsChecked="{Binding Log.IncludeDebug}"
                                           VerticalAlignment="Center" />
                                 <Button Classes="sm ghost" Content="清空"
                                         Command="{Binding Log.ClearCommand}" />

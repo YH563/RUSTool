@@ -38,9 +38,10 @@
               「画不画」这个开关。界面这边再画一份静态坐标轴只会和它叠在一起。
             -->
 
-            <!-- ② 3D 视口：关节角来自状态帧（弧度）；初始化失败时它自己隐藏，不去打扰上面那层 -->
+            <!-- ② 3D 视口：关节角与 TCP 位姿都来自状态帧；初始化失败时它自己隐藏，不去打扰上面那层 -->
             <viz:RobotViewport x:Name="Viewport"
-                               JointValues="{Binding Status.JointsRadians}" />
+                               JointValues="{Binding Status.JointsRadians}"
+                               TcpPose="{Binding Status.TcpPose}" />
 
             <!-- ③ 角标：GPU / 模型 / FPS / 拾取。左对齐 + 省略号，窄面板里也不会撑破卡片 -->
             <TextBlock x:Name="ViewportStatus"

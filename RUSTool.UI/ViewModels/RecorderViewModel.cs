@@ -63,8 +63,14 @@ public sealed partial class RecorderViewModel : ViewModelBase
             }
         });
 
+        // 只在【录制中】轮询：空闲时不向后端发任何请求（连接时那一次同步已足够），
+        // 避免每秒一条 recorder_status 常驻刷后端与日志。开始/停止的状态由回执直接落地。
         _timer = new DispatcherTimer { Interval = PollInterval };
-        _timer.Tick += (_, _) => _ = RefreshAsync();
+        _timer.Tick += (_, _) =>
+        {
+            if (IsRecording)
+                _ = RefreshAsync();
+        };
         _timer.Start();
     }
 

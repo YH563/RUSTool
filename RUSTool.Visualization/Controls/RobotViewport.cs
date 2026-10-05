@@ -113,6 +113,11 @@ public sealed class RobotViewport : OpenGlControlBase
     private float[]? _pendingJoints;
     private bool _jointMismatchReported;
 
+    // ── TCP 位姿邮箱：同一条规矩。用 _hasPendingTcp 区分「没更新」与「更新成 null（隐藏）」──
+    private readonly object _tcpLock = new();
+    private float[]? _pendingTcp;
+    private bool _hasPendingTcp;
+
     // ── 点云帧邮箱：同一条规矩（覆盖式）——WS 线程写、渲染线程取走即置空 ──
     private readonly object _cloudLock = new();
     private PointCloudFrame? _pendingCloud;
@@ -176,6 +181,20 @@ public sealed class RobotViewport : OpenGlControlBase
     }
 
     /// <summary>
+    /// TCP 位姿（基坐标，<c>[x,y,z,rx,ry,rz]</c>，m/rad），用于在视口里实时画一个 TCP 坐标系。
+    /// <c>null</c> / 不足 6 维时不画。绑定即可，驱动方式与 <see cref="JointValues"/> 相同（邮箱 + 渲染线程落地）。
+    /// </summary>
+    public static readonly StyledProperty<IReadOnlyList<float>?> TcpPoseProperty =
+        AvaloniaProperty.Register<RobotViewport, IReadOnlyList<float>?>(nameof(TcpPose));
+
+    /// <inheritdoc cref="TcpPoseProperty"/>
+    public IReadOnlyList<float>? TcpPose
+    {
+        get => GetValue(TcpPoseProperty);
+        set => SetValue(TcpPoseProperty, value);
+    }
+
+    /// <summary>
     /// 视口顶部被界面覆盖层占掉的高度（逻辑像素）—— 例如 3D 卡片右上角那块「机械臂状态」HUD。
     ///
     /// <para>
@@ -199,6 +218,20 @@ public sealed class RobotViewport : OpenGlControlBase
     {
         get => GetValue(GizmoTopInsetProperty);
         set => SetValue(GizmoTopInsetProperty, value);
+    }
+
+    /// <summary>
+    /// 是否显示感知点云图层（默认显示）。关掉只隐藏点云节点，不影响机械臂模型；
+    /// 点云在真机上可能与机械臂网格发生遮挡/深度冲突而看起来"闪"，给界面一个开关去验证 / 回避。
+    /// </summary>
+    public static readonly StyledProperty<bool> ShowPointCloudProperty =
+        AvaloniaProperty.Register<RobotViewport, bool>(nameof(ShowPointCloud), defaultValue: true);
+
+    /// <inheritdoc cref="ShowPointCloudProperty"/>
+    public bool ShowPointCloud
+    {
+        get => GetValue(ShowPointCloudProperty);
+        set => SetValue(ShowPointCloudProperty, value);
     }
 
     /// <summary>GL 初始化完成（UI 线程）：携带 GPU / 版本 / 模型装配报告，供界面显示或记日志。</summary>
@@ -260,6 +293,40 @@ public sealed class RobotViewport : OpenGlControlBase
 
         if (change.Property == JointValuesProperty)
             OnJointValuesChanged();
+        else if (change.Property == TcpPoseProperty)
+            OnTcpPoseChanged();
+        else if (change.Property == ShowPointCloudProperty)
+        {
+            ApplyPointCloudVisibility();
+            RequestNextFrameRendering();
+        }
+    }
+
+    /// <summary>把绑定进来的 TCP 位姿拷成私有快照放进邮箱（null / 不足 6 维 = 隐藏）。</summary>
+    private void OnTcpPoseChanged()
+    {
+        float[]? snapshot = null;
+        if (TcpPose is { Count: >= 6 } values)
+        {
+            snapshot = new float[6];
+            for (int i = 0; i < 6; i++)
+                snapshot[i] = values[i];
+        }
+
+        lock (_tcpLock)
+        {
+            _pendingTcp = snapshot;
+            _hasPendingTcp = true;
+        }
+
+        RequestNextFrameRendering();
+    }
+
+    /// <summary>把点云节点的可见性对齐到开关（有数据且开关为开才显示）。</summary>
+    private void ApplyPointCloudVisibility()
+    {
+        if (_robotScene is { } scene)
+            scene.PointCloud.Node.Visible = ShowPointCloud && scene.PointCloud.Count > 0;
     }
 
     /// <summary>
@@ -388,7 +455,23 @@ public sealed class RobotViewport : OpenGlControlBase
         {
             _lastCloud = cloud;
             _robotScene.ApplyPointCloudFrame(cloud);
+            // Apply 会把节点置为可见，这里再按开关收一次（关掉点云时不显示）。
+            ApplyPointCloudVisibility();
         }
+
+        // 取走本帧的 TCP 位姿（取走即置空）。tcpPending=true 时 tcp 为 null 表示「隐藏」。
+        bool tcpPending;
+        float[]? tcp;
+        lock (_tcpLock)
+        {
+            tcpPending = _hasPendingTcp;
+            tcp = _pendingTcp;
+            _hasPendingTcp = false;
+            _pendingTcp = null;
+        }
+
+        if (tcpPending)
+            _robotScene.ApplyTcpPose(tcp);
 
         TimeSpan now = _clock.Elapsed;
         double deltaSeconds = Math.Clamp((now - _lastFrameTime).TotalSeconds, 0, 0.25);
@@ -523,6 +606,9 @@ public sealed class RobotViewport : OpenGlControlBase
         // 重挂回来的视口要立刻显示【当前】关节角：邮箱在上一份生命期里被取走后是空的，
         // 而下一帧状态未必马上到（未连后端时根本不会来），模型就会停在库的默认姿态上。
         OnJointValuesChanged();
+
+        // TCP 坐标系同理：重挂后先按当前绑定值补一发，不然要等下一帧状态才出现。
+        OnTcpPoseChanged();
     }
 
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
