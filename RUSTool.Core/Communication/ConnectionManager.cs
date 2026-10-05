@@ -23,6 +23,8 @@ internal sealed class ConnectionManager : IDisposable
     private ClientWebSocket? _controlWs;
     private ClientWebSocket? _stateWs;
     private ClientWebSocket? _sensorWs;
+    private ClientWebSocket? _meshWs;
+    private ClientWebSocket? _pcmapWs;
     private CancellationTokenSource? _controlCts;
     private Task? _controlLoopTask;
     private bool _controlRequested;
@@ -36,6 +38,10 @@ internal sealed class ConnectionManager : IDisposable
     public event Action<ReadOnlyMemory<byte>>? StateMessageReceived;
     /// <summary>/sensor 通道收到整帧二进制（原样字节，未解码）</summary>
     public event Action<ReadOnlyMemory<byte>>? SensorMessageReceived;
+    /// <summary>/mesh 通道收到整帧二进制（原样字节，未解码）</summary>
+    public event Action<ReadOnlyMemory<byte>>? MeshMessageReceived;
+    /// <summary>/pcmap 通道收到整帧二进制（原样字节，未解码）</summary>
+    public event Action<ReadOnlyMemory<byte>>? PcMapMessageReceived;
     /// <summary>/control 连上通知（含重连成功后）</summary>
     public event Action? ControlConnected;
     /// <summary>/control 断线通知（重连由本类内部负责）</summary>
@@ -44,6 +50,10 @@ internal sealed class ConnectionManager : IDisposable
     public event Action? StateDisconnected;
     /// <summary>/sensor 断线通知（重连由 BridgeClient 负责）</summary>
     public event Action? SensorDisconnected;
+    /// <summary>/mesh 断线通知（重连由 BridgeClient 负责）</summary>
+    public event Action? MeshDisconnected;
+    /// <summary>/pcmap 断线通知（重连由 BridgeClient 负责）</summary>
+    public event Action? PcMapDisconnected;
 
     public ConnectionManager(string host, ushort port)
     {
@@ -102,6 +112,34 @@ internal sealed class ConnectionManager : IDisposable
         _ = Task.Run(() => SensorReceiveLoopAsync(ws, ct), CancellationToken.None);
     }
 
+    /// <summary>建立 /mesh 连接（单次尝试，不做自动重连）。</summary>
+    public async Task ConnectMeshAsync(CancellationToken ct)
+    {
+        await DisconnectMeshAsync();
+        var ws = await ConnectAsync(Channels.Mesh, ct);
+        if (ct.IsCancellationRequested)
+        {
+            await CloseAsync(ws);
+            throw new OperationCanceledException(ct);
+        }
+        _meshWs = ws;
+        _ = Task.Run(() => MeshReceiveLoopAsync(ws, ct), CancellationToken.None);
+    }
+
+    /// <summary>建立 /pcmap 连接（单次尝试，不做自动重连）。</summary>
+    public async Task ConnectPcMapAsync(CancellationToken ct)
+    {
+        await DisconnectPcMapAsync();
+        var ws = await ConnectAsync(Channels.PcMap, ct);
+        if (ct.IsCancellationRequested)
+        {
+            await CloseAsync(ws);
+            throw new OperationCanceledException(ct);
+        }
+        _pcmapWs = ws;
+        _ = Task.Run(() => PcMapReceiveLoopAsync(ws, ct), CancellationToken.None);
+    }
+
     /// <summary>沿 /control 通道发送整帧文本。</summary>
     public async Task SendAsync(ReadOnlyMemory<byte> data, CancellationToken ct = default)
     {
@@ -131,6 +169,26 @@ internal sealed class ConnectionManager : IDisposable
         await CloseAsync(ws);
     }
 
+    /// <summary>断开 /mesh 通道。</summary>
+    public async Task DisconnectMeshAsync()
+    {
+        var ws = _meshWs;
+        if (ws is null)
+            return;
+        _meshWs = null;
+        await CloseAsync(ws);
+    }
+
+    /// <summary>断开 /pcmap 通道。</summary>
+    public async Task DisconnectPcMapAsync()
+    {
+        var ws = _pcmapWs;
+        if (ws is null)
+            return;
+        _pcmapWs = null;
+        await CloseAsync(ws);
+    }
+
     /// <summary>断开所有通道，停止重连循环。</summary>
     public void DisconnectAll()
     {
@@ -147,6 +205,10 @@ internal sealed class ConnectionManager : IDisposable
         _stateWs = null;
         _sensorWs?.Dispose();
         _sensorWs = null;
+        _meshWs?.Dispose();
+        _meshWs = null;
+        _pcmapWs?.Dispose();
+        _pcmapWs = null;
     }
 
     // ────────────── 内部 ──────────────
@@ -293,6 +355,50 @@ internal sealed class ConnectionManager : IDisposable
         finally
         {
             SensorDisconnected?.Invoke();
+            ws.Dispose();
+        }
+    }
+
+    /// <summary>/mesh 接收循环（与 /sensor 同构：二进制、可能几 MB）。</summary>
+    private async Task MeshReceiveLoopAsync(ClientWebSocket ws, CancellationToken ct)
+    {
+        try
+        {
+            while (ws.State == WebSocketState.Open && !ct.IsCancellationRequested)
+            {
+                var frame = await ReceiveFrameAsync(ws, ct);
+                if (frame is null)
+                    break;
+                MeshMessageReceived?.Invoke(frame.Value);
+            }
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception) { }
+        finally
+        {
+            MeshDisconnected?.Invoke();
+            ws.Dispose();
+        }
+    }
+
+    /// <summary>/pcmap 接收循环（线格式同 /sensor）。</summary>
+    private async Task PcMapReceiveLoopAsync(ClientWebSocket ws, CancellationToken ct)
+    {
+        try
+        {
+            while (ws.State == WebSocketState.Open && !ct.IsCancellationRequested)
+            {
+                var frame = await ReceiveFrameAsync(ws, ct);
+                if (frame is null)
+                    break;
+                PcMapMessageReceived?.Invoke(frame.Value);
+            }
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception) { }
+        finally
+        {
+            PcMapDisconnected?.Invoke();
             ws.Dispose();
         }
     }

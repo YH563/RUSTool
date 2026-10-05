@@ -38,6 +38,9 @@ public sealed class RobotScene : IDisposable
     /// <summary>TCP 坐标系（三色箭头，rviz 风格）：默认隐藏，收到有效 TCP 位姿才显示、随后实时跟随。</summary>
     private readonly Axes _tcpAxes;
 
+    /// <summary>增量网格接收端（<c>/mesh</c>）；块节点由它在场景里创建 / 替换 / 删除。</summary>
+    private readonly MeshSink _meshSink;
+
     private RobotScene(SceneGraph graph)
     {
         Graph = graph;
@@ -46,6 +49,14 @@ public sealed class RobotScene : IDisposable
         // 结构一次性定下来，此后整份生命期只管往里灌数据 —— 见 PointCloudLayer 的注释。
         PointCloud = new PointCloudLayer();
         graph.Add(PointCloud.Node);
+
+        // 面元点云图（/pcmap，重建融合地图）：与 /sensor 分开一层，默认隐藏。
+        PcMap = new PointCloudLayer(pointSize: 2.0f);
+        PcMap.Node.Visible = false;
+        graph.Add(PcMap.Node);
+
+        // 增量网格（/mesh）：库的 MeshSink 负责在场景里建 / 换 / 删块节点。
+        _meshSink = new MeshSink(graph, null, true);
 
         // TCP 坐标系：库自带的 Axes（+X 红 / +Y 绿 / +Z 蓝）。用「恒定屏幕尺寸 + 永远可见」
         // 当一个小标记 —— 它是给操作者指 TCP 朝向的，不该被机械臂本体挡住、也不该随镜头变大变小。
@@ -66,6 +77,12 @@ public sealed class RobotScene : IDisposable
     /// 相机取景刻意不看它：临床场景里点云可能铺得比机械臂大得多，按整机取景才看得清姿态。
     /// </summary>
     public PointCloudLayer PointCloud { get; }
+
+    /// <summary>
+    /// 面元点云图图层（<c>/pcmap</c>）——重建的融合点云地图（去噪 / 带置信度）。
+    /// 与 <see cref="PointCloud"/>（原始 <c>/sensor</c>）分开一层，默认隐藏。
+    /// </summary>
+    public PointCloudLayer PcMap { get; }
 
     /// <summary>实际加载的机器人模型；未加载到模型时为 null（场景只剩网格与坐标轴）。</summary>
     public RobotModel? Robot { get; private set; }
@@ -144,6 +161,68 @@ public sealed class RobotScene : IDisposable
     /// </summary>
     /// <returns>true = 已落地；false = 帧不自洽（已丢弃并计数）。</returns>
     public bool ApplyPointCloudFrame(PointCloudFrame frame) => PointCloud.Apply(frame);
+
+    /// <summary>用一帧面元点云图整帧替换（<c>/pcmap</c>）。属主线程调用。</summary>
+    public bool ApplyPcMapFrame(PointCloudFrame frame) => PcMap.Apply(frame);
+
+    /// <summary>清空并隐藏面元点云图。属主线程调用。</summary>
+    public void ClearPcMap() => PcMap.Clear();
+
+    /// <summary>
+    /// 应用一帧增量网格（<c>/mesh</c>）：把每个块换算成库的 <see cref="MeshChunkUpdate"/>
+    /// 推进 <see cref="MeshSink"/>，再在场景边界 <c>Apply()</c> 一次。属主线程调用。
+    /// </summary>
+    public void ApplyMeshFrame(MeshFrameData frame)
+    {
+        foreach (MeshChunkData chunk in frame.Chunks)
+        {
+            if (chunk.Remove)
+            {
+                _meshSink.Push(MeshChunkUpdate.Remove(chunk.Id));
+                continue;
+            }
+
+            int verts = chunk.Positions.Length / 3;
+            if (verts <= 0)
+                continue;
+
+            // 库的顶点布局是交错的 pos3 | uv2 | normal3 | tangent3（11 floats/顶点）；
+            // 协议只给 pos + 可选 normal，其余占位。三角汤 → 隐式索引 0..verts-1。
+            var interleaved = new float[verts * 11];
+            for (int v = 0; v < verts; v++)
+            {
+                int o = v * 11;
+                interleaved[o + 0] = chunk.Positions[v * 3 + 0];
+                interleaved[o + 1] = chunk.Positions[v * 3 + 1];
+                interleaved[o + 2] = chunk.Positions[v * 3 + 2];
+                if (chunk.Normals is { } normals)
+                {
+                    interleaved[o + 5] = normals[v * 3 + 0];
+                    interleaved[o + 6] = normals[v * 3 + 1];
+                    interleaved[o + 7] = normals[v * 3 + 2];
+                }
+                else
+                {
+                    interleaved[o + 7] = 1f; // 无法线时给 (0,0,1)
+                }
+            }
+
+            var indices = new uint[verts];
+            for (int i = 0; i < verts; i++)
+                indices[i] = (uint)i;
+
+            var origin = new Vector3(chunk.OriginX, chunk.OriginY, chunk.OriginZ);
+            _meshSink.Push(new MeshChunkUpdate(chunk.Id, origin, interleaved, indices, chunk.Revision, null));
+        }
+
+        _meshSink.Apply();
+    }
+
+    /// <summary>移除全部网格块（关闭 /mesh 显示时用）。属主线程调用。</summary>
+    public void ClearMesh() => _meshSink.Clear();
+
+    /// <summary>当前网格块数（诊断用）。</summary>
+    public long MeshChunkCount => _meshSink.ChunkCount;
 
     /// <summary>
     /// 相机复位：库的默认机位 + 对准整机。

@@ -24,7 +24,8 @@ public static class BridgeProtocol
         bool Success,
         string Message,
         double[] Result,
-        string[]? Strings = null); // 文本结果（协议 v0.4）：recorder/replay 的文件名清单等
+        string[]? Strings = null, // 文本结果（协议 v0.4）：recorder/replay 的文件名清单等
+        uint ErrorCode = 0);      // 结构化错误码（1xxx 协议/路由、2xxx 领域；0 = 成功）
 
     // ---- 状态帧（/state 通道）----
     /// <summary>

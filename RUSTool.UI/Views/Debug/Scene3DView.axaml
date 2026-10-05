@@ -41,7 +41,9 @@
             <!-- ② 3D 视口：关节角与 TCP 位姿都来自状态帧；初始化失败时它自己隐藏，不去打扰上面那层 -->
             <viz:RobotViewport x:Name="Viewport"
                                JointValues="{Binding Status.JointsRadians}"
-                               TcpPose="{Binding Status.TcpPose}" />
+                               TcpPose="{Binding Status.TcpPose}"
+                               ShowPcMap="{Binding ShowPcMap}"
+                               ShowMesh="{Binding ShowMesh}" />
 
             <!-- ③ 角标：GPU / 模型 / FPS / 拾取。左对齐 + 省略号，窄面板里也不会撑破卡片 -->
             <TextBlock x:Name="ViewportStatus"

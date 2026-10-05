@@ -20,6 +20,9 @@ public interface IRobotService : IDisposable
     /// <summary>最新一帧点云（只保留最新；未开流 / 未收到时为 null）</summary>
     SensorPointCloudFrame? LatestSensorFrame { get; }
 
+    /// <summary>最新一帧面元点云图（<c>/pcmap</c>；只保留最新；未开流 / 未收到时为 null）</summary>
+    SensorPointCloudFrame? LatestPcMap { get; }
+
     /// <summary>连接 / 断线通知</summary>
     event Action<bool>? ConnectionChanged;
 
@@ -31,6 +34,12 @@ public interface IRobotService : IDisposable
     /// 回调里只该把帧交给渲染侧的邮箱，不要在这里等锁 / 做重活。
     /// </summary>
     event Action<SensorPointCloudFrame>? SensorFrameReceived;
+
+    /// <summary>增量网格帧（<c>/mesh</c> 通道，**后台线程**触发）。</summary>
+    event Action<MeshFrame>? MeshFrameReceived;
+
+    /// <summary>面元点云图（<c>/pcmap</c> 通道，**后台线程**触发；解码后与 /sensor 同形）。</summary>
+    event Action<SensorPointCloudFrame>? PcMapFrameReceived;
 
     /// <summary>异步事件（长任务完成通知，如 plan_done）</summary>
     event Action<EventNotification>? EventReceived;
@@ -52,6 +61,18 @@ public interface IRobotService : IDisposable
 
     /// <summary>关闭 /sensor 感知流。</summary>
     void StopSensorStream();
+
+    /// <summary>开启 /mesh 增量网格流（可靠有序；默认关）。</summary>
+    void StartMeshStream();
+
+    /// <summary>关闭 /mesh 增量网格流。</summary>
+    void StopMeshStream();
+
+    /// <summary>开启 /pcmap 面元点云图流（覆盖式）。</summary>
+    void StartPcMapStream();
+
+    /// <summary>关闭 /pcmap 面元点云图流。</summary>
+    void StopPcMapStream();
 
     /// <summary>下发任意指令（扩展用）。<paramref name="text"/> 是字符串参数通道（协议 v0.5）。</summary>
     Task<CommandResult> SendAsync(string cmd, double[]? args = null,
@@ -100,17 +121,26 @@ public interface IRobotService : IDisposable
 
     // ── 扫查流程 ──
 
-    /// <summary>开始预扫描。</summary>
+    /// <summary>开始预扫描（后端兼容别名，空操作确认）。</summary>
     Task<CommandResult> PreScanStartAsync();
 
-    /// <summary>结束预扫描。</summary>
+    /// <summary>结束预扫描（后端兼容别名，等价 <see cref="PreScanDoneAsync"/>）。</summary>
     Task<CommandResult> PreScanEndAsync();
 
-    /// <summary>记录当前位姿为扫查起点。</summary>
-    Task<CommandResult> SetStartPoseAsync();
+    /// <summary>
+    /// 半自动建图完成（前端下发，路由到 PLANNING）：planning 抓地图快照初始化后才放行 <c>plan</c>。
+    /// 这是对齐后的正式入口；<see cref="PreScanEndAsync"/> 保留为兼容别名。
+    /// </summary>
+    Task<CommandResult> PreScanDoneAsync();
 
-    /// <summary>记录当前位姿为扫查终点。</summary>
-    Task<CommandResult> SetEndPoseAsync();
+    /// <summary>
+    /// 设置扫查起点。<paramref name="pose"/> = <c>[x,y,z,(rx,ry,rz)?]</c>（m/rad，固定轴 XYZ）；
+    /// <c>null</c> / 空数组 = 无参，由后端用当前 TCP 位姿（"记录当前位姿为起点"）。
+    /// </summary>
+    Task<CommandResult> SetStartPoseAsync(double[]? pose = null);
+
+    /// <summary>设置扫查终点（参数口径同 <see cref="SetStartPoseAsync"/>）。</summary>
+    Task<CommandResult> SetEndPoseAsync(double[]? pose = null);
 
     /// <summary>开始路径规划。</summary>
     Task<CommandResult> PlanAsync();

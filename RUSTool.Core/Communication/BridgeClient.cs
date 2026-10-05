@@ -31,6 +31,15 @@ public sealed class BridgeClient : IDisposable
     private int _sensorLoopRunning;
     private volatile bool _sensorStreamEnabled;
     private long _sensorDecodeFailures;
+    private CancellationTokenSource? _meshCts;
+    private int _meshLoopRunning;
+    private volatile bool _meshStreamEnabled;
+    private long _meshDecodeFailures;
+    private SensorPointCloudFrame? _latestPcMap;
+    private CancellationTokenSource? _pcmapCts;
+    private int _pcmapLoopRunning;
+    private volatile bool _pcmapStreamEnabled;
+    private long _pcmapDecodeFailures;
     private volatile bool _disposed;
 
     public BridgeClient(string host = "127.0.0.1", ushort port = 8765)
@@ -39,10 +48,14 @@ public sealed class BridgeClient : IDisposable
         _connection.ControlMessageReceived += OnControlMessage;
         _connection.StateMessageReceived += OnStateMessage;
         _connection.SensorMessageReceived += OnSensorMessage;
+        _connection.MeshMessageReceived += OnMeshMessage;
+        _connection.PcMapMessageReceived += OnPcMapMessage;
         _connection.ControlConnected += () => ConnectionChanged?.Invoke(true);
         _connection.ControlDisconnected += OnControlDisconnected;
         _connection.StateDisconnected += OnStateDisconnected;
         _connection.SensorDisconnected += OnSensorDisconnected;
+        _connection.MeshDisconnected += OnMeshDisconnected;
+        _connection.PcMapDisconnected += OnPcMapDisconnected;
     }
 
     /// <summary>/control 是否在线</summary>
@@ -64,11 +77,20 @@ public sealed class BridgeClient : IDisposable
     /// </summary>
     public event Action<SensorPointCloudFrame>? SensorFrameReceived;
 
+    /// <summary>增量网格帧（<c>/mesh</c> 通道）。回调在 WebSocket 线程触发。</summary>
+    public event Action<MeshFrame>? MeshFrameReceived;
+
+    /// <summary>面元点云图（<c>/pcmap</c> 通道；解码后与 <c>/sensor</c> 同一个形状）。回调在 WebSocket 线程触发。</summary>
+    public event Action<SensorPointCloudFrame>? PcMapFrameReceived;
+
     /// <summary>最新一帧状态（只保留最新）</summary>
     public BridgeProtocol.StateFrame? LatestState => _latestState;
 
     /// <summary>最新一帧点云（只保留最新；未开流 / 未收到时为 null）</summary>
     public SensorPointCloudFrame? LatestSensorFrame => _latestSensorFrame;
+
+    /// <summary>最新一帧面元点云图（只保留最新；未开流 / 未收到时为 null）</summary>
+    public SensorPointCloudFrame? LatestPcMap => _latestPcMap;
 
 
     /// <summary>指令日志回调（message, isError），由组装层注入，例如接到全局日志服务。</summary>
@@ -129,6 +151,45 @@ public sealed class BridgeClient : IDisposable
         _ = DisconnectSensorAsyncSafely();
     }
 
+    /// <summary>开启 /mesh 增量网格流（可靠有序；默认关，需要时调用）。</summary>
+    public void StartMeshStream()
+    {
+        ThrowIfDisposed();
+        if (_meshStreamEnabled)
+            return;
+        _meshStreamEnabled = true;
+        _meshCts = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token);
+        StartMeshLoop();
+    }
+
+    /// <summary>关闭 /mesh 增量网格流。</summary>
+    public void StopMeshStream()
+    {
+        _meshStreamEnabled = false;
+        _meshCts?.Cancel();
+        _ = DisconnectMeshAsyncSafely();
+    }
+
+    /// <summary>开启 /pcmap 面元点云图流（覆盖式）。</summary>
+    public void StartPcMapStream()
+    {
+        ThrowIfDisposed();
+        if (_pcmapStreamEnabled)
+            return;
+        _pcmapStreamEnabled = true;
+        _pcmapCts = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token);
+        StartPcMapLoop();
+    }
+
+    /// <summary>关闭 /pcmap 面元点云图流。</summary>
+    public void StopPcMapStream()
+    {
+        _pcmapStreamEnabled = false;
+        _pcmapCts?.Cancel();
+        _latestPcMap = null;
+        _ = DisconnectPcMapAsyncSafely();
+    }
+
     /// <summary>
     /// 下发指令并等待回执（阻塞式）。
     /// 超时（默认 5000ms）未收到 reply → Success=false, Message="timeout"。
@@ -142,7 +203,8 @@ public sealed class BridgeClient : IDisposable
 
         var result = await SendCoreAsync(cmd, args, timeoutMs, ct, text);
 
-        Logger?.Invoke($"← 指令 {cmd} 结果: {(result.Success ? "成功" : "失败")} - {result.Message}",
+        string code = !result.Success && result.ErrorCode != 0 ? $" (code {result.ErrorCode})" : "";
+        Logger?.Invoke($"← 指令 {cmd} 结果: {(result.Success ? "成功" : "失败")} - {result.Message}{code}",
             !result.Success);
         return result;
     }
@@ -196,6 +258,11 @@ public sealed class BridgeClient : IDisposable
         _sensorStreamEnabled = false;
         _sensorCts?.Cancel();
         _latestSensorFrame = null;
+        _meshStreamEnabled = false;
+        _meshCts?.Cancel();
+        _pcmapStreamEnabled = false;
+        _pcmapCts?.Cancel();
+        _latestPcMap = null;
         _connection.DisconnectAll();
         ConnectionChanged?.Invoke(false);
     }
@@ -210,10 +277,14 @@ public sealed class BridgeClient : IDisposable
         _cts.Cancel();
         _stateCts?.Cancel();
         _sensorCts?.Cancel();
+        _meshCts?.Cancel();
+        _pcmapCts?.Cancel();
         _connection.DisconnectAll();
         FailAllPending("client disposed");
         _stateCts?.Dispose();
         _sensorCts?.Dispose();
+        _meshCts?.Dispose();
+        _pcmapCts?.Dispose();
         _cts.Dispose();
     }
 
@@ -229,7 +300,7 @@ public sealed class BridgeClient : IDisposable
         if (msg.Type == "reply")
         {
             if (_pending.TryRemove(msg.Id, out var tcs))
-                tcs.TrySetResult(new CommandResult(msg.Success, msg.Message, msg.Result, msg.Strings ?? []));
+                tcs.TrySetResult(new CommandResult(msg.Success, msg.Message, msg.Result, msg.Strings ?? [], msg.ErrorCode));
         }
         else if (msg.Type == "event")
         {
@@ -270,6 +341,40 @@ public sealed class BridgeClient : IDisposable
         SensorFrameReceived?.Invoke(frame);
     }
 
+    /// <summary>
+    /// /mesh 整帧到达：在 WebSocket 线程解码成纯数据的 <see cref="MeshFrame"/>。
+    /// 坏帧只记不抛（与 /sensor 同一约定，首帧 + 每 100 次记一条，不刷屏）。
+    /// </summary>
+    private void OnMeshMessage(ReadOnlyMemory<byte> data)
+    {
+        var frame = MeshFrameCodec.TryDecode(data, out string? error);
+        if (frame is null)
+        {
+            long failures = Interlocked.Increment(ref _meshDecodeFailures);
+            if (failures == 1 || failures % 100 == 0)
+                Logger?.Invoke($"网格帧解码失败（第 {failures} 次）：{error}", true);
+            return;
+        }
+
+        MeshFrameReceived?.Invoke(frame);
+    }
+
+    /// <summary>/pcmap 整帧到达：线格式同 /sensor，复用同一解码器（<c>scope=map</c>）。</summary>
+    private void OnPcMapMessage(ReadOnlyMemory<byte> data)
+    {
+        var frame = SensorFrameCodec.TryDecode(data, out string? error);
+        if (frame is null)
+        {
+            long failures = Interlocked.Increment(ref _pcmapDecodeFailures);
+            if (failures == 1 || failures % 100 == 0)
+                Logger?.Invoke($"面元点云帧解码失败（第 {failures} 次）：{error}", true);
+            return;
+        }
+
+        _latestPcMap = frame;
+        PcMapFrameReceived?.Invoke(frame);
+    }
+
     private void OnControlDisconnected()
     {
         ConnectionChanged?.Invoke(false);
@@ -288,6 +393,18 @@ public sealed class BridgeClient : IDisposable
         // 感知流断线后自动重连（直到 StopSensorStream / Dispose）
         if (_sensorStreamEnabled && !_disposed)
             StartSensorLoop();
+    }
+
+    private void OnMeshDisconnected()
+    {
+        if (_meshStreamEnabled && !_disposed)
+            StartMeshLoop();
+    }
+
+    private void OnPcMapDisconnected()
+    {
+        if (_pcmapStreamEnabled && !_disposed)
+            StartPcMapLoop();
     }
 
     /// <summary>
@@ -404,6 +521,86 @@ public sealed class BridgeClient : IDisposable
         }
     }
 
+    // ── /mesh 与 /pcmap 的重连循环（与 /sensor 同一套） ──
+
+    private void StartMeshLoop()
+    {
+        if (Interlocked.Exchange(ref _meshLoopRunning, 1) != 0)
+            return;
+        _ = Task.Run(MeshStreamLoopAsync, CancellationToken.None);
+    }
+
+    private async Task MeshStreamLoopAsync()
+    {
+        try
+        {
+            var cts = _meshCts;
+            while (_meshStreamEnabled && !_disposed && cts is not null)
+            {
+                try
+                {
+                    await _connection.ConnectMeshAsync(cts.Token).ConfigureAwait(false);
+                    return; // 连上后由 MeshDisconnected 驱动下一次连接
+                }
+                catch (OperationCanceledException) { return; }
+                catch (Exception)
+                {
+                    try { await Task.Delay(1000, cts.Token).ConfigureAwait(false); }
+                    catch (OperationCanceledException) { return; }
+                }
+            }
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _meshLoopRunning, 0);
+        }
+    }
+
+    private void StartPcMapLoop()
+    {
+        if (Interlocked.Exchange(ref _pcmapLoopRunning, 1) != 0)
+            return;
+        _ = Task.Run(PcMapStreamLoopAsync, CancellationToken.None);
+    }
+
+    private async Task PcMapStreamLoopAsync()
+    {
+        try
+        {
+            var cts = _pcmapCts;
+            while (_pcmapStreamEnabled && !_disposed && cts is not null)
+            {
+                try
+                {
+                    await _connection.ConnectPcMapAsync(cts.Token).ConfigureAwait(false);
+                    return;
+                }
+                catch (OperationCanceledException) { return; }
+                catch (Exception)
+                {
+                    try { await Task.Delay(1000, cts.Token).ConfigureAwait(false); }
+                    catch (OperationCanceledException) { return; }
+                }
+            }
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _pcmapLoopRunning, 0);
+        }
+    }
+
+    private async Task DisconnectMeshAsyncSafely()
+    {
+        try { await _connection.DisconnectMeshAsync().ConfigureAwait(false); }
+        catch (Exception) { }
+    }
+
+    private async Task DisconnectPcMapAsyncSafely()
+    {
+        try { await _connection.DisconnectPcMapAsync().ConfigureAwait(false); }
+        catch (Exception) { }
+    }
+
     private void FailAllPending(string message)
     {
         foreach (var (id, tcs) in _pending)
@@ -424,7 +621,7 @@ public sealed class BridgeClient : IDisposable
 /// 指令回执（对上层友好的返回值封装）。<see cref="Strings"/> 是文本结果
 /// （协议 v0.4）：recorder / replay 的「文件名清单 / 当前文件名」等都从这里取。
 /// </summary>
-public sealed record CommandResult(bool Success, string Message, double[] Result, string[] Strings);
+public sealed record CommandResult(bool Success, string Message, double[] Result, string[] Strings, uint ErrorCode = 0);
 
 /// <summary>异步事件通知（对上层友好的返回值封装）</summary>
 public sealed record EventNotification(string EventName, bool Success, string Message);

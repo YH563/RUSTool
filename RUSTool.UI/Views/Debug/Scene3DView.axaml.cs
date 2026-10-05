@@ -7,6 +7,7 @@ using RUSTool.Visualization.Controls;
 using RUSTool.Visualization.Scene;
 using System;
 using System.Threading;
+using Viz = RUSTool.Visualization.Scene;
 
 namespace RUSTool.UI.Views.Debug;
 
@@ -148,6 +149,8 @@ public partial class Scene3DView : UserControl
             _wiredViewModel = viewModel;
             viewModel.ViewResetRequested += OnViewResetRequested;
             viewModel.PointCloudFrameReceived += OnPointCloudFrame;
+            viewModel.PcMapFrameReceived += OnPcMapFrame;
+            viewModel.MeshFrameReceived += OnMeshFrame;
             _log = viewModel.LogService;
         }
     }
@@ -158,6 +161,8 @@ public partial class Scene3DView : UserControl
         {
             _wiredViewModel.ViewResetRequested -= OnViewResetRequested;
             _wiredViewModel.PointCloudFrameReceived -= OnPointCloudFrame;
+            _wiredViewModel.PcMapFrameReceived -= OnPcMapFrame;
+            _wiredViewModel.MeshFrameReceived -= OnMeshFrame;
             _wiredViewModel = null;
         }
 
@@ -194,5 +199,27 @@ public partial class Scene3DView : UserControl
             Console.Error.WriteLine($"[3d] {line}");
             _log?.Log(line, LogLevel.Info, LogSource);
         }
+    }
+
+    /// <summary>面元点云图（<c>/pcmap</c>，WS 线程）→ 视口的第二个点云图层。</summary>
+    private void OnPcMapFrame(SensorPointCloudFrame frame)
+        => Viewport.SubmitPcMap(new PointCloudFrame(
+            frame.Xyz, frame.Rgb, frame.Count, frame.Seq, frame.Scope, frame.Timestamp));
+
+    /// <summary>
+    /// 增量网格（<c>/mesh</c>，WS 线程）→ 适配成图形栈自己的 <see cref="Viz.MeshFrameData"/>
+    /// （两个工程互不认识，适配点只能在这里）→ 丢进视口邮箱。
+    /// </summary>
+    private void OnMeshFrame(MeshFrame frame)
+    {
+        var chunks = new Viz.MeshChunkData[frame.Chunks.Count];
+        for (int i = 0; i < chunks.Length; i++)
+        {
+            Communication.MeshChunkData c = frame.Chunks[i];
+            chunks[i] = new Viz.MeshChunkData(
+                c.Id, c.Remove, c.OriginX, c.OriginY, c.OriginZ, c.Revision, c.TriangleCount, c.Positions, c.Normals);
+        }
+
+        Viewport.SubmitMesh(new Viz.MeshFrameData(chunks));
     }
 }

@@ -163,8 +163,12 @@ public sealed partial class ScanWorkflowViewModel : ViewModelBase
     [RelayCommand]
     private Task StartPreScan() => FireThenSend(ScanTrigger.StartPreScan, "pre_scan_start", _robot.PreScanStartAsync);
 
+    /// <summary>
+    /// 结束预扫查 = 半自动建图完成：发 <c>pre_scan_done</c>（对齐后的正式入口，
+     /// planning 抓地图快照初始化轨迹生成器；<c>pre_scan_end</c> 只是后端兼容别名）。
+    /// </summary>
     [RelayCommand]
-    private Task EndPreScan() => FireThenSend(ScanTrigger.EndPreScan, "pre_scan_end", _robot.PreScanEndAsync);
+    private Task EndPreScan() => FireThenSend(ScanTrigger.EndPreScan, "pre_scan_done", _robot.PreScanDoneAsync);
 
     /// <summary>开始规划：状态先到 Planning，步骤推进由 <c>plan_done</c> 事件完成。</summary>
     [RelayCommand]
@@ -204,13 +208,25 @@ public sealed partial class ScanWorkflowViewModel : ViewModelBase
         }
     }
 
-    /// <summary>选起点：短指令，以回执为准 —— 成功才标记。</summary>
+    /// <summary>选起点：带上当前 TCP 位姿（对齐计划 F2）；短指令，以回执为准 —— 成功才标记。</summary>
     [RelayCommand]
-    private Task SetStartPose() => SendThenFire(ScanTrigger.SetStartPose, "set_start_pose", _robot.SetStartPoseAsync);
+    private Task SetStartPose()
+        => SendThenFire(ScanTrigger.SetStartPose, "set_start_pose", () => _robot.SetStartPoseAsync(CurrentTcpPose()));
 
     /// <summary>选终点：同起点。</summary>
     [RelayCommand]
-    private Task SetEndPose() => SendThenFire(ScanTrigger.SetEndPose, "set_end_pose", _robot.SetEndPoseAsync);
+    private Task SetEndPose()
+        => SendThenFire(ScanTrigger.SetEndPose, "set_end_pose", () => _robot.SetEndPoseAsync(CurrentTcpPose()));
+
+    /// <summary>
+    /// 当前 TCP 位姿（基坐标，m/rad），用作起终点的 args（对齐计划 F2）；
+    /// 取不到（未连后端 / 字段不全）时返回 null —— 后端会退回"用当前 TCP 位姿"。
+    /// </summary>
+    private double[]? CurrentTcpPose()
+    {
+        double[]? pose = _robot.LatestState?.ToolPose;
+        return pose is { Length: >= 3 } ? pose : null;
+    }
 
     [RelayCommand]
     private async Task Pause()

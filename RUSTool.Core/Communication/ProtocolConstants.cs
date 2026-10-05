@@ -13,6 +13,12 @@ public static class Channels
 
     /// <summary>感知二进制帧（可丢帧，覆盖式：只发最新一帧）</summary>
     public const string Sensor = "/sensor";
+
+    /// <summary>增量网格块帧（可靠有序队列，不丢块；默认关）</summary>
+    public const string Mesh = "/mesh";
+
+    /// <summary>面元点云图（重建融合地图快照，覆盖式；线格式同 /sensor）</summary>
+    public const string PcMap = "/pcmap";
 }
 
 /// <summary>指令名（与后端 string_consts.hpp 的 CmdName 对齐）</summary>
@@ -24,6 +30,23 @@ public static class Commands
     public const string SetMode = "set_mode";
     public const string PreScanStart = "pre_scan_start";
     public const string PreScanEnd = "pre_scan_end";
+
+    /// <summary>
+    /// 半自动建图完成（前端下发，路由到 PLANNING）：planning 抓地图快照初始化后才放行 plan。
+    /// <c>pre_scan_end</c> 是它的等价兼容别名（见 CommandAlignment_Plan F1）。
+    /// </summary>
+    public const string PreScanDone = "pre_scan_done";
+
+    // ── 感知 / 重建控制（F6：登记，按需调用） ──
+    public const string MapClear = "map_clear";
+    public const string LoadCloud = "load_cloud";
+
+    // ── 工具坐标系 / 标定 ──
+    public const string SetToolCalibPoint = "set_tool_calib_point";
+    public const string ComputeToolCalib = "compute_tool_calib";
+    public const string SetToolCoord = "set_tool_coord";
+    public const string SetToolIndex = "set_tool_index";
+    public const string GetToolCoords = "get_tool_coords";
     public const string SetStartPose = "set_start_pose";
     public const string SetEndPose = "set_end_pose";
     public const string Plan = "plan";
@@ -125,7 +148,7 @@ public static class Events
 /// <summary>感知帧类型（与后端 string_consts.hpp 的 SensorType 对齐）</summary>
 public static class SensorTypes
 {
-    /// <summary>点云（已接通：<see cref="SensorFrameCodec"/> 解码）</summary>
+    /// <summary>点云（已接通：<see cref="SensorFrameCodec"/> 解码）。<c>/pcmap</c> 也用它（<c>scope=map</c>）。</summary>
     public const string PointCloud = "pointcloud";
 
     /// <summary>图像（通道已开、解码未实现）</summary>
@@ -133,6 +156,12 @@ public static class SensorTypes
 
     /// <summary>压缩图（通道已开、解码未实现）</summary>
     public const string Compressed = "compressed";
+
+    /// <summary>增量网格块（<c>/mesh</c> 通道，<see cref="MeshFrameCodec"/> 解码）</summary>
+    public const string Mesh = "mesh";
+
+    /// <summary>超声（预留，未实现）</summary>
+    public const string Ultrasound = "ultrasound";
 }
 
 /// <summary>

@@ -130,6 +130,15 @@ public sealed class RobotViewport : OpenGlControlBase
     /// </summary>
     private PointCloudFrame? _lastCloud;
 
+    /// <summary>面元点云图（/pcmap）邮箱与最近一帧（重挂时补画）。</summary>
+    private readonly object _pcmapLock = new();
+    private PointCloudFrame? _pendingPcMap;
+    private PointCloudFrame? _lastPcMap;
+
+    /// <summary>增量网格（/mesh）邮箱（每帧一个批次，取走即置空）。</summary>
+    private readonly object _meshLock = new();
+    private MeshFrameData? _pendingMesh;
+
     /// <summary>本控件累计落地 / 被覆盖丢弃的点云帧数（只用于那行每秒诊断）。</summary>
     private long _cloudDropped;
 
@@ -234,6 +243,28 @@ public sealed class RobotViewport : OpenGlControlBase
         set => SetValue(ShowPointCloudProperty, value);
     }
 
+    /// <summary>是否显示面元点云图（<c>/pcmap</c>，重建融合地图）。默认显示（收到帧才出现）。</summary>
+    public static readonly StyledProperty<bool> ShowPcMapProperty =
+        AvaloniaProperty.Register<RobotViewport, bool>(nameof(ShowPcMap), defaultValue: true);
+
+    /// <inheritdoc cref="ShowPcMapProperty"/>
+    public bool ShowPcMap
+    {
+        get => GetValue(ShowPcMapProperty);
+        set => SetValue(ShowPcMapProperty, value);
+    }
+
+    /// <summary>是否显示增量网格（<c>/mesh</c>）。默认关（重建网格按需开）。</summary>
+    public static readonly StyledProperty<bool> ShowMeshProperty =
+        AvaloniaProperty.Register<RobotViewport, bool>(nameof(ShowMesh), defaultValue: false);
+
+    /// <inheritdoc cref="ShowMeshProperty"/>
+    public bool ShowMesh
+    {
+        get => GetValue(ShowMeshProperty);
+        set => SetValue(ShowMeshProperty, value);
+    }
+
     /// <summary>GL 初始化完成（UI 线程）：携带 GPU / 版本 / 模型装配报告，供界面显示或记日志。</summary>
     public event Action<string>? Ready;
 
@@ -287,6 +318,33 @@ public sealed class RobotViewport : OpenGlControlBase
             Dispatcher.UIThread.Post(RequestNextFrameRendering);
     }
 
+    /// <summary>递入一帧面元点云图（<c>/pcmap</c>）——可从任意线程调用（覆盖式，同 <see cref="SubmitPointCloud"/>）。</summary>
+    public void SubmitPcMap(PointCloudFrame frame)
+    {
+        lock (_pcmapLock)
+            _pendingPcMap = frame;
+
+        RequestRender();
+    }
+
+    /// <summary>递入一帧增量网格（<c>/mesh</c>）——可从任意线程调用（邮箱覆盖式保留最新一批）。</summary>
+    public void SubmitMesh(MeshFrameData frame)
+    {
+        lock (_meshLock)
+            _pendingMesh = frame;
+
+        RequestRender();
+    }
+
+    /// <summary>从任意线程请求下一帧渲染（UI 线程则直接请求）。</summary>
+    private void RequestRender()
+    {
+        if (Dispatcher.UIThread.CheckAccess())
+            RequestNextFrameRendering();
+        else
+            Dispatcher.UIThread.Post(RequestNextFrameRendering);
+    }
+
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
@@ -300,6 +358,24 @@ public sealed class RobotViewport : OpenGlControlBase
             ApplyPointCloudVisibility();
             RequestNextFrameRendering();
         }
+        else if (change.Property == ShowPcMapProperty)
+        {
+            ApplyPcMapVisibility();
+            RequestNextFrameRendering();
+        }
+        else if (change.Property == ShowMeshProperty)
+        {
+            if (!ShowMesh)
+                _robotScene?.ClearMesh(); // 关掉网格就清空块，别留着旧网格
+            RequestNextFrameRendering();
+        }
+    }
+
+    /// <summary>把面元点云图节点的可见性对齐到开关。</summary>
+    private void ApplyPcMapVisibility()
+    {
+        if (_robotScene is { } scene)
+            scene.PcMap.Node.Visible = ShowPcMap && scene.PcMap.Count > 0;
     }
 
     /// <summary>把绑定进来的 TCP 位姿拷成私有快照放进邮箱（null / 不足 6 维 = 隐藏）。</summary>
@@ -389,6 +465,11 @@ public sealed class RobotViewport : OpenGlControlBase
             // 「重挂要显示当前关节角」是同一个理由，只是这里补的是最后一帧点云。
             if (_lastCloud is { } cloud)
                 _robotScene.ApplyPointCloudFrame(cloud);
+            if (_lastPcMap is { } pcmap)
+            {
+                _robotScene.ApplyPcMapFrame(pcmap);
+                ApplyPcMapVisibility();
+            }
 
             // 库的默认机位按「几米见方」的场景设计，这里按整机包围盒重新取景（同 ResetView）。
             _robotScene.ResetView();
@@ -472,6 +553,30 @@ public sealed class RobotViewport : OpenGlControlBase
 
         if (tcpPending)
             _robotScene.ApplyTcpPose(tcp);
+
+        // 面元点云图（/pcmap）：整帧替换另一个点云图层。
+        PointCloudFrame? pcmap;
+        lock (_pcmapLock)
+        {
+            pcmap = _pendingPcMap;
+            _pendingPcMap = null;
+        }
+        if (pcmap is not null)
+        {
+            _lastPcMap = pcmap;
+            _robotScene.ApplyPcMapFrame(pcmap);
+            ApplyPcMapVisibility();
+        }
+
+        // 增量网格（/mesh）：推给 MeshSink 并在这一帧边界落地；关闭时不画（也丢帧）。
+        MeshFrameData? mesh;
+        lock (_meshLock)
+        {
+            mesh = _pendingMesh;
+            _pendingMesh = null;
+        }
+        if (mesh is not null && ShowMesh)
+            _robotScene.ApplyMeshFrame(mesh);
 
         TimeSpan now = _clock.Elapsed;
         double deltaSeconds = Math.Clamp((now - _lastFrameTime).TotalSeconds, 0, 0.25);

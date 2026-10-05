@@ -7,13 +7,15 @@
 
 ---
 
-## 0. 三条通道
+## 0. 五条通道
 
 | 通道 | 方向 | 格式 | 现状 |
 |---|---|---|---|
 | `/control` | 双向 | JSON（command / reply / event） | ✅ 已实现：必连，断线按 500ms → 10s 退避自动重连 |
 | `/state` | 服务器 → 客户端 | JSON，约 125Hz（8ms 一帧） | ✅ 已实现：按需开启，客户端只保留最新一帧 |
 | `/sensor` | 服务器 → 客户端 | 二进制帧（`uint32 LE 头长 + JSON 头 + payload`） | ✅ 点云已实现（`SensorFrameCodec`：zstd / raw + int16 反量化），覆盖式只保留最新一帧；影像 / 超声仍未解码 |
+| `/pcmap` | 服务器 → 客户端 | 同 `/sensor`（`type=pointcloud`、`scope=map`） | ✅ 已实现：重建融合点云图，复用 `SensorFrameCodec`，覆盖式 |
+| `/mesh` | 服务器 → 客户端 | 二进制帧（`uint32 头长 + JSON 头 + payload`） | ✅ 已实现：增量网格块（`MeshFrameCodec`，zstd/raw + int16 位置 / int8 法线）；可靠有序，默认关 |
 
 > 常量对照：`RUSTool.Core/Communication/ProtocolConstants.cs` 的 `Channels` / `Commands` / `Events` /
 > `SensorTypes` / `SensorEncodings` / `SensorScopes` 与本文逐条对齐；**改协议先改那份常量**，
@@ -93,7 +95,8 @@ public record RobotState
   "success": true,
   "message": "ok",
   "result":  [],
-  "strings": []
+  "strings": [],
+  "error_code": 0
 }
 ```
 
@@ -104,6 +107,7 @@ public record RobotState
 | `message` | string | 失败原因 / 附加说明 |
 | `result` | double[] | **数值**返回值（查询类指令使用） |
 | `strings` | string[] | **文本**返回值（协议 v0.4；录制 / 回放的文件名清单等，旧后端缺失时按空数组处理） |
+| `error_code` | uint32 | **结构化错误码**（协议加性字段，0 = 成功）：1xxx 协议/路由（1001 未知指令 / 1002 参数非法 / 1004 超时 / 1005 服务不可用 / 1006 异常）、2xxx 领域（2000 模块失败…）。前端 `ReplyOrEvent.ErrorCode` 已解析，失败日志会带上码 |
 
 ---
 
@@ -214,6 +218,23 @@ result 定长 7 项 `state / records / payload_mib / file_mib / dropped / thrott
 | 指令 | args | 说明 |
 |------|------|------|
 | `run_file` | `[]` | 执行指令脚本文件 |
+
+### 3.9 扫查流程（路由到 PLANNING）
+
+> 对齐口径见后端 `docs/CommandAlignment_Plan.md`。前端已按 F1/F2 对齐：
+> **`pre_scan_done` 是"半自动建图完成"的正式入口**（`pre_scan_end` 只是后端兼容别名）；
+> 起终点带上当前 `state.tool_pose`（`[x,y,z,rx,ry,rz]`，m/rad）作为 args（无参时后端用当前 TCP 位姿）。
+
+| 指令 | args | 事件 | 说明 |
+|------|------|------|------|
+| `pre_scan_start` | `[]` | — | 开始预扫查（后端兼容别名，空操作确认） |
+| `pre_scan_done` | `[]` | — | **半自动建图完成**：planning 抓地图快照初始化后才放行 `plan`（`pre_scan_end` 等价） |
+| `set_start_pose` | `[x,y,z,(rx,ry,rz)?]` | — | 设起点；有参用坐标、无参用当前 TCP 位姿 |
+| `set_end_pose` | `[x,y,z,(rx,ry,rz)?]` | — | 设终点（同上） |
+| `plan` | `[]` | `plan_done` | 规划 |
+| `execute` | `[]` | `motion_done` / `scan_done` | 执行 |
+| `stop` / `pause` / `resume` / `reset` | `[]` | — | 流程控制（`stop` 任意阶段可达） |
+| `query_prescan_done` / `query_motion_done` | `[]` | — | 查询完成状态（Result[0] = 1/0） |
 
 ---
 

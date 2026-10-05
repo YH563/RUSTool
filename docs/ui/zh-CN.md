@@ -655,10 +655,11 @@ cd RUSTool.UI
 2. **点云「选点」交互**：`/sensor` 点云已经解码并渲染进 3D 视口（`PointCloudLayer`），
    但「点击点云表面取点」还没接：`RobotViewport` 的单击目前只做模型拾取
    （库的 `SceneGraph.PickAndSelect`），点云选区 / 最近点求解与选中点标记待做。
-3. **影像 / 超声**：`/sensor` 的 `image` / `ultrasound` 帧会被整帧丢弃（只记日志），
-   解码与渲染都没有。（数据曲线**已完成**：`/state` 的 `effort` → `RUSTool.Charts`，见 11.4。）
-4. **`set_start_pose` / `set_end_pose` 参数**：仍按「无参采集当前位姿」下发；
-   若后端要求传点坐标 `[x,y,z]`（或点索引），需与后端确认后修正。
+3. **影像 / 超声**：`/sensor` 的 `image` / `ultrasound` 帧仍整帧丢弃（只记日志）。
+   但**重建通道已接**：`/pcmap`（面元点云图，复用 `SensorFrameCodec`）与 `/mesh`（增量网格，
+   `MeshFrameCodec` + 库 `MeshSink`）已解码并进 3D（3D 卡片头「重建 / 网格」开关）。
+4. **`set_start_pose` / `set_end_pose` 参数** ✅ 已对齐：前端带上当前 `state.tool_pose`
+   `[x,y,z,rx,ry,rz]`（m/rad）作为 args（后端有参按坐标、无参用当前 TCP）。
 5. **回放模块**：时间轴、A/B 循环、双轨联动都还是演示数据。
 
 ---

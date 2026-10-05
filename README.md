@@ -239,6 +239,9 @@ dotnet run --project RUSTool.UI -- --shot RUSTool.UI/preview/05-menu-MenuFile.pn
 - [x] **状态机接线**：`ScanWorkflowViewModel` 改为驱动 `ScanStateMachine`（用户动作过 `CanFire`、后端事件推进阶段，
       「按钮灰不灰 = 能否执行」同源）；`RobotSession.TryEnter*` 接入手动 / 扫查模式仲裁（工具栏状态灯不再永远「空闲」）；
       临床主 CTA 改为按阶段路由的「下一步」✔
+- [x] **前后端指令对齐（`CommandAlignment_Plan` F1–F6）**：`pre_scan_done` 正式入口、`set_*_pose` 带
+      `tool_pose`、登记 `map_clear/load_cloud/工具 5 条` 常量；新增 `/pcmap`（复用 `SensorFrameCodec`）与
+      `/mesh`（`MeshFrameCodec` + 库 `MeshSink`，3D「重建 / 网格」开关）；reply/event 增 `error_code` ✔
 - [ ] **点云选点**：3D 视口里点击点云表面取点（raycast / 最近点）→ `set_start_pose` / `set_end_pose` 带坐标
 - [ ] **测试补齐**：`BridgeProtocol`（样例 JSON / 字段缺省 / 坏 JSON）、`BridgeClient`（id 匹配 / 超时 / 断线置失败）
 - [x] **录制 / 回放接线**：录制走后端（`recorder_start/stop/status`，工具栏状态灯 + 计时 + 丢弃/限流计数）；

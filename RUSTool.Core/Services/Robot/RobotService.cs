@@ -19,6 +19,8 @@ public sealed class RobotService : IRobotService
         _client.ConnectionChanged += connected => ConnectionChanged?.Invoke(connected);
         _client.StateUpdated += frame => StateUpdated?.Invoke(frame);
         _client.SensorFrameReceived += frame => SensorFrameReceived?.Invoke(frame);
+        _client.MeshFrameReceived += frame => MeshFrameReceived?.Invoke(frame);
+        _client.PcMapFrameReceived += frame => PcMapFrameReceived?.Invoke(frame);
         _client.EventReceived += evt => EventReceived?.Invoke(evt);
     }
 
@@ -28,9 +30,13 @@ public sealed class RobotService : IRobotService
 
     public SensorPointCloudFrame? LatestSensorFrame => _client.LatestSensorFrame;
 
+    public SensorPointCloudFrame? LatestPcMap => _client.LatestPcMap;
+
     public event Action<bool>? ConnectionChanged;
     public event Action<BridgeProtocol.StateFrame>? StateUpdated;
     public event Action<SensorPointCloudFrame>? SensorFrameReceived;
+    public event Action<MeshFrame>? MeshFrameReceived;
+    public event Action<SensorPointCloudFrame>? PcMapFrameReceived;
     public event Action<EventNotification>? EventReceived;
 
     public Task ConnectAsync() => _client.ConnectAsync();
@@ -44,6 +50,14 @@ public sealed class RobotService : IRobotService
     public void StartSensorStream() => _client.StartSensorStream();
 
     public void StopSensorStream() => _client.StopSensorStream();
+
+    public void StartMeshStream() => _client.StartMeshStream();
+
+    public void StopMeshStream() => _client.StopMeshStream();
+
+    public void StartPcMapStream() => _client.StartPcMapStream();
+
+    public void StopPcMapStream() => _client.StopPcMapStream();
 
     public Task<CommandResult> SendAsync(string cmd, double[]? args = null,
         int timeoutMs = 5000, CancellationToken ct = default, string? text = null)
@@ -116,11 +130,14 @@ public sealed class RobotService : IRobotService
     public Task<CommandResult> PreScanEndAsync()
         => _client.SendAsync(Commands.PreScanEnd);
 
-    public Task<CommandResult> SetStartPoseAsync()
-        => _client.SendAsync(Commands.SetStartPose);
+    public Task<CommandResult> PreScanDoneAsync()
+        => _client.SendAsync(Commands.PreScanDone);
 
-    public Task<CommandResult> SetEndPoseAsync()
-        => _client.SendAsync(Commands.SetEndPose);
+    public Task<CommandResult> SetStartPoseAsync(double[]? pose = null)
+        => _client.SendAsync(Commands.SetStartPose, pose ?? []);
+
+    public Task<CommandResult> SetEndPoseAsync(double[]? pose = null)
+        => _client.SendAsync(Commands.SetEndPose, pose ?? []);
 
     public Task<CommandResult> PlanAsync()
         => _client.SendAsync(Commands.Plan);

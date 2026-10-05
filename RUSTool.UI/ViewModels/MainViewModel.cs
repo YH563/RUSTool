@@ -31,6 +31,8 @@ public sealed partial class MainViewModel : ViewModelBase
         // /sensor 的点云帧只在这里过一道手：服务层抛帧 → 视图层订阅（3D 视口的数据入口）。
         // 本层不认识 RUSTool.Visualization，也不认识 GL —— 转成视口能懂的形状是视图层的事。
         _robot.SensorFrameReceived += frame => PointCloudFrameReceived?.Invoke(frame);
+        _robot.PcMapFrameReceived += frame => PcMapFrameReceived?.Invoke(frame);
+        _robot.MeshFrameReceived += frame => MeshFrameReceived?.Invoke(frame);
 
         // 构造顺序：日志最先，其余 VM 都要往里写。
         Log = new LogViewModel(log);
@@ -70,6 +72,10 @@ public sealed partial class MainViewModel : ViewModelBase
 
             Replay.ResetTakeover();
             ApplyRobotMode(); // 连上后按当前 tab 进入手动 / 扫查模式（本地仲裁，恢复状态灯）
+
+            // 重建通道按需开：连上后按当前开关补订阅（/sensor 由 SessionViewModel.Connect 负责）。
+            if (ShowPcMap) _robot.StartPcMapStream();
+            if (ShowMesh) _robot.StartMeshStream();
         };
     }
 
@@ -130,6 +136,12 @@ public sealed partial class MainViewModel : ViewModelBase
     /// </para>
     /// </summary>
     public event Action<SensorPointCloudFrame>? PointCloudFrameReceived;
+
+    /// <summary>面元点云图（<c>/pcmap</c>）——由 3D 视图订阅。后台线程触发。</summary>
+    public event Action<SensorPointCloudFrame>? PcMapFrameReceived;
+
+    /// <summary>增量网格（<c>/mesh</c>）——由 3D 视图订阅。后台线程触发。</summary>
+    public event Action<MeshFrame>? MeshFrameReceived;
 
     /// <summary>
     /// 注入一帧点云到自己抛出的那条事件上（与真实流【同一个出口】）。
@@ -205,6 +217,26 @@ public sealed partial class MainViewModel : ViewModelBase
     /// <summary>3D 视口是否显示感知点云（默认显示）。关掉可排除点云与模型的遮挡/深度冲突。</summary>
     [ObservableProperty]
     private bool _showPointCloud = true;
+
+    /// <summary>是否显示面元点云图（<c>/pcmap</c>，重建融合地图）。默认显示；开关同时启停该流。</summary>
+    [ObservableProperty]
+    private bool _showPcMap = true;
+
+    /// <summary>是否显示增量网格（<c>/mesh</c>）。默认关；开关同时启停该流。</summary>
+    [ObservableProperty]
+    private bool _showMesh;
+
+    partial void OnShowPcMapChanged(bool value)
+    {
+        if (!Session.IsConnected) return;
+        if (value) _robot.StartPcMapStream(); else _robot.StopPcMapStream();
+    }
+
+    partial void OnShowMeshChanged(bool value)
+    {
+        if (!Session.IsConnected) return;
+        if (value) _robot.StartMeshStream(); else _robot.StopMeshStream();
+    }
 
     public bool IsClinicalMode => !IsDebugMode;
 

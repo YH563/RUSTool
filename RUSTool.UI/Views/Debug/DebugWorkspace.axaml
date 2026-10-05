@@ -34,12 +34,18 @@
             <Border Classes="card" MinWidth="320">
                 <Grid RowDefinitions="Auto,*">
                     <Border Classes="cardHeader">
-                        <Grid ColumnDefinitions="*,Auto,Auto">
+                        <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto">
                             <TextBlock Classes="panelTitle" Text="3D 场景" />
                             <TextBlock Grid.Column="1" Classes="caption" Text="视角 默认" />
                             <CheckBox Grid.Column="2" Content="点云" Margin="12,0,0,0"
                                       VerticalAlignment="Center"
                                       IsChecked="{Binding ShowPointCloud}" />
+                            <CheckBox Grid.Column="3" Content="重建" Margin="8,0,0,0"
+                                      VerticalAlignment="Center"
+                                      IsChecked="{Binding ShowPcMap}" />
+                            <CheckBox Grid.Column="4" Content="网格" Margin="8,0,0,0"
+                                      VerticalAlignment="Center"
+                                      IsChecked="{Binding ShowMesh}" />
                         </Grid>
                     </Border>
                     <!--
