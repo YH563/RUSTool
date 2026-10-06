@@ -3,16 +3,19 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="using:RUSTool.UI.ViewModels"
-             mc:Ignorable="d" d:DesignWidth="520" d:DesignHeight="320"
+             xmlns:debug="using:RUSTool.UI.Views.Debug"
+             mc:Ignorable="d" d:DesignWidth="700" d:DesignHeight="350"
              x:Class="RUSTool.UI.Views.Debug.ScanWorkflowPanel"
              x:DataType="vm:ScanWorkflowViewModel">
 
     <!--
-      扫查工作流：步骤状态建模成 StepState，四盏灯用主题的 dot 类表达
-      （待办灰 / 进行中蓝 / 完成绿），一眼看得出流程走到哪。
+      扫查工作流：①预扫查 → ②位姿 → ③规划 → ④执行。
 
-      按钮按前置条件 IsEnabled —— "执行"在规划完成前点不动，
-      这是真机上的安全底线，不只是界面细节。
+      布局：顶部状态条（当前阶段 / 下一步）→ 中部【四步流程 | 点动】并排 → 底部流程按钮。
+      点动与「手动」面板共用同一个 RobotControlViewModel（JogAxes，按住走 / 松手停），
+      且**只在①预扫查阶段**可用（建图时人工点动扫过体表）；其余阶段整体置灰（CanJog）。
+      后端 start_jog 本就直连 driver、不受 set_mode 影响，所以扫查模式下也能点动。
+      所有流程按钮的 IsEnabled 来自状态机 CanFire —— 与「点了能不能执行」同源。
     -->
 
     <Grid RowDefinitions="Auto,*,Auto" Margin="16,10">
@@ -34,42 +37,77 @@
             </Grid>
         </Border>
 
-        <!-- ── 四步流程 ── -->
-        <ItemsControl Grid.Row="1" ItemsSource="{Binding Steps}" Margin="0,8,0,0">
-            <ItemsControl.ItemTemplate>
-                <DataTemplate x:DataType="vm:ScanStep">
-                    <Border Classes="sunken" Padding="10,4" Margin="0,2">
-                        <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+        <!-- ── 中部并排：左四步流程 / 右点动 ── -->
+        <!-- 分隔线用 Auto 列：dividerVertical 带左右 12 的 Margin，固定 6px 列会溢出压到相邻列 -->
+        <Grid Grid.Row="1" ColumnDefinitions="1.1*,Auto,1.05*" Margin="0,8,0,0">
 
-                            <!-- 步骤灯：待办 / 进行中 / 完成，三态互斥 -->
-                            <Ellipse Classes="dot"
-                                     Classes.idle="{Binding IsPending}"
-                                     Classes.info="{Binding IsActive}"
-                                     Classes.success="{Binding IsDone}" />
+            <!-- 右：点动（仅预扫查 / 位姿选点阶段） -->
+            <Grid Grid.Column="2" RowDefinitions="Auto,Auto,*,Auto">
+                <TextBlock Classes="caption" Text="点动（预扫查 / 位姿选点）" TextWrapping="Wrap" />
+                <Grid Grid.Row="1" ColumnDefinitions="Auto,*,Auto" Margin="0,4,0,0">
+                    <TextBlock Classes="caption" Text="参考系" VerticalAlignment="Center" />
+                    <ComboBox Grid.Column="2" MinWidth="104"
+                              ItemsSource="{Binding Control.JogFrames}"
+                              SelectedIndex="{Binding Control.JogFrameIndex}" />
+                </Grid>
 
-                            <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
-                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <TextBlock Text="{Binding Index}"
-                                               Foreground="{DynamicResource TextTertiaryBrush}" />
-                                    <TextBlock Text="{Binding Title}"
-                                               FontWeight="{DynamicResource FontWeightSemiBold}" />
-                                </StackPanel>
-                                <TextBlock Classes="caption" Text="{Binding Hint}" />
-                            </StackPanel>
+                <ScrollViewer Grid.Row="2" Margin="0,4,0,0" IsEnabled="{Binding CanJog}"
+                              VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <debug:JogAxes DataContext="{Binding Control}" />
+                </ScrollViewer>
 
-                            <!-- 产物摘要：告诉用户这一步"做出了什么" -->
-                            <Border Grid.Column="2" Classes="tag neutral"
-                                    IsVisible="{Binding HasDetail}">
-                                <TextBlock Text="{Binding Detail}" />
+                <Grid Grid.Row="3" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8" Margin="0,6,0,0"
+                      IsEnabled="{Binding CanJog}">
+                    <TextBlock Classes="caption" Text="速度" VerticalAlignment="Center" />
+                    <Slider Grid.Column="1" Minimum="1" Maximum="100"
+                            Value="{Binding Control.MotionSpeed}" />
+                    <TextBlock Grid.Column="2" Classes="mono" Width="44" TextAlignment="Right"
+                               VerticalAlignment="Center"
+                               Text="{Binding Control.MotionSpeed, StringFormat='{}{0:F0}%'}" />
+                </Grid>
+            </Grid>
+
+            <Rectangle Grid.Column="1" Classes="dividerVertical" Margin="12,0" />
+
+            <!-- 左：四步流程状态灯 -->
+            <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled">
+                <ItemsControl ItemsSource="{Binding Steps}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:ScanStep">
+                            <Border Classes="sunken" Padding="10,4" Margin="0,2">
+                                <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+
+                                    <!-- 步骤灯：待办 / 进行中 / 完成，三态互斥 -->
+                                    <Ellipse Classes="dot"
+                                             Classes.idle="{Binding IsPending}"
+                                             Classes.info="{Binding IsActive}"
+                                             Classes.success="{Binding IsDone}" />
+
+                                    <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <TextBlock Text="{Binding Index}"
+                                                       Foreground="{DynamicResource TextTertiaryBrush}" />
+                                            <TextBlock Text="{Binding Title}"
+                                                       FontWeight="{DynamicResource FontWeightSemiBold}" />
+                                        </StackPanel>
+                                        <TextBlock Classes="caption" Text="{Binding Hint}" />
+                                    </StackPanel>
+
+                                    <!-- 产物摘要：告诉用户这一步"做出了什么" -->
+                                    <Border Grid.Column="2" Classes="tag neutral"
+                                            IsVisible="{Binding HasDetail}">
+                                        <TextBlock Text="{Binding Detail}" />
+                                    </Border>
+                                </Grid>
                             </Border>
-                        </Grid>
-                    </Border>
-                </DataTemplate>
-            </ItemsControl.ItemTemplate>
-        </ItemsControl>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Grid>
 
-        <!-- ── 流程控制 ── -->
-        <!-- 每个按钮的 IsEnabled 都来自状态机 CanFire —— 与「点了能不能执行」同源 -->
+        <!-- ── 流程控制：横跨整卡 ── -->
         <WrapPanel Grid.Row="2" Orientation="Horizontal" ItemSpacing="6" Margin="0,8,0,0">
             <Button Classes="sm accent" Content="开始预扫查" IsEnabled="{Binding CanStartPreScan}"
                     Command="{Binding StartPreScanCommand}" />

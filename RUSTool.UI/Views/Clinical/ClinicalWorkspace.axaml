@@ -38,7 +38,9 @@
         </Style>
 </UserControl.Styles>
 
-    <Grid ColumnDefinitions="*,6,340" Margin="16,12">
+    <Grid RowDefinitions="*,Auto">
+
+        <Grid Grid.Row="0" ColumnDefinitions="*,6,340" Margin="16,12">
 
         <!-- ═══ 左：主视图 = 超声影像（临床主内容）+ 左下角 3D 画中画 ═══ -->
         <Border Classes="card">
@@ -134,27 +136,62 @@
                     </Grid>
                 </Border>
 
-                <!-- 4 步：与工程师模式共用同一份状态机数据（只是投影不同） -->
-                <ItemsControl Grid.Row="2" ItemsSource="{Binding Scan.Steps}" Margin="16,12">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="vm:ScanStep">
-                            <Border Classes="step" Classes.active="{Binding IsActive}">
-                                <Grid ColumnDefinitions="Auto,*,Auto">
-                                    <Ellipse Classes="dot"
-                                             Classes.idle="{Binding IsPending}"
-                                             Classes.info="{Binding IsActive}"
-                                             Classes.success="{Binding IsDone}" />
-                                    <StackPanel Grid.Column="1" Margin="12,0,0,0">
-                                        <TextBlock Classes="stepTitle" Text="{Binding Title}" />
-                                        <TextBlock Classes="caption" Text="{Binding Hint}" />
-                                    </StackPanel>
-                                    <TextBlock Grid.Column="2" Classes="caption" VerticalAlignment="Center"
-                                               Text="{Binding Detail}" />
-                                </Grid>
-                            </Border>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                <!-- 内容：上四步流程 / 下点动（仅预扫查 / 位姿选点阶段），上下排列；
+                     整块统一滚动，避免窄卡片里挤成两列。 -->
+                <ScrollViewer Grid.Row="2" Padding="16,12"
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Spacing="12">
+
+                        <!-- 上：4 步（与工程师模式共用同一份状态机数据，只是投影不同） -->
+                        <ItemsControl ItemsSource="{Binding Scan.Steps}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:ScanStep">
+                                    <Border Classes="step" Classes.active="{Binding IsActive}">
+                                        <Grid ColumnDefinitions="Auto,*,Auto">
+                                            <Ellipse Classes="dot"
+                                                     Classes.idle="{Binding IsPending}"
+                                                     Classes.info="{Binding IsActive}"
+                                                     Classes.success="{Binding IsDone}" />
+                                            <StackPanel Grid.Column="1" Margin="12,0,0,0">
+                                                <TextBlock Classes="stepTitle" Text="{Binding Title}" />
+                                                <TextBlock Classes="caption" Text="{Binding Hint}" />
+                                            </StackPanel>
+                                            <TextBlock Grid.Column="2" Classes="caption" VerticalAlignment="Center"
+                                                       Text="{Binding Detail}" />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <Rectangle Classes="divider" />
+
+                        <!-- 下：点动（与工程师侧共用 RobotControlViewModel；仅预扫查 / 选点阶段可用） -->
+                        <Grid RowDefinitions="Auto,Auto,Auto,Auto">
+                            <TextBlock Classes="caption" Text="点动（预扫查 / 选点）" TextWrapping="Wrap" />
+                            <Grid Grid.Row="1" ColumnDefinitions="Auto,*" Margin="0,4,0,0">
+                                <TextBlock Classes="caption" Text="参考系" VerticalAlignment="Center" />
+                                <ComboBox Grid.Column="1" Width="140" HorizontalAlignment="Left"
+                                          ItemsSource="{Binding Control.JogFrames}"
+                                          SelectedIndex="{Binding Control.JogFrameIndex}" />
+                            </Grid>
+                            <StackPanel Grid.Row="2" Margin="0,4,0,0" IsEnabled="{Binding Scan.CanJog}">
+                                <debug:JogAxes DataContext="{Binding Control}" />
+                            </StackPanel>
+                            <Grid Grid.Row="3" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8" Margin="0,6,0,0"
+                                  IsEnabled="{Binding Scan.CanJog}">
+                                <TextBlock Classes="caption" Text="速度" VerticalAlignment="Center" />
+                                <Slider Grid.Column="1" Minimum="1" Maximum="100"
+                                        Value="{Binding Control.MotionSpeed}" />
+                                <TextBlock Grid.Column="2" Classes="mono" Width="40" TextAlignment="Right"
+                                           VerticalAlignment="Center"
+                                           Text="{Binding Control.MotionSpeed, StringFormat='{}{0:F0}%'}" />
+                            </Grid>
+                        </Grid>
+
+                    </StackPanel>
+                </ScrollViewer>
 
                 <!-- 下一步：主操作，按钮文案直接说"该做什么"（向导感的关键）。
                      MinHeight 48 —— 临床场景触控友好，比工程师侧的 38 更高一档。 -->
@@ -193,6 +230,16 @@
                             Command="{Binding Session.ResetEmergencyCommand}" />
                 </Grid>
             </Grid>
+        </Border>
+
+        </Grid>
+
+        <!-- 底部常驻状态栏：只显示错误信息（无错误时留空） -->
+        <Border Grid.Row="1" BorderThickness="0,1,0,0" Padding="16,6" MinHeight="30"
+                BorderBrush="{DynamicResource BorderSubtleBrush}"
+                Background="{DynamicResource SurfaceSunkenBrush}">
+            <TextBlock Classes="danger" Text="{Binding LastError}" TextWrapping="Wrap"
+                       VerticalAlignment="Center" />
         </Border>
 
     </Grid>

@@ -43,7 +43,8 @@
                                JointValues="{Binding Status.JointsRadians}"
                                TcpPose="{Binding Status.TcpPose}"
                                ShowPcMap="{Binding ShowPcMap}"
-                               ShowMesh="{Binding ShowMesh}" />
+                               ShowMesh="{Binding ShowMesh}"
+                               ShowTrajectory="{Binding ShowTrajectory}" />
 
             <!-- ③ 角标：GPU / 模型 / FPS / 拾取。左对齐 + 省略号，窄面板里也不会撑破卡片 -->
             <TextBlock x:Name="ViewportStatus"

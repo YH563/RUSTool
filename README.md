@@ -16,7 +16,7 @@
 |---|---|---|---|
 | **`RUSTool.Core`** | 类库 | 纯逻辑层：bridge 通信客户端（`BridgeClient` / `ConnectionManager` / `BridgeProtocol` / `SensorFrameCodec`）、机器人业务服务（`IRobotService` / `RobotService` / `RobotSession`）、流程状态机（`ScanStateMachine`）、日志契约（`ILogService`）。零界面、零图形依赖 | `CommunityToolkit.Mvvm`（仅 `ObservableObject`）、`ZstdSharp.Port`（`/sensor` 点云帧解压） |
 | **`RUSTool.UI`** | WinExe | **唯一的应用**（`dotnet run` 起来的就是它）：Avalonia 界面 + 设计系统 `Theme/` + 依赖图组装（唯一组合根） | `Core`、`Visualization`、`Charts`、`Replay`、`Settings`、Avalonia 12.1.0、CommunityToolkit.Mvvm 8.4.2、Avalonia.Headless（截图） |
-| **`RUSTool.Visualization`** | 类库 | **3D 图形栈的隔离容器**：`RobotViewport`（内嵌 3D 视口）、`RobotScene` + `PointCloudLayer`（URDF + 关节驱动 + 感知点云）、`SimulationLogBridge`（库日志接出）。Silk.NET / OpenGL / `RobotSimulation` 只在这里出现 | 与 `Core` 无关，依赖 `RobotSimulation` 0.4.0、Silk.NET.OpenGL 2.23.0、Avalonia 12.1.0 |
+| **`RUSTool.Visualization`** | 类库 | **3D 图形栈的隔离容器**：`RobotViewport`（内嵌 3D 视口）、`RobotScene` + `PointCloudLayer`（URDF + 关节驱动 + 感知点云 + 规划轨迹折线）、`SimulationLogBridge`（库日志接出）。Silk.NET / OpenGL / `RobotSimulation` 只在这里出现 | 与 `Core` 无关，依赖 `RobotSimulation` 0.4.1、Silk.NET.OpenGL 2.23.0、Avalonia 12.1.0 |
 | **`RUSTool.Charts`** | 类库 | **2D 图表栈的隔离容器**：`RobotStatePanel`（曲线控件：一路一行、行头色标/名字/读数 + 空数据态）、`RobotStateRow` / `RobotStateRows`（滚动窗口行模型与推帧入口）、`RobotArmChannels`（通道目录）。LiveCharts 2 / SkiaSharp 只在这里出现 | 与 `Core` 无关，依赖 `LiveChartsCore.SkiaSharpView.Avalonia` 2.1.0-dev-798、Avalonia 12.1.0、CommunityToolkit.Mvvm 8.4.2 |
 | **`RUSTool.Replay`** | 类库 | **回放隔离容器**（回放职责已由后端移交前端）：录音目录发现、`.rusrec` 容器读取 + ROS CDR 解码、本地回放引擎（时间轴 / seek / 倍速 / 单步）。只依赖 `Core` 的两个数据契约，不引用界面 | `Core` |
 | **`RUSTool.Settings`** | 类库 | **全局参数模块**：`AppSettings`（录音目录 / bridge 地址…）+ JSON 持久化（`~/.config/RUSTool/settings.json`）+ 变更通知 | `CommunityToolkit.Mvvm` |
@@ -105,13 +105,13 @@ RUSTool.sln
 
 | 项 | 要求 | 说明 |
 |---|---|---|
-| 目标框架 | `net8.0` | 五个工程统一（跟随 `RobotSimulation` 0.3.1 的 lib 目录） |
+| 目标框架 | `net8.0` | 五个工程统一（跟随 `RobotSimulation` 0.4.x 的 lib 目录） |
 | **构建 SDK** | **.NET SDK 10** | 必须。Avalonia 12.1.0 的源生成器要求 Roslyn 4.14+；用 SDK 8 会加载不上源生成器，`InitializeComponent` 不被生成 → 整片 `CS0103` |
 | `global.json` | **刻意不放** | 钉了 SDK 版本反而编译不过 |
 | 3D | 桌面 OpenGL 3.3 core | 后端只带 `#version 330 core` 着色器；遇到 GLES 会抛 `NotSupportedException` 并被捕获 → 3D 区降级为空状态 |
 | 平台 | Linux / Windows 桌面 | 无显卡 / 无 GL 时应用照常可用（HUD、指令、日志都不依赖 GL） |
 | 后端 | 任何实现 bridge 协议的服务 | 默认 `ws://127.0.0.1:8765`（协议见 [`docs/protocol/zh-CN.md`](docs/protocol/zh-CN.md)） |
-| NuGet 源 | **nuget.org 一个**（仓库根 `NuGet.config` 里 `<clear />` 后显式登记） | `RobotSimulation` 0.1.0 / 0.2.0 / 0.2.1 / 0.3.0 / 0.3.1 都已发布在 nuget.org 上；换机器 / 上 CI 不需要任何手工加源，也不依赖本机离线目录 |
+| NuGet 源 | **nuget.org 一个**（仓库根 `NuGet.config` 里 `<clear />` 后显式登记） | `RobotSimulation` 0.1.0 … 0.4.1 都已发布在 nuget.org 上；换机器 / 上 CI 不需要任何手工加源，也不依赖本机离线目录 |
 
 ```bash
 # 本机 dotnet 装在 ~/.dotnet 但没进 PATH（preview.sh 会自己设好）
@@ -277,7 +277,7 @@ dotnet run --project RUSTool.UI -- --shot RUSTool.UI/preview/05-menu-MenuFile.pn
 ## 9. 许可
 
 - 本仓库当前**未包含** `LICENSE` 文件 —— 对外发布前需要先补一份许可声明（由作者决定采用哪种许可）。
-- 3D 内核 `RobotSimulation`（Core / Robot / OpenGL，0.3.1）为自研库；
+- 3D 内核 `RobotSimulation`（Core / Robot / OpenGL，0.4.1）为自研库；
   `RUSTool.Visualization/Assets/Models/` 下的测试模型与 mesh 随该库仓库分发，许可以那一部分为准
   （该库采用 MIT；本目录不再单独声明）。
 - 本仓库自有源码的许可随仓库根声明；在上面那条补齐之前，请按「内部项目」对待。

@@ -139,6 +139,13 @@ public sealed class RobotViewport : OpenGlControlBase
     private readonly object _meshLock = new();
     private MeshFrameData? _pendingMesh;
 
+    /// <summary>规划轨迹（plan_done）邮箱：扁平 [x,y,z,…]；取走即置空（空数组 = 清空）。</summary>
+    private readonly object _trajectoryLock = new();
+    private float[]? _pendingTrajectory;
+
+    /// <summary>最近一条规划轨迹（重挂回来时补画，理由同 <see cref="_lastCloud"/>）。</summary>
+    private float[]? _lastTrajectory;
+
     /// <summary>本控件累计落地 / 被覆盖丢弃的点云帧数（只用于那行每秒诊断）。</summary>
     private long _cloudDropped;
 
@@ -265,6 +272,17 @@ public sealed class RobotViewport : OpenGlControlBase
         set => SetValue(ShowMeshProperty, value);
     }
 
+    /// <summary>是否显示规划轨迹（<c>plan_done</c> 生成的折线）。默认显示（收到轨迹才出现）。</summary>
+    public static readonly StyledProperty<bool> ShowTrajectoryProperty =
+        AvaloniaProperty.Register<RobotViewport, bool>(nameof(ShowTrajectory), defaultValue: true);
+
+    /// <inheritdoc cref="ShowTrajectoryProperty"/>
+    public bool ShowTrajectory
+    {
+        get => GetValue(ShowTrajectoryProperty);
+        set => SetValue(ShowTrajectoryProperty, value);
+    }
+
     /// <summary>GL 初始化完成（UI 线程）：携带 GPU / 版本 / 模型装配报告，供界面显示或记日志。</summary>
     public event Action<string>? Ready;
 
@@ -336,6 +354,18 @@ public sealed class RobotViewport : OpenGlControlBase
         RequestRender();
     }
 
+    /// <summary>
+    /// 递入一条规划轨迹（<c>plan_done</c> 的扁平 <c>[x,y,z, …]</c>，m/base_link）——
+    /// 可从任意线程调用（邮箱覆盖式保留最新一条）。空数组 = 清空。
+    /// </summary>
+    public void SubmitTrajectory(float[] xyz)
+    {
+        lock (_trajectoryLock)
+            _pendingTrajectory = xyz;
+
+        RequestRender();
+    }
+
     /// <summary>从任意线程请求下一帧渲染（UI 线程则直接请求）。</summary>
     private void RequestRender()
     {
@@ -369,6 +399,24 @@ public sealed class RobotViewport : OpenGlControlBase
                 _robotScene?.ClearMesh(); // 关掉网格就清空块，别留着旧网格
             RequestNextFrameRendering();
         }
+        else if (change.Property == ShowTrajectoryProperty)
+        {
+            ApplyTrajectoryVisibility();
+            RequestNextFrameRendering();
+        }
+    }
+
+    /// <summary>把规划轨迹节点的可见性对齐到开关（无轨迹时隐藏）。</summary>
+    private void ApplyTrajectoryVisibility() => _robotScene?.SetTrajectoryVisible(ShowTrajectory);
+
+    /// <summary>扁平 <c>[x,y,z, …]</c> → 点序列（不足 3 的尾巴丢弃）。</summary>
+    private static List<Vector3> ToVector3List(float[] xyz)
+    {
+        int n = xyz.Length / 3;
+        var points = new List<Vector3>(n);
+        for (int i = 0; i < n; i++)
+            points.Add(new Vector3(xyz[i * 3], xyz[i * 3 + 1], xyz[i * 3 + 2]));
+        return points;
     }
 
     /// <summary>把面元点云图节点的可见性对齐到开关。</summary>
@@ -469,6 +517,11 @@ public sealed class RobotViewport : OpenGlControlBase
             {
                 _robotScene.ApplyPcMapFrame(pcmap);
                 ApplyPcMapVisibility();
+            }
+            if (_lastTrajectory is { } trajectory)
+            {
+                _robotScene.ApplyTrajectory(ToVector3List(trajectory));
+                ApplyTrajectoryVisibility();
             }
 
             // 库的默认机位按「几米见方」的场景设计，这里按整机包围盒重新取景（同 ResetView）。
@@ -577,6 +630,20 @@ public sealed class RobotViewport : OpenGlControlBase
         }
         if (mesh is not null && ShowMesh)
             _robotScene.ApplyMeshFrame(mesh);
+
+        // 规划轨迹（plan_done）：取走本帧轨迹（取走即置空），转成点序列落地；空数组 = 清空。
+        float[]? trajectory;
+        lock (_trajectoryLock)
+        {
+            trajectory = _pendingTrajectory;
+            _pendingTrajectory = null;
+        }
+        if (trajectory is not null)
+        {
+            _lastTrajectory = trajectory;
+            _robotScene.ApplyTrajectory(ToVector3List(trajectory));
+            ApplyTrajectoryVisibility();
+        }
 
         TimeSpan now = _clock.Elapsed;
         double deltaSeconds = Math.Clamp((now - _lastFrameTime).TotalSeconds, 0, 0.25);

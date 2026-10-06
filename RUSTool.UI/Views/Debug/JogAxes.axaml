@@ -1,0 +1,34 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:RUSTool.UI.ViewModels"
+             mc:Ignorable="d" d:DesignWidth="300" d:DesignHeight="240"
+             x:Class="RUSTool.UI.Views.Debug.JogAxes"
+             x:DataType="vm:RobotControlViewModel">
+
+    <!--
+      可复用点动轴：6 根轴（数据）+ 一个行模板，12 个按钮共用一份交互逻辑
+      （按下 start_jog / 松开 stop_jog_decel，交互在 code-behind）。
+
+      DataContext 必须是 RobotControlViewModel；「手动画板」与「扫查面板」共用它，
+      所以点动只写一次。参考系 / 速度由宿主另行摆放。
+    -->
+    <ItemsControl ItemsSource="{Binding Axes}">
+        <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:JogAxis">
+                <Border Classes="sunken" Padding="10,3" Margin="0,2">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />
+
+                        <!-- Tag 只表示方向；轴信息来自按钮的 DataContext -->
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                            <Button Classes="sm" Content="−" Width="46" Tag="neg" />
+                            <Button Classes="sm" Content="+" Width="46" Tag="pos" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </DataTemplate>
+        </ItemsControl.ItemTemplate>
+    </ItemsControl>
+</UserControl>

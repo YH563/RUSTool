@@ -151,6 +151,7 @@ public partial class Scene3DView : UserControl
             viewModel.PointCloudFrameReceived += OnPointCloudFrame;
             viewModel.PcMapFrameReceived += OnPcMapFrame;
             viewModel.MeshFrameReceived += OnMeshFrame;
+            viewModel.TrajectoryReceived += OnTrajectory;
             _log = viewModel.LogService;
         }
     }
@@ -163,6 +164,7 @@ public partial class Scene3DView : UserControl
             _wiredViewModel.PointCloudFrameReceived -= OnPointCloudFrame;
             _wiredViewModel.PcMapFrameReceived -= OnPcMapFrame;
             _wiredViewModel.MeshFrameReceived -= OnMeshFrame;
+            _wiredViewModel.TrajectoryReceived -= OnTrajectory;
             _wiredViewModel = null;
         }
 
@@ -205,6 +207,12 @@ public partial class Scene3DView : UserControl
     private void OnPcMapFrame(SensorPointCloudFrame frame)
         => Viewport.SubmitPcMap(new PointCloudFrame(
             frame.Xyz, frame.Rgb, frame.Count, frame.Seq, frame.Scope, frame.Timestamp));
+
+    /// <summary>
+    /// 规划轨迹（<c>plan_done</c> 的 result，后台线程）→ 视口的轨迹折线。
+    /// 数据已是扁平 <c>[x,y,z, …]</c>（m/base_link），直接投递；空数组 = 清空。
+    /// </summary>
+    private void OnTrajectory(float[] xyz) => Viewport.SubmitTrajectory(xyz);
 
     /// <summary>
     /// 增量网格（<c>/mesh</c>，WS 线程）→ 适配成图形栈自己的 <see cref="Viz.MeshFrameData"/>

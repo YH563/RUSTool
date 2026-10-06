@@ -304,7 +304,7 @@ public sealed class BridgeClient : IDisposable
         }
         else if (msg.Type == "event")
         {
-            EventReceived?.Invoke(new EventNotification(msg.Event, msg.Success, msg.Message));
+            EventReceived?.Invoke(new EventNotification(msg.Event, msg.Success, msg.Message, msg.Result));
         }
     }
 
@@ -623,5 +623,8 @@ public sealed class BridgeClient : IDisposable
 /// </summary>
 public sealed record CommandResult(bool Success, string Message, double[] Result, string[] Strings, uint ErrorCode = 0);
 
-/// <summary>异步事件通知（对上层友好的返回值封装）</summary>
-public sealed record EventNotification(string EventName, bool Success, string Message);
+/// <summary>
+/// 异步事件通知（对上层友好的返回值封装）。<see cref="Result"/> 是事件携带的数值结果 ——
+/// 目前用于 <c>plan_done</c> 的**规划轨迹**（扁平化的三维点序列 <c>[x,y,z, …]</c>，m，base_link）。
+/// </summary>
+public sealed record EventNotification(string EventName, bool Success, string Message, double[] Result);

@@ -5,6 +5,7 @@ using RUSTool.Services.Logging;
 using RUSTool.Services.Robot;
 using RUSTool.Settings;
 using System;
+using System.Collections.Specialized;
 using System.Threading.Tasks;
 
 namespace RUSTool.UI.ViewModels;
@@ -36,11 +37,18 @@ public sealed partial class MainViewModel : ViewModelBase
 
         // 构造顺序：日志最先，其余 VM 都要往里写。
         Log = new LogViewModel(log);
+
+        // 临床视图的错误条：只跟日志里【最新一条错误】。日志集合本身已在 UI 线程更新，
+        // 这里直接赋属性即安全（无需再 Post）。
+        log.Entries.CollectionChanged += OnLogEntriesChanged;
         Session = new SessionViewModel(robot, session, log);
         Status = new RobotStatusViewModel(robot);
         Charts = new TorqueChartViewModel(robot);
         Control = new RobotControlViewModel(robot, log);
-        Scan = new ScanWorkflowViewModel(robot, log);
+        Scan = new ScanWorkflowViewModel(robot, log, Control);
+
+        // 规划轨迹（plan_done 事件）从扫查 VM 转发到 3D 视图 —— 与点云同一条「VM → 视图」出口。
+        Scan.TrajectoryGenerated += xyz => TrajectoryReceived?.Invoke(xyz);
         Replay = new ReplayViewModel(settings, log);
         Recorder = new RecorderViewModel(robot, log);
 
@@ -71,7 +79,8 @@ public sealed partial class MainViewModel : ViewModelBase
                 return;
 
             Replay.ResetTakeover();
-            ApplyRobotMode(); // 连上后按当前 tab 进入手动 / 扫查模式（本地仲裁，恢复状态灯）
+            // 连上后按当前 tab 显式下发并仲裁：bridge 默认是「自动」，不主动切就会与页签不符。
+            _ = ApplyRobotModeAsync(RobotModeIndex);
 
             // 重建通道按需开：连上后按当前开关补订阅（/sensor 由 SessionViewModel.Connect 负责）。
             if (ShowPcMap) _robot.StartPcMapStream();
@@ -82,13 +91,70 @@ public sealed partial class MainViewModel : ViewModelBase
     /// <summary>上一次观察到的连接态，用于识别「真正的连接翻转」（见构造函数里的说明）。</summary>
     private bool _lastConnected;
 
-    /// <summary>按当前"机器人指令"页签进入对应操作模式（本地互斥仲裁，不发指令）。</summary>
-    private void ApplyRobotMode()
+    /// <summary>最近一条错误日志（仅错误级）；空串 = 无错误。临床视图用它显示错误条。</summary>
+    [ObservableProperty]
+    private string _lastError = "";
+
+    /// <summary>错误条是否可见（无错误时整条隐藏）。</summary>
+    public bool HasError => !string.IsNullOrEmpty(LastError);
+
+    partial void OnLastErrorChanged(string value) => OnPropertyChanged(nameof(HasError));
+
+    /// <summary>日志新增一条：错误级就更新错误条；清空日志（Reset）时一并清掉。</summary>
+    private void OnLogEntriesChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        if (RobotModeIndex == 1)
+        if (e.Action == NotifyCollectionChangedAction.Reset)
+        {
+            LastError = "";
+            return;
+        }
+
+        if (e.NewItems is null)
+            return;
+
+        foreach (LogEntry entry in e.NewItems)
+        {
+            if (entry.IsError)
+                LastError = entry.Source.Length == 0 ? entry.Message : $"{entry.Source}: {entry.Message}";
+        }
+    }
+
+    /// <summary>本地互斥仲裁：进入指定页签对应的操作模式（不发指令）。</summary>
+    private void ApplyRobotModeLocal(int mode)
+    {
+        if (mode == 1)
             Session.EnterScanMode();
         else
             Session.EnterManualMode();
+    }
+
+    /// <summary>
+    /// 切换操作模式：连上时**总是显式下发 `set_mode`**（即使页签值没变），最后做本地仲裁。
+    ///
+    /// <para>
+    /// <b>为什么"总是发"：</b>后端 bridge 的默认路由模式是「自动」，而前端默认页签是「手动」——
+    /// 只按"页签值变化"发指令，两者会从一开始就不同步。
+    /// </para>
+    /// <para>
+    /// <b>切回手动时补发 `reset`（而非 `stop`）：</b>后端 <c>stop</c> 是**急停**语义——它会把
+    /// 驱动执行器置为 <c>STOPPED</c>，而 <c>start_jog</c> 只入队、不会把状态拉回 <c>RUNNING</c>
+    /// （见后端 <c>TrajectoryExecutor</c> / <c>RobotSimDriver::StartJOG</c>）。所以在连接 / 切模式时
+    /// 顺手发 <c>stop</c>，会让点动**只进队列不执行**、机械臂完全不动（必须 `reset` 才恢复）。
+    /// 而扫查中止时 planning 会向 driver 发 <c>stop</c>，同样会残留 <c>STOPPED</c>；
+    /// 因此这里用 <c>reset</c> 收尾：既清空残余伺服 / 队列，又把执行器恢复到 <c>RUNNING</c>，
+    /// 手动点动随即可用。
+    /// </para>
+    /// </summary>
+    private async Task ApplyRobotModeAsync(int mode)
+    {
+        if (Session.IsConnected)
+        {
+            await _robot.SetMode(mode);
+            if (mode == 0)
+                await _robot.ResetAsync(); // 切手动：清扫查残留并把执行器拉回 RUNNING，保证点动可用
+        }
+
+        ApplyRobotModeLocal(mode);
     }
 
     /// <summary>全局参数（录音目录 / bridge 地址…），由组装层注入。</summary>
@@ -144,6 +210,12 @@ public sealed partial class MainViewModel : ViewModelBase
     public event Action<MeshFrame>? MeshFrameReceived;
 
     /// <summary>
+    /// 规划轨迹（<c>plan_done</c> 事件的 result）——扁平三维点序列 <c>[x,y,z, …]</c>（m，base_link），
+    /// 由 3D 视图订阅后画成一条路径。空数组 = 清空。后台线程触发。
+    /// </summary>
+    public event Action<float[]>? TrajectoryReceived;
+
+    /// <summary>
     /// 注入一帧点云到自己抛出的那条事件上（与真实流【同一个出口】）。
     ///
     /// <para>
@@ -154,6 +226,13 @@ public sealed partial class MainViewModel : ViewModelBase
     /// </summary>
     /// <param name="frame">要注入的帧（通常是 <c>DemoSensorFrame.Build()</c> 的产物）。</param>
     public void PublishPointCloud(SensorPointCloudFrame frame) => PointCloudFrameReceived?.Invoke(frame);
+
+    /// <summary>
+    /// 注入一条规划轨迹到自己抛出的那条事件上（与真实 <c>plan_done</c> 【同一个出口】）。
+    /// 只给截图模式用（<c>Program.cs</c> 的 <c>--demo-trajectory</c>）；真实运行时不调用它。
+    /// </summary>
+    /// <param name="xyz">扁平三维点序列 <c>[x,y,z, …]</c>（m，base_link）；空数组 = 清空。</param>
+    public void PublishTrajectory(float[] xyz) => TrajectoryReceived?.Invoke(xyz);
 
     /// <summary>
     /// 注入一帧状态帧（<c>/state</c>）到【订阅了状态流的两个消费者】上（HUD 与六路曲线），
@@ -226,6 +305,10 @@ public sealed partial class MainViewModel : ViewModelBase
     [ObservableProperty]
     private bool _showMesh;
 
+    /// <summary>3D 视口是否显示规划轨迹（plan_done 生成）。默认显示；纯显隐开关，不涉及订阅流。</summary>
+    [ObservableProperty]
+    private bool _showTrajectory = true;
+
     partial void OnShowPcMapChanged(bool value)
     {
         if (!Session.IsConnected) return;
@@ -259,11 +342,10 @@ public sealed partial class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(ModeName));
     }
 
-    /// <summary>机器人指令模式切换：同步给后端（0=手动 / 1=扫查）并做本地模式仲裁。</summary>
+    /// <summary>机器人指令模式切换（含 Carousel 翻页）：同步给后端并做本地模式仲裁。</summary>
     partial void OnRobotModeIndexChanged(int value)
     {
-        _ = _robot.SetMode(value);
-        ApplyRobotMode();
+        _ = ApplyRobotModeAsync(value);
         OnPropertyChanged(nameof(IsManualMode));
         OnPropertyChanged(nameof(IsScanMode));
     }
@@ -274,9 +356,20 @@ public sealed partial class MainViewModel : ViewModelBase
     [RelayCommand]
     private void SwitchToClinical() => IsDebugMode = false;
 
-    /// <summary>「机器人指令」卡片里手动 / 扫查两个面板的切换（参数 "0" = 手动 / "1" = 扫查）。</summary>
+    /// <summary>
+    /// 「机器人指令」卡片里手动 / 扫查两个面板的切换（参数 "0" = 手动 / "1" = 扫查）。
+    /// 与当前页签相同也强制重发一次（见 <see cref="ApplyRobotModeAsync"/>）——
+    /// 这样"点手动"总能保证后端真的切到手动、并清掉扫查残留。
+    /// </summary>
     [RelayCommand]
-    private void SelectRobotMode(object? parameter) => RobotModeIndex = parameter?.ToString() == "1" ? 1 : 0;
+    private void SelectRobotMode(object? parameter)
+    {
+        int mode = parameter?.ToString() == "1" ? 1 : 0;
+        if (RobotModeIndex == mode)
+            _ = ApplyRobotModeAsync(mode);
+        else
+            RobotModeIndex = mode; // 变值：由 OnRobotModeIndexChanged 走同一条路
+    }
 
     /// <summary>
     /// 「重置视角」请求。3D 视口的相机是图形栈内部的显示状态（属于视图层），

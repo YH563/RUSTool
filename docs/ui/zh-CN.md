@@ -61,7 +61,7 @@ RUSTool.UI/
 │   ├── SessionViewModel.cs     连接 / 使能 / 驱动 / 急停（连接类动作的唯一入口）
 │   ├── RobotStatusViewModel.cs 订阅 /state 状态流 → HUD 读数（弧度→度在这一层换算）
 │   ├── TorqueChartViewModel.cs 图表接线（薄适配层）：从通道目录建六行 + 推状态帧 + 透连接状态
-│   ├── RobotControlViewModel.cs 点动 6 轴 + movej / movel / 暂停 / 复位
+│   ├── RobotControlViewModel.cs 点动 6 轴 + movej / movel / 暂停 / 复位（点动控件由 Views/Debug/JogAxes 复用）
 │   ├── ScanWorkflowViewModel.cs 四步扫查流程（同步回执 + 异步事件双来源）
 │   ├── LogViewModel.cs         日志面板（增量镜像 + 级别过滤）
 │   ├── ReplayViewModel.cs      回放（薄适配）：读设置里的录音目录 + 驱动 RUSTool.Replay 引擎 + 接管
@@ -74,13 +74,14 @@ RUSTool.UI/
     │   ├── DebugWorkspace.axaml        上排 3D / 影像 / 曲线（卡片体直接是 charts:RobotStatePanel），下排 指令 / 日志，底部回放传输条
     │   ├── Scene3DView.axaml           三层叠放：占位层 + RobotViewport + 角标
     │   ├── UltrasoundView.axaml        超声影像（占位）
-    │   ├── ArmControlPanel.axaml       点动 / MoveJ / MoveL（「按住走、松手停」）
-    │   ├── ScanWorkflowPanel.axaml     四步流程面板
+    │   ├── ArmControlPanel.axaml       手动面板：点动（复用 JogAxes）/ MoveJ / MoveL
+    │   ├── JogAxes.axaml               可复用点动控件（6 轴，按住走 / 松手停；手动与扫查面板共用）
+    │   ├── ScanWorkflowPanel.axaml     扫查面板：四步流程 + 点动并排（点动仅预扫查 / 选点可用）
     │   ├── RobotStatusOverlay.axaml    机械臂状态浮层（3D 视口右上角，按需展开）
-    │   ├── ReplayModule.axaml          回放传输条（单行、高密度）
+    │   ├── ReplayModule.axaml          回放传输条（单行、高密度；固定高度，载入前后一致）
     │   └── LogView.axaml               日志面板
     └── Clinical/               临床工作区
-        └── ClinicalWorkspace.axaml     超声 + 3D 分栏主视图 + 4 步向导 + 常驻急停
+        └── ClinicalWorkspace.axaml     超声 + 3D 分栏 + 上四步流程 / 下点动 + 底部常驻错误状态栏 + 常驻急停
 ```
 
 ## 2. 两类用户与设计原则
@@ -226,6 +227,10 @@ RUSTool.UI/
   这是"只留一个小窗看不清"之后的修正。
 - **末端接触力 HUD** 叠在超声主栏右上角；接触力是临床唯一展示的数值。
 - 急停 / 急停恢复在右侧向导底部常驻。
+- **右侧向导卡上下排列**：上＝四步流程，下＝点动（占满卡宽，参考系下拉固定窄宽）。
+  点动仅在 **①预扫查 / ②位姿选点** 阶段可用（`ScanWorkflowViewModel.CanJog`）。
+- **底部常驻状态栏**：显示**最近一条错误信息**（`MainViewModel.LastError`，来自错误级日志；
+  无错误时留空）。临床不显示日志面板，出错只从这里露出，不再用"从顶部冒出的横幅"。
 
 **尚未实现**（后续）：主视图目前固定为"超声主 + 3D 辅"，不随阶段切换。
 目标态是早期阶段（建图/选点/规划）把 3D 放大为主、超声退为辅或隐藏；
@@ -238,22 +243,13 @@ RUSTool.UI/
 | ③ 规划 | 点云 + 规划路径预览线 | [开始规划] |
 | ④ 执行扫查 | 超声影像（主）+ 3D 轨迹（辅） | [暂停] [停止] |
 
-### 6.3 临床点动键盘
+### 6.3 临床点动
 
-复用 `start_jog`（ref=基坐标，固定低速，max_dis=0 无限），UI 呈现为 6 个方向键；按压=点动，松手=停。
+复用后端 `start_jog`（按住走 / 松手停），与工程师「手动」面板**共用同一个 `RobotControlViewModel`
+与 `JogAxes` 控件**：6 根轴（X/Y/Z 方向 + 绕 X/Y/Z 旋转）+ 参考系下拉 + 速度滑条。
 
-```
-              ┌─────┐
-              │ 上  │      ← Z+
-      ┌─────┐ ├─────┤ ┌─────┐
-      │ 左  │ │ 后  │ │ 右  │   ← Y- / X- / Y+
-      └─────┘ └─────┘ └─────┘
-              │ 前  │      ← X+
-              ├─────┤
-              │ 下  │      ← Z-
-```
-
-隐藏参考系切换与速度调节，只做「把探头挪到病人体表上」这一件事。
+> 早期设计稿是"6 个方向键、隐藏参考系与速度"；当前实现直接复用完整 6 轴控件（少写一套交互），
+> 只在**阶段**上收紧：仅 ①预扫查 / ②位姿选点 可用，其余阶段整块置灰（`CanJog`）。
 
 ### 6.4 交互与安全规则
 
@@ -277,7 +273,7 @@ RUSTool.UI/
 ┌──────────────────────────────────────────────────────────────────┐
 │ 工具栏: [连接][断开] [真实|仿真] [● 录制][开始/停止] │ 模式切换 │ [🛑急停] │ 状态点 │
 ├──────────────┬──────────────────────────┬─────────────────────────┤
-│ 3D场景/HUD   │ 超声影像                 │ 数据曲线                │
+│ 3D场景(点云/重建/网格/轨迹)/HUD │ 超声影像           │ 数据曲线       │
 ├──────────────┴──────────────────────────┴─────────────────────────┤
 │ ┌ 机器人指令 [手动|扫查] ─────────────┐   ┌ 日志 ─────────────────┐ │
 │ │   当前页内容（点动 / 扫查流程）        │   │  自动滚动 / 只看警告    │ │
@@ -288,7 +284,8 @@ RUSTool.UI/
 ```
 
 > **回放是一条底部全宽传输条**（不是下排的一张卡片）：时间轴可以拉长、控件挤在一行，
-> 信息密度高；下排空间让给「机器人指令 / 日志」。
+> 信息密度高；下排空间让给「机器人指令 / 日志」。整条**固定高度**（载入前只有提示文字、
+> 载入后是整条传输控件，两者高度一致，不会"载入后变高"）。
 >
 > **录制走后端、回放走前端本地**：
 > - 工具栏常驻一个录制开关（开始 / 停止 + 状态灯 + 计时），对应后端 `recorder_*`（旁路，不变）。
@@ -315,7 +312,10 @@ RUSTool.UI/
 | 仿真 | 倍速、单步、仿真时间/帧率 |
 | 驱动 | robot_enable、switch_driver、get_driver_type、is_connected、get_state、run_file |
 
-> **点动独占一个 tab 并占满面板宽度**：点动是最高频持续操作，需要最大空间，内部用 2 列 × 3 轴紧凑布局，避免横向溢出。
+> **手动面板分两栏**：左＝点动（复用 `JogAxes`，6 轴单列、按住走 / 松手停），右＝运动指令
+> （movej / movel 输入 + 通用运动速度滑条 + 停止点动 / 偏移清零 / 暂停 / 继续）。
+> 点动与扫查面板**共用同一个 `JogAxes` 控件与 `RobotControlViewModel`** —— 交互只写一次，
+> 参考系 / 速度由宿主各自摆放。
 
 ### 7.3 3D 场景图层
 
@@ -324,7 +324,7 @@ RUSTool.UI/
 | 机械臂 DH 模型 | 真实尺寸连杆与关节 | ✅ 已接（URDF + 关节驱动） |
 | 点云 | 预扫查生成的病人体表点云（验证建图质量） | ✅ 已接：`/sensor` 帧整帧替换（当前帧 / 累积地图快照都走同一条路径） |
 | TCP 坐标系 | 工具中心点 XYZ 三轴（库自带 `Axes`，rviz 风格三色箭头、恒定屏幕尺寸、永远可见） | ✅ 已接：`/state.tool_pose` → `RobotViewport.TcpPose` → 每帧更新；无 `tool_pose`（如未连后端）时不显示。3D 卡片头另有「点云」开关，与它无关 |
-| 规划路径线 | 预设扫查路径 | ⬜ 未接 |
+| 规划路径线 | `plan_done` 事件的 `result` 轨迹点序列（`[x,y,z, …]`，m，base_link）→ 库的 `Curve` 折线（绿色、`lineWidth: 3`，0.4.1 的 `LineWidth`） | ✅ 已接：`plan_done` → `ScanWorkflowViewModel.TrajectoryGenerated` → `MainViewModel.TrajectoryReceived` → 视口邮箱 → `RobotScene` 折线；停止 / 复位清空。3D 卡片头有「轨迹」开关 |
 | 实时轨迹 | TCP 实际运动轨迹（透明度渐变） | ⬜ 未接 |
 | 力矢量箭头 | 末端接触力大小与方向 | ⬜ 未接（HUD 里有数值） |
 | 超声探头模型 | 探头姿态与扫查面朝向 | ⬜ 未接 |
@@ -333,12 +333,20 @@ RUSTool.UI/
 
 ## 8. 点动交互差异（临床 vs 工程师）
 
-| | 临床（建图阶段） | 工程师 |
+| | 临床 | 工程师 |
 |---|---|---|
-| 形式 | 简化方向键（前/后/左/右/上/下） | 完整 6 轴 + 参考系切换 |
-| 速度 | 固定低速，不可调 | 0~100 可调 |
-| 参考系 | 隐藏（锁定基坐标） | 关节/基/工具可切换 |
-| 出现时机 | 只在①建图阶段 | 始终可及 |
+| 形式 | 完整 6 轴（复用 `JogAxes`） | 完整 6 轴（复用 `JogAxes`） |
+| 速度 | 0~100 可调（共用） | 0~100 可调 |
+| 参考系 | 关节 / 基 / 工具可切换 | 关节 / 基 / 工具可切换 |
+| 出现时机 | 仅 ①预扫查 / ②位姿选点（`CanJog`） | 手动面板始终可及 |
+
+> **现状实现**：手动面板与两个工作区的扫查卡片**共用同一个 `RobotControlViewModel` 与同一套
+> `JogAxes` 控件（按住走 / 松手停）**——交互只写一次，参考系 / 速度由宿主摆放。
+> - 工程师扫查卡片：**左＝四步流程，右＝点动**（并排；分割线用 `Auto` 列，避免
+>   `dividerVertical` 的 `Margin` 溢出压到相邻列）。
+> - 临床向导卡：**上＝四步流程，下＝点动**（上下排列、点动占满卡宽）。
+> - 点动闸门统一由 `ScanWorkflowViewModel.CanJog` 控制：**仅 ①预扫查 / ②位姿选点** 可用，
+>   规划 / 执行等阶段整块置灰。后端 `start_jog` 本就直连 driver、不受 `set_mode` 影响。
 
 ---
 
@@ -369,8 +377,11 @@ RUSTool.UI/
 
 ### 9.2 记录与回放模块
 
-- 记录：超声影像、机械臂 6D 位姿、力/扭矩 6 维、控制指令与状态。
-- 回放：时间轴拖拽、播放/暂停/步进、速度 0.1x~2.0x、A/B 循环、双轨联动（超声 + 曲线同步）。
+- 记录：走后端 `recorder_*`（RECORDER 旁路），工具栏开关 + 状态灯 + 计时（详见 §7.1）。
+- 回放：前端本地读 `.rusrec`（`RUSTool.Replay`）。时间轴拖拽、播放/暂停/步进、速度、
+  回起点 / 快退 / 快进 / 停止；状态帧与点云喂回**与实时相同**的下游（HUD / 曲线 / 3D）。
+  `RobotState` 解码**带 `tool_index` / `tool_pose`**，所以回放时 3D 的工具坐标系照常显示。
+- **暂无 A/B 循环**（旧后端回放的能力未迁移）。
 
 ### 9.3 主题与配色
 
@@ -660,7 +671,10 @@ cd RUSTool.UI
    `MeshFrameCodec` + 库 `MeshSink`）已解码并进 3D（3D 卡片头「重建 / 网格」开关）。
 4. **`set_start_pose` / `set_end_pose` 参数** ✅ 已对齐：前端带上当前 `state.tool_pose`
    `[x,y,z,rx,ry,rz]`（m/rad）作为 args（后端有参按坐标、无参用当前 TCP）。
-5. **回放模块**：时间轴、A/B 循环、双轨联动都还是演示数据。
+5. **回放模块**：本地回放**已接真实**（`.rusrec` 解码 + 时间轴 / seek / 倍速 / 单步，喂 HUD / 曲线 / 3D）。
+   仍缺：A/B 循环、超声 + 曲线真正的"双轨联动"（取决于录音里是否含影像通道）。
+6. **规划轨迹显示** ✅ 已完成：`plan_done` 的 `result` → 3D 折线
+   （`RobotScene` 的 `Curve`，0.4.1 的 `LineWidth`），3D 卡片头「轨迹」开关；停止 / 复位清空。
 
 ---
 
@@ -670,7 +684,7 @@ cd RUSTool.UI
 |------|------|------|
 | UI 框架 | **Avalonia 12.1.0** | 跨平台桌面；`OpenGlControlBase` 可直接嵌 GL |
 | 架构模式 | **MVVM + CommunityToolkit.Mvvm 8.4.2** | 源生成器（`ObservableProperty` / `RelayCommand`） |
-| 3D 渲染 | **`RobotSimulation` 0.3.1**（Silk.NET.OpenGL 2.23.0） | 自研图形库；隔离在 `RUSTool.Visualization` |
+| 3D 渲染 | **`RobotSimulation` 0.4.1**（Silk.NET.OpenGL 2.23.0） | 自研图形库；隔离在 `RUSTool.Visualization` |
 | 依赖注入 | 无容器，显式组合根（`App.CreateMainViewModel`） | 依赖图小而固定，引入容器反而多一层间接 |
 | 日志 | **自研 `ILogService`**（契约在 Core、实现在界面层，按天落盘） | 与图形栈日志合流（来源列 `sim`） |
 | 图表 | **`LiveChartsCore.SkiaSharpView.Avalonia` 2.1.0-dev-798**（SkiaSharp 跟随 Avalonia 传递引入 3.119.4） | 隔离在 `RUSTool.Charts`；2.0.4 / 2.0.5 在 Avalonia 12.1.0 下抛 `MissingFieldException`，所以钉这个预览版 |

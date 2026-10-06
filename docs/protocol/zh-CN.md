@@ -105,7 +105,7 @@ public record RobotState
 | `id` | int | 对应请求的 ID（event 恒为 0，用 `ack_id` 关联） |
 | `success` | bool | 执行成功/失败 |
 | `message` | string | 失败原因 / 附加说明 |
-| `result` | double[] | **数值**返回值（查询类指令使用） |
+| `result` | double[] | **数值**返回值（查询类指令使用；**事件**也用它 —— 如 `plan_done` 的 `result` 是规划轨迹点序列 `[x,y,z, …]`，m，base_link，≤2000 点） |
 | `strings` | string[] | **文本**返回值（协议 v0.4；录制 / 回放的文件名清单等，旧后端缺失时按空数组处理） |
 | `error_code` | uint32 | **结构化错误码**（协议加性字段，0 = 成功）：1xxx 协议/路由（1001 未知指令 / 1002 参数非法 / 1004 超时 / 1005 服务不可用 / 1006 异常）、2xxx 领域（2000 模块失败…）。前端 `ReplyOrEvent.ErrorCode` 已解析，失败日志会带上码 |
 
@@ -235,6 +235,10 @@ result 定长 7 项 `state / records / payload_mib / file_mib / dropped / thrott
 | `execute` | `[]` | `motion_done` / `scan_done` | 执行 |
 | `stop` / `pause` / `resume` / `reset` | `[]` | — | 流程控制（`stop` 任意阶段可达） |
 | `query_prescan_done` / `query_motion_done` | `[]` | — | 查询完成状态（Result[0] = 1/0） |
+
+> **`plan_done` 事件带 `result`**：规划轨迹点序列 扁平 `[x,y,z, …]`（m，base_link；超 2000 点等距抽稀、末点必含）。
+> 前端 `BridgeClient` 把它装进 `EventNotification.Result`（v0.4 起），再由
+> `ScanWorkflowViewModel.TrajectoryGenerated` → 3D 折线显示；停止 / 复位清空。
 
 ---
 

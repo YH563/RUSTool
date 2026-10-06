@@ -163,7 +163,7 @@ View  ← 绑定 →  ViewModel                    ┐
 | **Views** | `RUSTool.UI` | 界面呈现（配色走主题语义类，无值转换器） | AXAML 文件 |
 | **Styles** | `RUSTool.UI` | 应用级布局类 | `AppLayout.axaml` |
 | **Composition Root** | `RUSTool.UI` | 依赖图组装：全项目唯一 new 具体实现的地方 | `App.CreateMainViewModel` |
-| **Visualization** | `RUSTool.Visualization` | 3D 场景与渲染：把图形栈（Silk.NET / OpenGL / RobotSimulation）关在一个工程里，对界面只暴露三个契约（控件 + 点云帧 + 日志出口） | `RobotViewport`（GL 生命周期 + 每帧 + 相机 / 拾取）、`RobotScene`（URDF 模型 + 关节驱动）、`SimulationLogBridge`（库日志接出来） |
+| **Visualization** | `RUSTool.Visualization` | 3D 场景与渲染：把图形栈（Silk.NET / OpenGL / RobotSimulation）关在一个工程里，对界面只暴露三个契约（控件 + 帧数据 + 日志出口） | `RobotViewport`（GL 生命周期 + 每帧 + 相机 / 拾取 + 关节 / 点云 / 轨迹投递）、`RobotScene`（URDF 模型 + 关节驱动 + 点云 / 轨迹图层）、`SimulationLogBridge`（库日志接出来） |
 | **Charts** | `RUSTool.Charts` | 2D 曲线：把图表栈（LiveCharts 2 / SkiaSharp）关在一个工程里，对界面只暴露曲线控件与行模型；滚动窗口、通道目录、线色/线宽都留在库内 | `RobotStatePanel`（一路一行、六行等分铺满 + 行头色标/名字/读数 + 空数据态）、`RobotStateRow` / `RobotStateRows`（行模型与推帧入口）、`RobotArmChannels`（通道目录）、`StatePalette` / `ChannelBrushConverter`（线色与行头色标） |
 | **Data** | ⬜ 待拆为独立项目 | 数据库/持久化 | SQLite、PostgreSQL 仓储实现 |
 | **Infrastructure** | ⬜ 待拆为独立项目 | 跨切面基础设施 | 配置、IoC 容器、异常处理 |
@@ -318,7 +318,7 @@ Idle ──► PreScanning ──► Posing ──► Planning ──► Ready �
 > `RUSTool.Core` 与测试从未引用该项目，因此删除对它们是零影响（编译器可证）。
 
 > `RUSTool.Visualization` 是**新增**工程（不是迁移）：把 3D 内核 `RobotSimulation`
-> （`Core` / `Robot` / `OpenGL`，0.3.1，全部发布在 nuget.org 上）接进 Avalonia。
+> （`Core` / `Robot` / `OpenGL`，0.4.1，全部发布在 nuget.org 上）接进 Avalonia。
 > `RUSTool.UI` 只引用它、不引用 Silk.NET；无 GL 时（离屏截图、无显卡机器）它自动降级为设计好的空状态，
 > 因此 `preview.sh` 的产出与以前一样可用。
 > 库日志经 `SimulationLogBridge` 汇进项目日志器（来源列 `sim`）；总趋势是**图形细节下移给库** ——

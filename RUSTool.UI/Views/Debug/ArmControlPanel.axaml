@@ -3,6 +3,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="using:RUSTool.UI.ViewModels"
+             xmlns:debug="using:RUSTool.UI.Views.Debug"
              mc:Ignorable="d" d:DesignWidth="700" d:DesignHeight="350"
              x:Class="RUSTool.UI.Views.Debug.ArmControlPanel"
              x:DataType="vm:RobotControlViewModel">
@@ -32,24 +33,8 @@
                 </StackPanel>
             </Grid>
 
-            <!-- 6 根轴：数据驱动，行模板只写一次 -->
-            <ItemsControl Grid.Row="1" ItemsSource="{Binding Axes}">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate x:DataType="vm:JogAxis">
-                        <Border Classes="sunken" Padding="10,3" Margin="0,2">
-                            <Grid ColumnDefinitions="*,Auto">
-                                <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />
-
-                                <!-- Tag 只表示方向；轴信息来自按钮的 DataContext -->
-                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
-                                    <Button Classes="sm" Content="−" Width="52" Tag="neg" />
-                                    <Button Classes="sm" Content="+" Width="52" Tag="pos" />
-                                </StackPanel>
-                            </Grid>
-                        </Border>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
+            <!-- 6 根轴：可复用点动控件（与扫查面板共用，按住走 / 松手停） -->
+            <debug:JogAxes Grid.Row="1" />
         </Grid>
 
         <Rectangle Grid.Row="0" Grid.Column="1" Classes="dividerVertical" Margin="14,4" />

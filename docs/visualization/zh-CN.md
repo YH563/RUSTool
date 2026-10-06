@@ -47,7 +47,7 @@ RUSTool.UI  ──绑定──►  RobotViewport.JointValues   （float 列表�
 单位约定与库一致：**弧度 / 米 / Z 轴向上**。界面这一层不做换算 ——
 HUD 上给人看的度数是另一条投影（见 `RobotStatusViewModel`）。
 
-界面**不自绘**朝向坐标轴：右下角那个 gizmo 是图形库画的（`RobotSimulation` 0.3.1 的
+界面**不自绘**朝向坐标轴：右下角那个 gizmo 是图形库画的（`RobotSimulation` 的
 `SceneGraph.ShowOrientationGizmo`，默认开启，屏幕空间、不随相机缩放）。界面里出现第二条轴 = 重复。
 
 界面也**不自己维护「选中」**：一次单击 = 库的 `SceneGraph.PickAndSelect` —— 命中就单选
@@ -90,7 +90,7 @@ SimulationLogBridge.Attach(new SimulationLogSink(log));   // log 是 ILogService
 RUSTool.Visualization/
 ├── Controls/RobotViewport.cs        OpenGlControlBase 宿主：GL 生命周期 / 每帧 / 相机 / 拾取 /
 │                                    关节帧与点云帧两条邮箱（唯一的数据入口）
-├── Scene/RobotScene.cs              场景装配：默认场景 + URDF 模型 + 关节驱动 + 点云图层（纯 CPU）
+├── Scene/RobotScene.cs              场景装配：默认场景 + URDF 模型 + 关节驱动 + 点云 / 轨迹图层（纯 CPU）
 ├── Scene/PointCloudLayer.cs         感知点云图层：整帧替换 / 只读渲染侧的 CPU 数据
 ├── Scene/PointCloudFrame.cs         点云帧的形状（本工程自己的类型，不认识 RUSTool.Core）
 ├── Logging/
@@ -100,8 +100,8 @@ RUSTool.Visualization/
 └── README.md                    工程级说明（导航到本文）
 ```
 
-`RobotScene` 是**加 3D 图层的落点**：点云已经挂上（`PointCloud`），规划路径、实时轨迹、力矢量箭头
-今后往 `Graph` 上挂，上层界面不需要知道多了一个图层。它对外可见的状态：
+`RobotScene` 是**加 3D 图层的落点**：点云（`PointCloud` / `PcMap`）与规划轨迹（`Curve`）已挂上，
+实时轨迹、力矢量箭头今后往 `Graph` 上挂，上层界面不需要知道多了一个图层。它对外可见的状态：
 
 | 成员 | 说明 |
 |---|---|
@@ -112,6 +112,8 @@ RUSTool.Visualization/
 | `PointCloud` | 感知点云图层（`PointCloudLayer`），装配时就挂上、默认不可见 |
 | `ApplyJointValues(...)` | 关节角（弧度）→ URDF 关节的 `Transform`；渲染线程独占调用 |
 | `ApplyPointCloudFrame(...)` | 一帧点云 → 点云图层（整帧替换）；同样只能在渲染线程调用 |
+| `ApplyTrajectory(points?)` | 规划轨迹点序列 → 折线（库的 `Curve`，绿色、线宽 3）；不足 2 个点 = 清空并隐藏；渲染线程调用 |
+| `SetTrajectoryVisible(bool)` | 按界面「轨迹」开关对齐折线可见性（无轨迹时始终隐藏） |
 
 > **任何一步失败都不抛异常**：3D 面板不该因为一个数据文件（或缺显卡）而白屏 ——
 > 失败原因写进 `LoadReport`，控件走 `Failed`，由界面决定显示什么。
@@ -169,11 +171,26 @@ RUSTool.Visualization/
 [`../ui/zh-CN.md`](../ui/zh-CN.md) 第 9.5 节。代价是切回来要重建一次图形栈：
 日志里每次切换都会多一行 `[3d] 就绪 …`，属正常，不是异常。
 
+### 4.2 规划轨迹图层（`plan_done`）怎么接进来的
+
+与点云同一条「解码 → 适配 / 投递 → 渲染线程落地」三段式，但数据源不是 WebSocket 帧流，
+而是 `/control` 上的 `plan_done` **事件**（`result` = 扁平 `[x,y,z, …]`，m，base_link）：
+
+| 段 | 位置 | 线程 | 做什么 |
+|---|---|---|---|
+| 事件 | `BridgeClient.OnControlMessage`（event 分支） | WS 线程 | 把 `event.result` 装进 `EventNotification`（v0.4 起带 `Result`） |
+| 适配 / 投递 | `ScanWorkflowViewModel.OnEvent`（`plan_done`）→ `MainViewModel.TrajectoryReceived` → `Scene3DView.OnTrajectory` → `RobotViewport.SubmitTrajectory` | WS 线程 | double → float、写进视口的轨迹邮箱（覆盖式），请求下一帧 |
+| 落地 | `RobotViewport.OnOpenGlRender` → `RobotScene.ApplyTrajectory` → `Curve.SetPoints` | 渲染线程 | 重建折线的 `LineData`（库在数据引用变化时重上一次 GPU） |
+
+- 折线是**整帧替换**（`Curve.SetPoints` 换一份 `LineData`），不是增量；轨迹一次规划一次下发，无高频压力。
+- 停止 / 复位时 `ScanWorkflowViewModel` 抛空数组 → 清空并隐藏；`RobotViewport` 的 `ShowTrajectory` 开关再收一层。
+- 坐标是 base_link，客户端不做任何变换；`Curve` 的 `LineWidth`（0.4.1）给 3 像素。
+
 ## 5. 依赖
 
 | 包 | 版本 | 作用 |
 |---|---|---|
-| `RobotSimulation.Core` / `.Robot` / `.OpenGL` | 0.3.1 | 场景图 / URDF + 正运动学 / Silk.NET 渲染后端（0.2.0 起自带屏幕空间朝向 gizmo；0.2.1 修正关节合成顺序；**0.3.0** 把 gizmo 尺寸改归渲染器、给场景图立下线程契约 —— 属主线程只声明一次，`PointCloud2Data` 只能由属主线程写；0.3.1 补 `Axes.AlwaysOnTop` / `GameObject.ShowLocalAxes`） |
+| `RobotSimulation.Core` / `.Robot` / `.OpenGL` | 0.4.1 | 场景图 / URDF + 正运动学 / Silk.NET 渲染后端（0.2.0 起自带屏幕空间朝向 gizmo；0.2.1 修正关节合成顺序；**0.3.0** 把 gizmo 尺寸改归渲染器、给场景图立下线程契约 —— 属主线程只声明一次，`PointCloud2Data` 只能由属主线程写；0.3.1 补 `Axes.AlwaysOnTop` / `GameObject.ShowLocalAxes`；**0.4.0** 增量网格外部写入协议；**0.4.1** 折线线宽 `GameObject.LineWidth` / `Curve(..., lineWidth)`——规划轨迹据此加粗） |
 | `Microsoft.Extensions.Logging` | 10.0.11 | `SimulationLogBridge` 实现 `ILoggerProvider` / `ILogger` 用；用 net8.0 资产，不给项目带进任何 10.0 运行时 |
 | `Avalonia` | 12.1.0 | `OpenGlControlBase`：给我们一个 GL 上下文和一个 framebuffer |
 | `Silk.NET.OpenGL` | 2.23.0 | 把 Avalonia 的过程地址包成 GL 门面 |
@@ -181,7 +198,7 @@ RUSTool.Visualization/
 **要求桌面 OpenGL**：后端只带 `#version 330 core` 着色器，拿到 GLES（部分平台的 ANGLE / EGL 默认）
 会抛 `NotSupportedException` —— 控件会捕获它并走 `Failed` 降级，不会让应用崩掉。
 
-包全部来自 **nuget.org**（`RobotSimulation` 0.1.0 / 0.2.0 / 0.2.1 / 0.3.0 / 0.3.1 都已发布），
+包全部来自 **nuget.org**（`RobotSimulation` 0.1.0 … 0.4.1 都已发布），
 仓库根的 `NuGet.config` 只登记这一个源 —— 换机器 / 上 CI 不需要任何手工加源。
 真无外网时只能靠 `~/.nuget/packages` 里已有的缓存还原，本仓库不再依赖本机离线目录。
 

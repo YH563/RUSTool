@@ -41,6 +41,12 @@ public sealed class RobotScene : IDisposable
     /// <summary>增量网格接收端（<c>/mesh</c>）；块节点由它在场景里创建 / 替换 / 删除。</summary>
     private readonly MeshSink _meshSink;
 
+    /// <summary>规划轨迹（<c>plan_done</c>）：一条折线；默认隐藏，收到轨迹才显示。</summary>
+    private readonly Curve _trajectory;
+
+    /// <summary>当前轨迹点数（&lt;2 = 无轨迹）；供可见性判断用。</summary>
+    private int _trajectoryPoints;
+
     private RobotScene(SceneGraph graph)
     {
         Graph = graph;
@@ -57,6 +63,15 @@ public sealed class RobotScene : IDisposable
 
         // 增量网格（/mesh）：库的 MeshSink 负责在场景里建 / 换 / 删块节点。
         _meshSink = new MeshSink(graph, null, true);
+
+        // 规划轨迹（plan_done）：一条折线（库的 Curve，Line pass）。默认隐藏，收到轨迹才显示。
+        // 后端已算好 base_link 下的坐标，客户端不做变换。
+        _trajectory = new Curve([], color: new Vector4(0.1f, 0.9f, 0.4f, 1f),
+            name: "PlannedTrajectory", lineWidth: 3f)
+        {
+            Visible = false,
+        };
+        graph.Add(_trajectory);
 
         // TCP 坐标系：库自带的 Axes（+X 红 / +Y 绿 / +Z 蓝）。用「恒定屏幕尺寸 + 永远可见」
         // 当一个小标记 —— 它是给操作者指 TCP 朝向的，不该被机械臂本体挡住、也不该随镜头变大变小。
@@ -167,6 +182,34 @@ public sealed class RobotScene : IDisposable
 
     /// <summary>清空并隐藏面元点云图。属主线程调用。</summary>
     public void ClearPcMap() => PcMap.Clear();
+
+    /// <summary>
+    /// 用一条规划轨迹（<c>plan_done</c>）替换折线图层：<paramref name="points"/> 为 base_link 下的点序列
+    /// （m）。不足 2 个点视为清空 + 隐藏。<b>只能在场景图属主线程（渲染回调）调用。</b>
+    /// </summary>
+    public void ApplyTrajectory(IReadOnlyList<Vector3>? points)
+    {
+        if (points is null || points.Count < 2)
+        {
+            ClearTrajectory();
+            return;
+        }
+
+        _trajectoryPoints = points.Count;
+        _trajectory.SetPoints(points);
+        _trajectory.Visible = true;
+    }
+
+    /// <summary>清空并隐藏规划轨迹（复位 / 停止时用）。属主线程调用。</summary>
+    public void ClearTrajectory()
+    {
+        _trajectoryPoints = 0;
+        _trajectory.SetPoints([]);
+        _trajectory.Visible = false;
+    }
+
+    /// <summary>按界面开关对齐轨迹可见性（无轨迹时始终隐藏）。属主线程调用。</summary>
+    public void SetTrajectoryVisible(bool visible) => _trajectory.Visible = visible && _trajectoryPoints >= 2;
 
     /// <summary>
     /// 应用一帧增量网格（<c>/mesh</c>）：把每个块换算成库的 <see cref="MeshChunkUpdate"/>

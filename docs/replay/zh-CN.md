@@ -22,6 +22,8 @@
 - `CdrReader.cs` + `RecPayloadDecoder.cs`：payload 是 ROS 消息的 CDR 字节，映射到前端两个契约
   —— `RobotState → BridgeProtocol.StateFrame`；`SensorFrame → SensorPointCloudFrame`
   （复用 `SensorFrameCodec` 的反量化，和实时 `/sensor` 同一条路径）。
+  `RobotState` 解码**带 `tool_index` / `tool_pose`**（不能丢：丢了回放时 `Status.TcpPose` 为空，
+  3D 里的工具坐标系会消失，而实时链路 `/state` 是带 `tool_pose` 的）。
 - `RecordingsLibrary.cs`：列出 `*.rusrec`（文件名升序 = 时间序）。
 
 ## 3. 回放引擎（`LocalReplayPlayer`）

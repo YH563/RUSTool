@@ -101,6 +101,26 @@ internal static class Program
             Dispatcher.UIThread.RunJobs();
         }
 
+        // 可选：注入一条合成规划轨迹（--demo-trajectory）。走的是真实 plan_done 的同一个出口
+        // （MainViewModel.TrajectoryReceived → Scene3DView → 视口邮箱 → 场景折线）。
+        // 轨迹点用 base_link 坐标（m），在整机前方画一段小幅蛇形扫查路径。
+        if (args.Contains("--demo-trajectory"))
+        {
+            const int n = 160;
+            var pts = new float[n * 3];
+            for (int i = 0; i < n; i++)
+            {
+                float t = i / (float)(n - 1);
+                pts[i * 3 + 0] = -0.30f + 0.60f * t;                      // x：前后
+                pts[i * 3 + 1] = 0.16f * MathF.Sin(t * MathF.PI * 5f);    // y：横向蛇形
+                pts[i * 3 + 2] = 0.30f + 0.05f * MathF.Cos(t * MathF.PI * 2f); // z：高度
+            }
+
+            vm.PublishTrajectory(pts);
+            Dispatcher.UIThread.RunJobs();
+            Console.Error.WriteLine($"[ui] 轨迹：已注入 {n} 个点的合成路径");
+        }
+
         // 可选：注入一整段合成状态帧（--demo-torque），把六路关节力矩曲线画出来。
         // 与 --demo-cloud 同一套路：帧按协议的线格式真的拼了一遍、再用生产的解码器解回来，
         // 只跳过 WebSocket 传输。这里要多给一样东西 —— 【一段历史】：

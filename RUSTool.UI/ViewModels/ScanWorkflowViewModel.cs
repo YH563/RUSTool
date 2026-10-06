@@ -4,6 +4,7 @@ using RUSTool.Communication;
 using RUSTool.Services.Logging;
 using RUSTool.Services.Robot;
 using RUSTool.Services.Robot.Workflows;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -86,10 +87,11 @@ public sealed partial class ScanWorkflowViewModel : ViewModelBase
     private readonly ILogService _log;
     private readonly ScanStateMachine _fsm = new();
 
-    public ScanWorkflowViewModel(IRobotService robot, ILogService log)
+    public ScanWorkflowViewModel(IRobotService robot, ILogService log, RobotControlViewModel control)
     {
         _robot = robot;
         _log = log;
+        Control = control;
 
         Steps = new List<ScanStep>
         {
@@ -108,6 +110,19 @@ public sealed partial class ScanWorkflowViewModel : ViewModelBase
     }
 
     public IReadOnlyList<ScanStep> Steps { get; }
+
+    /// <summary>
+    /// 规划轨迹就绪（<c>plan_done</c> 事件的 <c>result</c>）——扁平三维点序列 <c>[x,y,z, …]</c>（m，base_link）。
+    /// 由 3D 视图订阅后在场景里画成一条路径。复位 / 停止时抛一个空数组表示「清空」。
+    /// <b>后台线程触发</b>（WS 线程），订阅者只该把点丢进视口邮箱。
+    /// </summary>
+    public event Action<float[]>? TrajectoryGenerated;
+
+    /// <summary>
+    /// 共用点动 VM（与「手动」面板同一个实例）—— 扫查卡片里点动与流程并排显示。
+    /// 后端 <c>start_jog</c> 本就直连 driver、不受 <c>set_mode</c> 影响。
+    /// </summary>
+    public RobotControlViewModel Control { get; }
 
     /// <summary>当前阶段的文字描述（卡片头 / 临床标签）。</summary>
     [ObservableProperty]
@@ -144,6 +159,12 @@ public sealed partial class ScanWorkflowViewModel : ViewModelBase
     public bool CanResume => IsPaused && _fsm.Stage == ScanStage.Executing;
     public bool CanStop => _fsm.Stage != ScanStage.Idle;
     public bool CanReset => _fsm.Stage != ScanStage.Idle;
+
+    /// <summary>
+    /// 点动是否可用：**预扫查 / 位姿选点**阶段（建图时点动扫过体表；选点时点动把机械臂移到起点 / 终点）；
+    /// 规划 / 执行等其余阶段置灰。
+    /// </summary>
+    public bool CanJog => _fsm.Stage is ScanStage.PreScanning or ScanStage.Posing;
 
     /// <summary>
     /// 「下一步」是否可用（临床主 CTA）：按当前阶段路由到该做的那件事；
@@ -255,6 +276,7 @@ public sealed partial class ScanWorkflowViewModel : ViewModelBase
         IsPaused = false;
         _fsm.TryFire(ScanTrigger.Stop);
         Handle("stop", await _robot.StopAsync());
+        TrajectoryGenerated?.Invoke([]); // 停止后清掉 3D 里的规划路径
         UpdateDerived();
     }
 
@@ -265,6 +287,7 @@ public sealed partial class ScanWorkflowViewModel : ViewModelBase
         IsPaused = false;
         _fsm.TryFire(ScanTrigger.Reset);
         Handle("reset", await _robot.ResetAsync());
+        TrajectoryGenerated?.Invoke([]); // 复位后清掉 3D 里的规划路径
         UpdateDerived();
     }
 
@@ -325,7 +348,12 @@ public sealed partial class ScanWorkflowViewModel : ViewModelBase
                 break;
 
             case "plan_done":
-                if (evt.Success) _fsm.TryFire(ScanTrigger.PlanDone);
+                if (evt.Success)
+                {
+                    _fsm.TryFire(ScanTrigger.PlanDone);
+                    // result = 规划轨迹（扁平 [x,y,z, …]，m，base_link）→ 交给 3D 视图画出来。
+                    PublishTrajectory(evt.Result);
+                }
                 break;
 
             case "motion_done":
@@ -344,6 +372,24 @@ public sealed partial class ScanWorkflowViewModel : ViewModelBase
         }
 
         UpdateDerived();
+    }
+
+    /// <summary>
+    /// 把 <c>plan_done</c> 的 <c>result</c>（double 扁平点）转成 float 扁平点抛给 3D 视图；
+    /// 点数不足 2 个（&lt;6 个分量）时抛空数组 = 清空轨迹。
+    /// </summary>
+    private void PublishTrajectory(double[] xyz)
+    {
+        if (xyz.Length < 6)
+        {
+            TrajectoryGenerated?.Invoke([]);
+            return;
+        }
+
+        var points = new float[xyz.Length];
+        for (int i = 0; i < xyz.Length; i++)
+            points[i] = (float)xyz[i];
+        TrajectoryGenerated?.Invoke(points);
     }
 
     /// <summary>统一处理回执：成功写日志、返回是否成功。</summary>
@@ -434,6 +480,7 @@ public sealed partial class ScanWorkflowViewModel : ViewModelBase
         OnPropertyChanged(nameof(CanResume));
         OnPropertyChanged(nameof(CanStop));
         OnPropertyChanged(nameof(CanReset));
+        OnPropertyChanged(nameof(CanJog));
         OnPropertyChanged(nameof(CanNextStep));
     }
 }

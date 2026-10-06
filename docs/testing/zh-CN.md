@@ -10,12 +10,12 @@
 
 | 项 | 值 |
 |---|---|
-| 目标框架 | `net8.0`（五个工程统一，跟随 `RobotSimulation` 0.3.1 的 lib 目录） |
+| 目标框架 | `net8.0`（五个工程统一，跟随 `RobotSimulation` 0.4.x 的 lib 目录） |
 | 构建 SDK | **.NET SDK 10**（本机装在 `~/.dotnet`，未加入 PATH） |
 | 为什么 | Avalonia 12.1.0 的源生成器要求 Roslyn 4.14+：用 SDK 8 时源生成器加载不上，`InitializeComponent` 不被生成，于是整片报 `CS0103` |
 | `global.json` | 刻意**不放** —— 钉了 SDK 版本反而编译不过 |
 | 换机器 | `~/.dotnet` 里的 SDK 或系统安装的 .NET 10 都可以，只要 `dotnet --version` ≥ 10 |
-| NuGet 源 | 仓库根 `NuGet.config`：`<clear />` 后**只**登记 nuget.org，不依赖本机离线目录或私有源 —— Linux / Windows / CI 用同一套配置还原；`RobotSimulation` 0.1.0 / 0.2.0 / 0.2.1 / 0.3.0 / 0.3.1 都已发布在 nuget.org 上 |
+| NuGet 源 | 仓库根 `NuGet.config`：`<clear />` 后**只**登记 nuget.org，不依赖本机离线目录或私有源 —— Linux / Windows / CI 用同一套配置还原；`RobotSimulation` 0.1.0 … 0.4.1 都已发布在 nuget.org 上 |
 
 ```bash
 export DOTNET_ROOT="$HOME/.dotnet"

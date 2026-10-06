@@ -34,7 +34,7 @@
             <Border Classes="card" MinWidth="320">
                 <Grid RowDefinitions="Auto,*">
                     <Border Classes="cardHeader">
-                        <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto">
+                        <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto">
                             <TextBlock Classes="panelTitle" Text="3D 场景" />
                             <TextBlock Grid.Column="1" Classes="caption" Text="视角 默认" />
                             <CheckBox Grid.Column="2" Content="点云" Margin="12,0,0,0"
@@ -46,6 +46,9 @@
                             <CheckBox Grid.Column="4" Content="网格" Margin="8,0,0,0"
                                       VerticalAlignment="Center"
                                       IsChecked="{Binding ShowMesh}" />
+                            <CheckBox Grid.Column="5" Content="轨迹" Margin="8,0,0,0"
+                                      VerticalAlignment="Center"
+                                      IsChecked="{Binding ShowTrajectory}" />
                         </Grid>
                     </Border>
                     <!--
@@ -216,8 +219,9 @@
              目录来自设置（可编辑 / 选择目录），文件升序=时间顺序；载入后本地播放。
              首次播放前会"接管"：确保不运动 → 断开后端 → 独占 HUD/曲线/3D。 -->
         <Border Grid.Row="3" Classes="card" Margin="0,12,0,0">
+            <!-- 固定高度：载入前（只有提示文字）与载入后（整条传输控件）保持一致，避免载入后变高。 -->
             <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,*" ColumnSpacing="10"
-                  Margin="16,6" VerticalAlignment="Center">
+                  Height="40" Margin="16,6" VerticalAlignment="Center">
                 <TextBlock Grid.Column="0" Classes="panelTitle" Text="回放" />
                 <TextBlock Grid.Column="1" Classes="caption" VerticalAlignment="Center"
                            Text="{Binding Replay.StatusText}" />

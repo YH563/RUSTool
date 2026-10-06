@@ -34,9 +34,10 @@ public static class RecPayloadDecoder
         double[] effort = cdr.ReadDoubleSequence();
         double[] flangePos = cdr.ReadDoubleSequence();
 
-        // tool_index / tool_pose 前端暂不使用，但读取以确认布局（越界会抛，暴露格式不匹配）。
-        _ = cdr.ReadI32();
-        _ = cdr.ReadDoubleSequence();
+        // tool_index / tool_pose：必须读以对齐布局（越界会抛，暴露格式不匹配），
+        // 且要带进 StateFrame —— 否则回放时 Status.TcpPose 为空，3D 里的工具坐标系会消失。
+        int toolIndex = cdr.ReadI32();
+        double[] toolPose = cdr.ReadDoubleSequence();
 
         return new BridgeProtocol.StateFrame(
             Timestamp: timestamp,
@@ -45,7 +46,9 @@ public static class RecPayloadDecoder
             JointVel: jointVel,
             JointAcc: jointAcc,
             Effort: effort,
-            FlangePos: flangePos);
+            FlangePos: flangePos,
+            ToolIndex: toolIndex,
+            ToolPose: toolPose);
     }
 
     /// <summary>
