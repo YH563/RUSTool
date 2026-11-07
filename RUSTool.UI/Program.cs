@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
+using Avalonia.Media.Imaging;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using RUSTool.Charts.Controls;
@@ -174,7 +175,7 @@ internal static class Program
             return;
         }
 
-        frame.Save(outPath);
+        frame.Save(outPath, PngBitmapEncoderOptions.Default);
         Console.WriteLine(
             $"已保存 {outPath}  ({frame.PixelSize.Width}x{frame.PixelSize.Height}, " +
             $"{(dark ? "Dark" : "Light")}, {(vm.IsClinicalMode ? "临床模式" : "工程师模式")})");
